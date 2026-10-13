@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -19,16 +20,8 @@ export interface CompanyInput {
 }
 
 const editableFields = [
-  'displayName',
-  'legalName',
-  'kraPin',
-  'businessType',
-  'phone',
-  'email',
-  'county',
-  'address',
-  'currency',
-  'timezone',
+  'displayName', 'legalName', 'kraPin', 'businessType', 'phone', 'email',
+  'county', 'address', 'currency', 'timezone',
 ] as const;
 
 @Injectable()
@@ -36,17 +29,13 @@ export class CompaniesService {
   constructor(private readonly database: DatabaseService) {}
 
   private async membership(userId: string, organizationId: string) {
-    const result = await this.database.query<{
-      role: string;
-      organization_id: string;
-    }>(
+    const result = await this.database.query<{ role: string; organization_id: string }>(
       `SELECT m.role, m."organizationId" AS organization_id
        FROM neon_auth.member m
        WHERE m."userId" = $1::uuid AND m."organizationId" = $2::uuid
        LIMIT 1`,
       [userId, organizationId],
     );
-
     if (result.rowCount === 0) {
       throw new ForbiddenException('You are not a member of this organization.');
     }
@@ -59,8 +48,7 @@ export class CompaniesService {
       `SELECT id, organization_id, display_name, legal_name, kra_pin,
               business_type, phone, email, county, address, currency,
               timezone, status, created_at, updated_at
-       FROM public.companies
-       WHERE organization_id = $1::uuid`,
+       FROM public.companies WHERE organization_id = $1::uuid`,
       [organizationId],
     );
     if (result.rowCount === 0) {
@@ -69,19 +57,17 @@ export class CompaniesService {
     return result.rows[0];
   }
 
-  async createForOrganization(
-    userId: string,
-    organizationId: string,
-    input: CompanyInput,
-  ) {
+  async createForOrganization(userId: string, organizationId: string, input: CompanyInput) {
     const member = await this.membership(userId, organizationId);
     if (!['owner', 'admin'].includes(member.role)) {
       throw new ForbiddenException('Only organization owners or admins can create a company profile.');
     }
-
-    const displayName = input.displayName?.trim();
-    if (!displayName) {
-      throw new Error('displayName is required.');
+    if (typeof input.displayName !== 'string' || !input.displayName.trim()) {
+      throw new BadRequestException('displayName is required and cannot be blank.');
+    }
+    const currency = input.currency ?? 'KES';
+    if (typeof currency !== 'string' || !/^[A-Za-z]{3}$/.test(currency)) {
+      throw new BadRequestException('currency must be a three-letter currency code.');
     }
 
     const result = await this.database.query(
@@ -92,66 +78,46 @@ export class CompaniesService {
        RETURNING id, organization_id, display_name, legal_name, kra_pin,
                  business_type, phone, email, county, address, currency,
                  timezone, status, created_at, updated_at`,
-      [
-        organizationId,
-        displayName,
-        input.legalName ?? null,
-        input.kraPin ?? null,
-        input.businessType ?? null,
-        input.phone ?? null,
-        input.email ?? null,
-        input.county ?? null,
-        input.address ?? null,
-        (input.currency ?? 'KES').trim().toUpperCase(),
-        input.timezone ?? 'Africa/Nairobi',
-      ],
+      [organizationId, input.displayName.trim(), input.legalName ?? null,
+        input.kraPin ?? null, input.businessType ?? null, input.phone ?? null,
+        input.email ?? null, input.county ?? null, input.address ?? null,
+        currency.toUpperCase(), input.timezone ?? 'Africa/Nairobi'],
     );
     return result.rows[0];
   }
 
-  async updateForOrganization(
-    userId: string,
-    organizationId: string,
-    input: CompanyInput,
-  ) {
+  async updateForOrganization(userId: string, organizationId: string, input: CompanyInput) {
     const member = await this.membership(userId, organizationId);
     if (!['owner', 'admin'].includes(member.role)) {
       throw new ForbiddenException('Only organization owners or admins can update a company profile.');
     }
-
     const entries = editableFields.filter((field) =>
       Object.prototype.hasOwnProperty.call(input, field),
     );
     if (entries.length === 0) {
-      throw new Error('Provide at least one supported company field to update.');
+      throw new BadRequestException('Provide at least one supported company field to update.');
+    }
+    if (input.displayName !== undefined &&
+        (typeof input.displayName !== 'string' || !input.displayName.trim())) {
+      throw new BadRequestException('displayName cannot be blank.');
+    }
+    if (input.currency !== undefined &&
+        (typeof input.currency !== 'string' || !/^[A-Za-z]{3}$/.test(input.currency))) {
+      throw new BadRequestException('currency must be a three-letter currency code.');
     }
 
     const columns: Record<(typeof editableFields)[number], string> = {
-      displayName: 'display_name',
-      legalName: 'legal_name',
-      kraPin: 'kra_pin',
-      businessType: 'business_type',
-      phone: 'phone',
-      email: 'email',
-      county: 'county',
-      address: 'address',
-      currency: 'currency',
-      timezone: 'timezone',
+      displayName: 'display_name', legalName: 'legal_name', kraPin: 'kra_pin',
+      businessType: 'business_type', phone: 'phone', email: 'email',
+      county: 'county', address: 'address', currency: 'currency', timezone: 'timezone',
     };
-    const values = entries.map((field) =>
-      field === 'displayName' ? input[field]?.trim() : input[field],
-    );
-    const assignments = entries.map(
-      (field, index) => `${columns[field]} = $${index + 2}`,
-    );
-
-    if (input.displayName !== undefined && !input.displayName.trim()) {
-      throw new Error('displayName cannot be blank.');
-    }
-    if (input.currency !== undefined && !/^[A-Za-z]{3}$/.test(input.currency)) {
-      throw new Error('currency must be a three-letter currency code.');
-    }
-
+    const values = entries.map((field) => {
+      const value = input[field];
+      if (field === 'displayName' && typeof value === 'string') return value.trim();
+      if (field === 'currency' && typeof value === 'string') return value.toUpperCase();
+      return value;
+    });
+    const assignments = entries.map((field, index) => `${columns[field]} = $${index + 2}`);
     const result = await this.database.query(
       `UPDATE public.companies
        SET ${assignments.join(', ')}, updated_at = now()
