@@ -1,13 +1,12 @@
-﻿import {
+import {
   Injectable,
   OnModuleDestroy,
-  OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Pool } from 'pg';
 
 @Injectable()
-export class DatabaseService implements OnModuleInit, OnModuleDestroy {
+export class DatabaseService implements OnModuleDestroy {
   private readonly pool: Pool;
 
   constructor() {
@@ -21,11 +20,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       connectionString,
       connectionTimeoutMillis: 10000,
     });
-  }
-
-  async onModuleInit() {
-    await this.pool.query('SELECT 1');
-    console.log('Neon PostgreSQL connection successful.');
   }
 
   async checkConnection(): Promise<boolean> {
