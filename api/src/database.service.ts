@@ -7,22 +7,28 @@ import { Pool } from 'pg';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
-  private readonly pool: Pool;
+  private readonly pool: Pool | null;
 
   constructor() {
     const connectionString = process.env.DATABASE_URL;
 
-    if (!connectionString) {
-      throw new Error('DATABASE_URL is missing from the environment.');
-    }
-
-    this.pool = new Pool({
-      connectionString,
-      connectionTimeoutMillis: 10000,
-    });
+    // Allow non-database routes to start even in Vercel Preview deployments
+    // where DATABASE_URL may not be configured. /health reports the issue.
+    this.pool = connectionString
+      ? new Pool({
+          connectionString,
+          connectionTimeoutMillis: 10000,
+        })
+      : null;
   }
 
   async checkConnection(): Promise<boolean> {
+    if (!this.pool) {
+      throw new ServiceUnavailableException(
+        'DATABASE_URL is not configured for this environment.',
+      );
+    }
+
     try {
       await this.pool.query('SELECT 1');
       return true;
@@ -32,6 +38,8 @@ export class DatabaseService implements OnModuleDestroy {
   }
 
   async onModuleDestroy() {
-    await this.pool.end();
+    if (this.pool) {
+      await this.pool.end();
+    }
   }
 }
