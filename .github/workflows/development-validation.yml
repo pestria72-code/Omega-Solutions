@@ -1,0 +1,40 @@
+name: Development validation
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            vite-version/package-lock.json
+
+      - name: Build API
+        working-directory: api
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build frontend
+        working-directory: vite-version
+        run: |
+          npm ci
+          npm run build
