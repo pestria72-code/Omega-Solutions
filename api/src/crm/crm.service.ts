@@ -20,7 +20,7 @@ export class CrmService {
     return (await this.memberships.getMembership(user.userId)).companyId;
   }
 
-  private async auditChange(user: AuthenticatedUser, action: string, entityType: string, entityId: string, newValues: unknown) {
+  private async auditChange(user: AuthenticatedUser, action: string, entityType: string, entityId: string, newValues: Record<string, unknown>) {
     const membership = await this.memberships.getMembership(user.userId);
     await this.audit.log({
       userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
