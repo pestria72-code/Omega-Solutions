@@ -107,3 +107,7 @@ export class UpdateTicketDto {
   @IsOptional() @IsDateString() dueAt?: string;
   @IsOptional() @IsString() description?: string;
 }
+
+export class AddCampaignSegmentDto {
+  @IsUUID() segmentId!: string;
+}
