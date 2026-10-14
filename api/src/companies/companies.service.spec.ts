@@ -42,7 +42,8 @@ const COMPANY_A: CompanyRow = {
 
 describe('CompaniesService', () => {
   let service: CompaniesService;
-  let db: { query: Mock };
+  let db: { query: Mock; transaction: Mock };
+  let txQuery: Mock;
   let memberships: {
     getMembership: Mock;
     getMembershipForCompany: Mock;
@@ -52,7 +53,11 @@ describe('CompaniesService', () => {
   let audit: { log: Mock };
 
   beforeEach(async () => {
-    db = { query: vi.fn() };
+    txQuery = vi.fn();
+    db = {
+      query: vi.fn(),
+      transaction: vi.fn(async (callback: (client: { query: Mock }) => Promise<unknown>) => callback({ query: txQuery })),
+    };
     memberships = {
       getMembership: vi.fn(),
       getMembershipForCompany: vi.fn(),
@@ -133,6 +138,42 @@ describe('CompaniesService', () => {
       expect(result.name).toBe('Alpha Updated');
       expect(audit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'company.update', entityId: 'comp-a' }),
+      );
+    });
+  });
+
+  describe('create (tenant isolation)', () => {
+    it('rejects a user who is not an owner/admin of their current company', async () => {
+      memberships.requireOwnerOrAdmin.mockRejectedValue(
+        new ForbiddenException('You do not have access to this company.'),
+      );
+
+      await expect(
+        service.create(USER_A, { name: 'Beta Ltd' }),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(db.transaction).not.toHaveBeenCalled();
+    });
+
+    it('creates the new company and owner membership in the same transaction', async () => {
+      memberships.requireOwnerOrAdmin.mockResolvedValue({
+        companyId: 'comp-a',
+        branchId: null,
+        role: 'owner',
+      });
+      txQuery
+        .mockResolvedValueOnce({ rows: [{ ...COMPANY_A, id: 'comp-b', name: 'Beta Ltd' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      const result = await service.create(USER_A, { name: 'Beta Ltd' });
+
+      expect(result.id).toBe('comp-b');
+      expect(db.transaction).toHaveBeenCalledTimes(1);
+      expect(txQuery).toHaveBeenCalledTimes(2);
+      expect(txQuery.mock.calls[1][0]).toContain('INSERT INTO company_memberships');
+      expect(txQuery.mock.calls[1][1]).toEqual(['user-a', 'comp-b']);
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'company.create', companyId: 'comp-b' }),
       );
     });
   });
