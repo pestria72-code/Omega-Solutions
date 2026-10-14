@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { CrmService } from './crm.service.js';
 import {
-  AddCampaignLeadDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto, CreateLeadDto,
+  AddCampaignLeadDto, AddCampaignSegmentDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto, CreateLeadDto,
   CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto, UpdateCampaignDto,
   UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
 } from './dto/crm.dto.js';
@@ -33,6 +33,11 @@ export class CrmController {
   @Post('campaigns/:campaignId/leads') @RequirePermissions('crm:write')
   addCampaignLead(@Request() req: { user: AuthenticatedUser }, @Param('campaignId') campaignId: string, @Body() dto: AddCampaignLeadDto) {
     return this.crm.addCampaignLead(req.user, campaignId, dto);
+  }
+
+  @Post('campaigns/:campaignId/segments') @RequirePermissions('crm:write')
+  addCampaignSegment(@Request() req: { user: AuthenticatedUser }, @Param('campaignId') campaignId: string, @Body() dto: AddCampaignSegmentDto) {
+    return this.crm.addCampaignSegment(req.user, campaignId, dto);
   }
 
   @Get('segments') @RequirePermissions('crm:read')
