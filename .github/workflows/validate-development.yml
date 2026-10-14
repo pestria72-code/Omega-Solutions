@@ -1,0 +1,49 @@
+name: Validate Omega development
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - "api/**"
+      - "vite-version/**"
+      - ".github/workflows/validate-development.yml"
+  pull_request:
+    paths:
+      - "api/**"
+      - "vite-version/**"
+      - ".github/workflows/validate-development.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            vite-version/package-lock.json
+      - name: Install API dependencies
+        working-directory: api
+        run: npm ci
+      - name: Build API
+        working-directory: api
+        run: npm run build
+      - name: Run API tests
+        working-directory: api
+        run: npm test
+      - name: Install frontend dependencies
+        working-directory: vite-version
+        run: npm ci
+      - name: Build frontend
+        working-directory: vite-version
+        run: npm run build
