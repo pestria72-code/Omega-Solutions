@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS crm_segment_members (
   lead_id UUID REFERENCES crm_leads(id) ON DELETE CASCADE,
   customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
   added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK ((lead_id IS NOT NULL)::int + (customer_id IS NOT NULL)::int = 1)
+  CHECK ((lead_id IS NOT NULL) <> (customer_id IS NOT NULL))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_segment_member_lead ON crm_segment_members(segment_id,lead_id) WHERE lead_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_segment_member_customer ON crm_segment_members(segment_id,customer_id) WHERE customer_id IS NOT NULL;
