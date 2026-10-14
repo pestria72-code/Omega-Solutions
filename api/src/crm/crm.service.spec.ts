@@ -1,0 +1,67 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { CrmService } from './crm.service.js';
+import { DatabaseService } from '../database.service.js';
+import { MembershipsService } from '../memberships/memberships.service.js';
+import { AuditService } from '../audit/audit.service.js';
+import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+
+describe('CrmService', () => {
+  const user: AuthenticatedUser = {
+    userId: 'user-1', email: 'owner@example.test', fullName: 'Test Owner',
+    companyId: 'company-1', branchId: null, role: 'owner', permissions: ['crm:read','crm:write'],
+  };
+  let db: { query: ReturnType<typeof vi.fn>; transaction: ReturnType<typeof vi.fn> };
+  let memberships: { getMembership: ReturnType<typeof vi.fn> };
+  let audit: { log: ReturnType<typeof vi.fn> };
+  let service: CrmService;
+
+  beforeEach(() => {
+    db = { query: vi.fn(), transaction: vi.fn() };
+    memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-1', branchId: null, role: 'owner' }) };
+    audit = { log: vi.fn().mockResolvedValue(undefined) };
+    service = new CrmService(
+      db as unknown as DatabaseService,
+      memberships as unknown as MembershipsService,
+      audit as unknown as AuditService,
+    );
+  });
+
+  it('scopes lead listing to the active company and filters by status and search', async () => {
+    db.query.mockResolvedValue({ rows: [{ id: 'lead-1' }], rowCount: 1 });
+    const rows = await service.listLeads(user, 'Acme', 'qualified');
+    expect(rows).toEqual([{ id: 'lead-1' }]);
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE company_id = $1'),
+      ['company-1', 'qualified', '%Acme%'],
+    );
+  });
+
+  it('does not return a lead outside the company scope', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    await expect(service.getLead(user, 'other-company-lead')).rejects.toThrow(NotFoundException);
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE id = $1 AND company_id = $2'),
+      ['other-company-lead', 'company-1'],
+    );
+  });
+
+  it('requires an opportunity to be linked to a lead or customer', async () => {
+    await expect(service.createOpportunity(user, { title: 'Unlinked deal' })).rejects.toThrow(BadRequestException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('requires CRM activities to be linked to a record', async () => {
+    await expect(service.createActivity(user, { activityType: 'task', subject: 'Call back' })).rejects.toThrow(BadRequestException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('lists CRM customers within the current company', async () => {
+    db.query.mockResolvedValue({ rows: [{ id: 'customer-1', name: 'Acme Ltd' }], rowCount: 1 });
+    const rows = await service.listCrmCustomers(user, 'Acme');
+    expect(rows).toEqual([{ id: 'customer-1', name: 'Acme Ltd' }]);
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE company_id=$1'),
+      ['company-1', '%Acme%'],
+    );
+  });
+});
