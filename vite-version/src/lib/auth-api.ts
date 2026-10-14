@@ -18,7 +18,7 @@ export interface RegisterResponse {
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api"}/auth/login`, {
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -31,7 +31,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
 }
 
 export async function register(email: string, password: string, fullName: string, phone?: string, companyName?: string): Promise<RegisterResponse> {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api"}/auth/register`, {
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, fullName, phone, companyName }),
@@ -44,7 +44,7 @@ export async function register(email: string, password: string, fullName: string
 }
 
 export async function getCurrentUser(token: string): Promise<AuthenticatedUser> {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api"}/auth/me`, {
+  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
