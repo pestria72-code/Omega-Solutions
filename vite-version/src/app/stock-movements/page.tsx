@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ArrowLeftRight, ClipboardList, Plus, RefreshCw, TrendingDown, TrendingUp } from "lucide-react"
+import { ClipboardList, Plus, RefreshCw, TrendingDown, TrendingUp } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
