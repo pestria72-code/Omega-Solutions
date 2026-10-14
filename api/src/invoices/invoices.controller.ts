@@ -1,0 +1,47 @@
+import {
+  Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards,
+} from '@nestjs/common';
+import { InvoicesService } from './invoices.service.js';
+import { CreateInvoiceDto, UpdateInvoiceStatusDto } from './dto/invoice.dto.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
+import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
+import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+
+@Controller('invoices')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+export class InvoicesController {
+  constructor(private readonly invoices: InvoicesService) {}
+
+  @Get()
+  @RequirePermissions('sales:read')
+  list(
+    @Req() req: { user: AuthenticatedUser },
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.invoices.list(req.user, search, status);
+  }
+
+  @Get(':id')
+  @RequirePermissions('sales:read')
+  getById(@Req() req: { user: AuthenticatedUser }, @Param('id') id: string) {
+    return this.invoices.getById(req.user, id);
+  }
+
+  @Post()
+  @RequirePermissions('sales:write')
+  create(@Req() req: { user: AuthenticatedUser }, @Body() dto: CreateInvoiceDto) {
+    return this.invoices.create(req.user, dto);
+  }
+
+  @Patch(':id/status')
+  @RequirePermissions('sales:write')
+  updateStatus(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Body() dto: UpdateInvoiceStatusDto,
+  ) {
+    return this.invoices.updateStatus(req.user, id, dto.status);
+  }
+}
