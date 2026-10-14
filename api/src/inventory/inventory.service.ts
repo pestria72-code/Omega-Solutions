@@ -117,8 +117,14 @@ export class InventoryService {
     fields.push('updated_at=NOW()');
     values.push(warehouseId,companyId);
     const result = await this.db.query<WarehouseRow>(
-      `UPDATE warehouses SET ${fields.join(',')} WHERE id=$${values.length-1} AND company_id=$${values.length} RETURNING *`, values as (string|number|boolean|null)[],
-    );
+      `UPDATE warehouses SET ${fields.join(',')} WHERE id=${values.length-1} AND company_id=${values.length} RETURNING *`, values as (string|number|boolean|null)[],
+    ).catch((error: unknown) => {
+      const databaseError = error as { code?: string };
+      if (databaseError.code === '23505') {
+        throw new ConflictException('A warehouse with this code already exists.');
+      }
+      throw error;
+    });
     if (!result.rows[0]) throw new NotFoundException('Warehouse not found.');
     await this.audit.log({userId:user.userId,companyId,branchId:result.rows[0].branch_id,action:'inventory.warehouse.update',entityType:'warehouse',entityId:warehouseId,oldValues:{name:existing.name,code:existing.code},newValues:{name:result.rows[0].name,code:result.rows[0].code},ipAddress:null});
     return result.rows[0];
