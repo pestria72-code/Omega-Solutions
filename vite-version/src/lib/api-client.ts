@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api";
 
 const TOKEN_KEY = "omega-token";
 const REFRESH_KEY = "omega-refresh";
