@@ -32,6 +32,46 @@ describe('InventoryService', () => {
 
   const user = { userId: 'user-1' } as any;
 
+  it('keeps warehouse listing read-only and does not create a default warehouse', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.listWarehouses(user);
+
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('FROM warehouses w');
+    expect(db.query.mock.calls[0][0]).not.toContain('INSERT INTO');
+  });
+
+  it('keeps stock listing read-only and does not create stock rows or opening movements', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.listStock(user);
+
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('FROM inventory_stock_levels s');
+    expect(db.query.mock.calls[0][0]).not.toContain('INSERT INTO');
+  });
+
+  it('keeps movement history read-only', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.listMovements(user);
+
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('FROM inventory_stock_movements m');
+    expect(db.query.mock.calls[0][0]).not.toContain('INSERT INTO');
+  });
+
+  it('keeps inventory summary read-only', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.summary(user);
+
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('FROM inventory_stock_levels s');
+    expect(db.query.mock.calls[0][0]).not.toContain('INSERT INTO');
+  });
+
   it('rejects a blank warehouse code before writing to the database', async () => {
     await expect(service.createWarehouse(user, { code: '   ', name: 'Main' })).rejects.toThrow(BadRequestException);
     expect(db.query).not.toHaveBeenCalled();
