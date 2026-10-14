@@ -24,7 +24,7 @@ describe('DashboardService', () => {
         rowCount: 1,
       })
       .mockResolvedValueOnce({
-        rows: [{ table_name: 'invoices' }, { table_name: 'company_memberships' }],
+        rows: [{ table_name: 'branches' }, { table_name: 'company_memberships' }],
         rowCount: 2,
       })
       .mockResolvedValueOnce({ rows: [{ count: '3' }], rowCount: 1 })
@@ -42,7 +42,7 @@ describe('DashboardService', () => {
 
     expect(getMembership).toHaveBeenCalledWith('user-1');
     expect(result.company).toEqual({ id: 'company-1', name: 'Acme Ltd', currency: 'KES' });
-    expect(result.recordsByTable).toEqual({ invoices: 3, company_memberships: 1 });
+    expect(result.recordsByTable).toEqual({ branches: 3, company_memberships: 1 });
     expect(result.generatedAt).toBeTruthy();
     expect(query.mock.calls[2][0]).toContain('company_id::text = $1::text');
     expect(query.mock.calls[2][1]).toEqual(['company-1']);
