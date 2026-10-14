@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Body, Param, Query, Request, UseGuards } 
 import { CrmService } from './crm.service.js';
 import {
   AddCampaignLeadDto, AddCampaignSegmentDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto, CreateLeadDto,
-  CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto, UpdateCampaignDto,
+  CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto, UpdateCampaignDto, UpdateCampaignLeadDto,
   UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
 } from './dto/crm.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -33,6 +33,16 @@ export class CrmController {
   @Post('campaigns/:campaignId/leads') @RequirePermissions('crm:write')
   addCampaignLead(@Request() req: { user: AuthenticatedUser }, @Param('campaignId') campaignId: string, @Body() dto: AddCampaignLeadDto) {
     return this.crm.addCampaignLead(req.user, campaignId, dto);
+  }
+
+  @Get('campaigns/:campaignId/leads') @RequirePermissions('crm:read')
+  listCampaignLeads(@Request() req: { user: AuthenticatedUser }, @Param('campaignId') campaignId: string) {
+    return this.crm.listCampaignLeads(req.user, campaignId);
+  }
+
+  @Patch('campaigns/:campaignId/leads/:leadId') @RequirePermissions('crm:write')
+  updateCampaignLead(@Request() req: { user: AuthenticatedUser }, @Param('campaignId') campaignId: string, @Param('leadId') leadId: string, @Body() dto: UpdateCampaignLeadDto) {
+    return this.crm.updateCampaignLead(req.user, campaignId, leadId, dto);
   }
 
   @Post('campaigns/:campaignId/segments') @RequirePermissions('crm:write')
