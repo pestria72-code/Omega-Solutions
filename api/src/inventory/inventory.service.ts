@@ -68,16 +68,26 @@ export class InventoryService {
 
   async createWarehouse(user: AuthenticatedUser, dto: CreateWarehouseDto): Promise<WarehouseRow> {
     const { companyId } = await this.memberships.getMembership(user.userId);
+    const code = dto.code.trim().toUpperCase();
+    const name = dto.name.trim();
+    if (!code) throw new BadRequestException('Warehouse code cannot be empty.');
+    if (!name) throw new BadRequestException('Warehouse name cannot be empty.');
     if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
     const exists = await this.db.query<{ id: string }>(
-      'SELECT id FROM warehouses WHERE company_id=$1 AND UPPER(code)=UPPER($2)', [companyId, dto.code.trim()],
+      'SELECT id FROM warehouses WHERE company_id=$1 AND UPPER(code)=UPPER($2)', [companyId, code],
     );
     if (exists.rows.length) throw new ConflictException('A warehouse with this code already exists.');
     const result = await this.db.query<WarehouseRow>(
       `INSERT INTO warehouses(company_id,branch_id,code,name,location,capacity,is_active)
        VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [companyId,dto.branchId ?? null,dto.code.trim().toUpperCase(),dto.name.trim(),dto.location ?? null,dto.capacity ?? 0,dto.isActive ?? true],
-    );
+      [companyId,dto.branchId ?? null,code,name,dto.location?.trim() || null,dto.capacity ?? 0,dto.isActive ?? true],
+    ).catch((error: unknown) => {
+      const databaseError = error as { code?: string };
+      if (databaseError.code === '23505') {
+        throw new ConflictException('A warehouse with this code already exists.');
+      }
+      throw error;
+    });
     const warehouse = result.rows[0];
     await this.audit.log({userId:user.userId,companyId,branchId:dto.branchId ?? null,action:'inventory.warehouse.create',entityType:'warehouse',entityId:warehouse.id,oldValues:null,newValues:{code:warehouse.code,name:warehouse.name},ipAddress:null});
     return warehouse;
