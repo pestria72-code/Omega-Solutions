@@ -42,3 +42,15 @@ export interface InvoiceRow {
   item_count?: number;
   items?: InvoiceItemRow[];
 }
+
+export interface InvoicePaymentRow {
+  [key: string]: unknown;
+  id: string;
+  invoice_id: string;
+  amount: string | number;
+  method: 'mpesa' | 'bank' | 'cash' | 'card' | 'cheque';
+  reference: string | null;
+  paid_at: string;
+  notes: string | null;
+  created_at: string;
+}
