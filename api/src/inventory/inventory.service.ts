@@ -36,8 +36,17 @@ export class InventoryService {
     private readonly audit: AuditService,
   ) {}
 
+  private async resolveMembership(user: AuthenticatedUser) {
+    // The signed token identifies the selected company. Never silently fall back
+    // to another membership when that company was explicitly selected.
+    if (user.companyId) {
+      return this.memberships.getMembershipForCompany(user.userId, user.companyId);
+    }
+    return this.memberships.getMembership(user.userId);
+  }
+
   async listWarehouses(user: AuthenticatedUser): Promise<WarehouseRow[]> {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const result = await this.db.query<WarehouseRow>(
       `SELECT w.id,w.company_id,w.branch_id,w.code,w.name,w.location,w.capacity,w.is_active,w.created_at,w.updated_at,
               b.name AS branch_name,
@@ -52,7 +61,7 @@ export class InventoryService {
   }
 
   async getWarehouse(user: AuthenticatedUser, warehouseId: string): Promise<WarehouseRow> {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const result = await this.db.query<WarehouseRow>(
       `SELECT w.*,b.name AS branch_name,
         COUNT(DISTINCT s.product_id)::int AS product_count,COALESCE(SUM(s.quantity),0) AS total_quantity
@@ -66,7 +75,7 @@ export class InventoryService {
   }
 
   async createWarehouse(user: AuthenticatedUser, dto: CreateWarehouseDto): Promise<WarehouseRow> {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const code = dto.code.trim().toUpperCase();
     const name = dto.name.trim();
     if (!code) throw new BadRequestException('Warehouse code cannot be empty.');
@@ -93,7 +102,7 @@ export class InventoryService {
   }
 
   async updateWarehouse(user: AuthenticatedUser, warehouseId: string, dto: UpdateWarehouseDto): Promise<WarehouseRow> {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const existing = await this.getWarehouse(user, warehouseId);
     if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
     if (typeof dto.code === 'string') {
@@ -140,7 +149,7 @@ export class InventoryService {
   }
 
   async listStock(user: AuthenticatedUser, warehouseId?: string, search?: string): Promise<StockRow[]> {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const values: (string|number)[] = [companyId];
     let filters = 's.company_id=$1';
     if (warehouseId) { values.push(warehouseId); filters += ` AND s.warehouse_id=$${values.length}`; }
@@ -157,7 +166,7 @@ export class InventoryService {
   }
 
   async listMovements(user: AuthenticatedUser, limit?: string): Promise<MovementRow[]> {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const parsed = Number.parseInt(limit ?? '100', 10);
     const safeLimit = Number.isFinite(parsed) ? Math.max(1,Math.min(parsed,250)) : 100;
     const result = await this.db.query<MovementRow>(
@@ -170,7 +179,7 @@ export class InventoryService {
   }
 
   async summary(user: AuthenticatedUser) {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const result = await this.db.query<Record<string, string|number>>(
       `SELECT COUNT(DISTINCT s.product_id)::int AS stocked_products,
         COUNT(*) FILTER(WHERE s.quantity>0 AND s.quantity<=s.reorder_level)::int AS low_stock_lines,
@@ -193,7 +202,7 @@ export class InventoryService {
   }
 
   async adjust(user: AuthenticatedUser, dto: AdjustStockDto) {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const result = await this.db.transaction(async client => {
       await this.assertProduct(client,companyId,dto.productId);
       await this.assertWarehouse(client,companyId,dto.warehouseId);
@@ -216,7 +225,7 @@ export class InventoryService {
   }
 
   async transfer(user: AuthenticatedUser, dto: TransferStockDto) {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     if (dto.sourceWarehouseId===dto.destinationWarehouseId) throw new BadRequestException('Choose two different warehouses.');
     const transferGroupId = randomUUID();
     const result = await this.db.transaction(async client => {
@@ -247,7 +256,7 @@ export class InventoryService {
   }
 
   private async postSingleMovement(user: AuthenticatedUser,dto: CreateStockMovementDto,type:'receipt'|'issue',signedQuantity:number) {
-    const { companyId } = await this.memberships.getMembership(user.userId);
+    const { companyId } = await this.resolveMembership(user);
     const movement = await this.db.transaction(async client => {
       await this.assertProduct(client,companyId,dto.productId);
       await this.assertWarehouse(client,companyId,dto.warehouseId);
