@@ -134,7 +134,7 @@ export default function ProductsPage() {
         unit: formData.unit.trim() || "pcs",
         sellingPrice: formData.sellingPrice,
         costPrice: formData.costPrice,
-        stockQuantity: formData.stockQuantity,
+        ...(editingProduct ? {} : { stockQuantity: formData.stockQuantity }),
         reorderLevel: formData.reorderLevel,
         isService: formData.isService,
       }
@@ -331,8 +331,9 @@ export default function ProductsPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="prod-stock">Stock Quantity</Label>
-                <Input id="prod-stock" type="number" value={formData.stockQuantity} onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })} />
+                <Label htmlFor="prod-stock">{editingProduct ? "Current Stock Quantity" : "Initial Stock Quantity"}</Label>
+                <Input id="prod-stock" type="number" min="0" step="0.0001" value={formData.stockQuantity} disabled={!!editingProduct} onChange={(e) => setFormData({ ...formData, stockQuantity: Number(e.target.value) })} />
+                {editingProduct && <span className="text-xs text-muted-foreground">Use Stock Movements for receipts, issues, and count adjustments so the inventory ledger stays accurate.</span>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prod-reorder">Reorder Level</Label>
