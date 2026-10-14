@@ -14,7 +14,8 @@ export const routes: RouteObject[] = [
       { path: "/", element: <Navigate to="dashboard" replace /> },
       // Overview
       { path: "/dashboard", lazy: page(() => import("@/app/dashboard/page")) },
-      // Sales
+      // CRM and sales
+      { path: "/crm", lazy: page(() => import("@/app/crm/page")) },
       { path: "/customers", lazy: page(() => import("@/app/customers/page")) },
       { path: "/quotations", lazy: page(() => import("@/app/quotations/page")) },
       { path: "/sales-orders", lazy: page(() => import("@/app/sales-orders/page")) },
