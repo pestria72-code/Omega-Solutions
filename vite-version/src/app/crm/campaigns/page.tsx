@@ -13,14 +13,17 @@ import { api } from "@/lib/api-client"
 import { formatKES, formatDate } from "@/lib/format"
 
 type Campaign={id:string;name:string;campaign_type:string;status:string;start_date:string|null;end_date:string|null;budget:number|string;actual_cost:number|string;target_leads:number;notes:string|null;leads_count:number;responses_count:number}
-type Lead={id:string;contact_name:string;organization_name:string|null}\ntype Segment={id:string;name:string;is_dynamic:boolean}
+type Lead={id:string;contact_name:string;organization_name:string|null}
+type Segment={id:string;name:string;is_dynamic:boolean}
 const blank={name:"",campaignType:"other",status:"planned",startDate:"",endDate:"",budget:"0",targetLeads:"0",notes:""}
 const statuses=["planned","active","paused","completed","cancelled"]
 const label=(s:string)=>s.replaceAll("_"," ").replace(/\b\w/g,x=>x.toUpperCase())
 
 export default function CrmCampaignsPage(){
  const [campaigns,setCampaigns]=React.useState<Campaign[]>([])
- const [leads,setLeads]=React.useState<Lead[]>([])\n const [segments,setSegments]=React.useState<Segment[]>([])\n const [segmentSelection,setSegmentSelection]=React.useState<Record<string,string>>({})
+ const [leads,setLeads]=React.useState<Lead[]>([])
+ const [segments,setSegments]=React.useState<Segment[]>([])
+ const [segmentSelection,setSegmentSelection]=React.useState<Record<string,string>>({})
  const [selection,setSelection]=React.useState<Record<string,string>>({})
  const [form,setForm]=React.useState(blank)
  const [open,setOpen]=React.useState(false)
@@ -41,7 +44,8 @@ export default function CrmCampaignsPage(){
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not save campaign.")}
   finally{setSaving(false)}
  }
- async function addSegment(c:Campaign){const segmentId=segmentSelection[c.id];if(!segmentId){setError("Select a segment to attach to this campaign.");return}try{await api.post("/crm/campaigns/"+c.id+"/segments",{segmentId});setSegmentSelection({...segmentSelection,[c.id]:""});await load()}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not attach segment.")}}\n async function changeStatus(c:Campaign,status:string){
+ async function addSegment(c:Campaign){const segmentId=segmentSelection[c.id];if(!segmentId){setError("Select a segment to attach to this campaign.");return}try{await api.post("/crm/campaigns/"+c.id+"/segments",{segmentId});setSegmentSelection({...segmentSelection,[c.id]:""});await load()}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not attach segment.")}}
+ async function changeStatus(c:Campaign,status:string){
   try{await api.patch("/crm/campaigns/"+c.id,{status});await load()}
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update campaign.")}
  }
