@@ -102,7 +102,8 @@ export default function CrmPage() {
  }
  async function updateStage(o:Opportunity,stage:string){
   setError(null)
-  try{await api.patch<Opportunity>("/crm/opportunities/"+o.id,{stage,probability:stage==="won"?100:stage==="lost"?0:o.probability});await load()}
+  const defaultProbability:Record<string,number>={qualification:10,needs_analysis:25,proposal:50,negotiation:75,won:100,lost:0}
+  try{await api.patch<Opportunity>("/crm/opportunities/"+o.id,{stage,probability:defaultProbability[stage]??o.probability});await load()}
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update stage.")}
  }
  async function completeActivity(a:Activity,completed:boolean){
