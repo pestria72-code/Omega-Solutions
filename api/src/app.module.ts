@@ -13,6 +13,7 @@ import { BranchesModule } from './branches/branches.module.js';
 import { CustomersModule } from './customers/customers.module.js';
 import { SuppliersModule } from './suppliers/suppliers.module.js';
 import { ProductsModule } from './products/products.module.js';
+import { CrmModule } from './crm/crm.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ProductsModule } from './products/products.module.js';
     CustomersModule,
     SuppliersModule,
     ProductsModule,
+    CrmModule,
   ],
   controllers: [AppController],
   providers: [AppService],
