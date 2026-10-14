@@ -17,15 +17,8 @@ export class DashboardService {
   ) {}
 
   async getSummary(user: AuthenticatedUser): Promise<DashboardSummary> {
-    // The company claim is signed into the JWT, but is not authorization by itself.
-    // Re-check that this user still has an active membership in that exact tenant.
-    if (!user.companyId) {
-      throw new ServiceUnavailableException('No active company context is available.');
-    }
-    const membership = await this.memberships.getMembershipForCompany(
-      user.userId,
-      user.companyId,
-    );
+    // Membership is resolved from the verified user identity, never from request input.
+    const membership = await this.memberships.getMembership(user.userId);
     try {
       const companyResult = await this.db.query<{
         id: string;
