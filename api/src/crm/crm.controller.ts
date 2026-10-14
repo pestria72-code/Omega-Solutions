@@ -17,6 +17,11 @@ export class CrmController {
   @Get('pipeline') @RequirePermissions('crm:read')
   pipeline(@Request() req: { user: AuthenticatedUser }) { return this.crm.pipelineSummary(req.user); }
 
+  @Get('customers') @RequirePermissions('crm:read')
+  listCrmCustomers(@Request() req: { user: AuthenticatedUser }, @Query('search') search?: string) {
+    return this.crm.listCrmCustomers(req.user, search);
+  }
+
   @Get('leads') @RequirePermissions('crm:read')
   list(@Request() req: { user: AuthenticatedUser }, @Query('search') search?: string, @Query('status') status?: string) {
     return this.crm.listLeads(req.user, search, status);
