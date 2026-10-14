@@ -38,7 +38,6 @@ export class InventoryService {
 
   async listWarehouses(user: AuthenticatedUser): Promise<WarehouseRow[]> {
     const { companyId } = await this.memberships.getMembership(user.userId);
-    await this.ensureCompanyInventory(companyId);
     const result = await this.db.query<WarehouseRow>(
       `SELECT w.id,w.company_id,w.branch_id,w.code,w.name,w.location,w.capacity,w.is_active,w.created_at,w.updated_at,
               b.name AS branch_name,
@@ -142,7 +141,6 @@ export class InventoryService {
 
   async listStock(user: AuthenticatedUser, warehouseId?: string, search?: string): Promise<StockRow[]> {
     const { companyId } = await this.memberships.getMembership(user.userId);
-    await this.ensureCompanyInventory(companyId);
     const values: (string|number)[] = [companyId];
     let filters = 's.company_id=$1';
     if (warehouseId) { values.push(warehouseId); filters += ` AND s.warehouse_id=$${values.length}`; }
@@ -160,7 +158,6 @@ export class InventoryService {
 
   async listMovements(user: AuthenticatedUser, limit?: string): Promise<MovementRow[]> {
     const { companyId } = await this.memberships.getMembership(user.userId);
-    await this.ensureCompanyInventory(companyId);
     const parsed = Number.parseInt(limit ?? '100', 10);
     const safeLimit = Number.isFinite(parsed) ? Math.max(1,Math.min(parsed,250)) : 100;
     const result = await this.db.query<MovementRow>(
@@ -174,7 +171,6 @@ export class InventoryService {
 
   async summary(user: AuthenticatedUser) {
     const { companyId } = await this.memberships.getMembership(user.userId);
-    await this.ensureCompanyInventory(companyId);
     const result = await this.db.query<Record<string, string|number>>(
       `SELECT COUNT(DISTINCT s.product_id)::int AS stocked_products,
         COUNT(*) FILTER(WHERE s.quantity>0 AND s.quantity<=s.reorder_level)::int AS low_stock_lines,
@@ -305,33 +301,6 @@ export class InventoryService {
   private async assertBranch(companyId:string,branchId:string) {
     const result=await this.db.query<{id:string}>('SELECT id FROM branches WHERE id=$1 AND company_id=$2 AND is_active=true',[branchId,companyId]);
     if(!result.rows[0]) throw new NotFoundException('Active branch not found in this company.');
-  }
-
-  private async ensureCompanyInventory(companyId:string) {
-    await this.ensureDefaultWarehouse(companyId);
-    await this.db.query(
-      `INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reorder_level)
-       SELECT w.company_id,w.id,p.id,CASE WHEN w.code='MAIN' THEN p.stock_quantity ELSE 0 END,p.reorder_level
-       FROM warehouses w JOIN products p ON p.company_id=w.company_id
-       WHERE w.company_id=$1 AND w.is_active=true AND p.is_service=false
-       ON CONFLICT(warehouse_id,product_id) DO NOTHING`, [companyId],
-    );
-    await this.db.query(
-      `INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes)
-       SELECT s.company_id,s.product_id,s.warehouse_id,'opening_balance',s.quantity,p.cost_price,'AUTO-INITIAL-STOCK','Opening stock captured from product setup'
-       FROM inventory_stock_levels s JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
-       WHERE s.company_id=$1 AND s.quantity>0
-         AND NOT EXISTS (SELECT 1 FROM inventory_stock_movements m WHERE m.company_id=s.company_id AND m.product_id=s.product_id AND m.warehouse_id=s.warehouse_id)`,
-      [companyId],
-    );
-  }
-
-  private async ensureDefaultWarehouse(companyId:string) {
-    await this.db.query(
-      `INSERT INTO warehouses(company_id,code,name,location)
-       VALUES($1,'MAIN','Main Warehouse','Default warehouse')
-       ON CONFLICT(company_id,code) DO NOTHING`,[companyId],
-    );
   }
 
   private async syncLegacyProductQuantity(client:PoolClient,companyId:string,productId:string) {
