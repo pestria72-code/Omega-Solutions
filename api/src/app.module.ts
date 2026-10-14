@@ -10,6 +10,7 @@ import { RbacModule } from './rbac/rbac.module.js';
 import { MembershipsModule } from './memberships/memberships.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { BranchesModule } from './branches/branches.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { BranchesModule } from './branches/branches.module.js';
     MembershipsModule,
     CompaniesModule,
     BranchesModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],
