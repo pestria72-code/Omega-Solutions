@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
@@ -109,6 +110,10 @@ export class ProductsService {
     const membership = await this.memberships.getMembership(user.userId);
     const existing = await this.getByIdInternal(membership.companyId, productId);
 
+    if (dto.stockQuantity !== undefined && Number(dto.stockQuantity) !== Number(existing.stock_quantity)) {
+      throw new BadRequestException('Use Inventory > Stock Movements to change stock quantities so the stock ledger remains accurate.');
+    }
+
     if (dto.sku && dto.sku !== existing.sku) {
       const dup = await this.db.query<{ id: string }>(
         'SELECT id FROM products WHERE company_id = $1 AND sku = $2 AND id != $3',
@@ -131,7 +136,6 @@ export class ProductsService {
       unit: 'unit',
       sellingPrice: 'selling_price',
       costPrice: 'cost_price',
-      stockQuantity: 'stock_quantity',
       reorderLevel: 'reorder_level',
       isService: 'is_service',
       isActive: 'is_active',
