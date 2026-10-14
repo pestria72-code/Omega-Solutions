@@ -1,8 +1,9 @@
 import { Controller, Get, Post, Patch, Body, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { CrmService } from './crm.service.js';
 import {
-  CreateActivityDto, CreateLeadDto, CreateOpportunityDto, UpdateActivityDto,
-  UpdateLeadDto, UpdateOpportunityDto,
+  AddCampaignLeadDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto, CreateLeadDto,
+  CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto, UpdateCampaignDto,
+  UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
 } from './dto/crm.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
@@ -13,6 +14,56 @@ import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CrmController {
   constructor(private readonly crm: CrmService) {}
+
+  @Get('campaigns') @RequirePermissions('crm:read')
+  listCampaigns(@Request() req: { user: AuthenticatedUser }, @Query('status') status?: string) {
+    return this.crm.listCampaigns(req.user, status);
+  }
+
+  @Post('campaigns') @RequirePermissions('crm:write')
+  createCampaign(@Request() req: { user: AuthenticatedUser }, @Body() dto: CreateCampaignDto) {
+    return this.crm.createCampaign(req.user, dto);
+  }
+
+  @Patch('campaigns/:id') @RequirePermissions('crm:write')
+  updateCampaign(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string, @Body() dto: UpdateCampaignDto) {
+    return this.crm.updateCampaign(req.user, id, dto);
+  }
+
+  @Post('campaigns/:campaignId/leads') @RequirePermissions('crm:write')
+  addCampaignLead(@Request() req: { user: AuthenticatedUser }, @Param('campaignId') campaignId: string, @Body() dto: AddCampaignLeadDto) {
+    return this.crm.addCampaignLead(req.user, campaignId, dto);
+  }
+
+  @Get('segments') @RequirePermissions('crm:read')
+  listSegments(@Request() req: { user: AuthenticatedUser }) {
+    return this.crm.listSegments(req.user);
+  }
+
+  @Post('segments') @RequirePermissions('crm:write')
+  createSegment(@Request() req: { user: AuthenticatedUser }, @Body() dto: CreateSegmentDto) {
+    return this.crm.createSegment(req.user, dto);
+  }
+
+  @Post('segments/:segmentId/members') @RequirePermissions('crm:write')
+  addSegmentMember(@Request() req: { user: AuthenticatedUser }, @Param('segmentId') segmentId: string, @Body() dto: AddSegmentMemberDto) {
+    return this.crm.addSegmentMember(req.user, segmentId, dto);
+  }
+
+  @Get('tickets') @RequirePermissions('crm:read')
+  listTickets(@Request() req: { user: AuthenticatedUser }, @Query('status') status?: string, @Query('priority') priority?: string, @Query('search') search?: string) {
+    return this.crm.listTickets(req.user, status, priority, search);
+  }
+
+  @Post('tickets') @RequirePermissions('crm:write')
+  createTicket(@Request() req: { user: AuthenticatedUser }, @Body() dto: CreateTicketDto) {
+    return this.crm.createTicket(req.user, dto);
+  }
+
+  @Patch('tickets/:id') @RequirePermissions('crm:write')
+  updateTicket(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string, @Body() dto: UpdateTicketDto) {
+    return this.crm.updateTicket(req.user, id, dto);
+  }
 
   @Get('pipeline') @RequirePermissions('crm:read')
   pipeline(@Request() req: { user: AuthenticatedUser }) { return this.crm.pipelineSummary(req.user); }
