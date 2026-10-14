@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS quotations (
     REFERENCES customers(id, company_id) ON DELETE RESTRICT,
   CONSTRAINT quotations_company_number_unique UNIQUE (company_id, quotation_number)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_id_company_unique ON quotations(id, company_id);
+
 CREATE TABLE IF NOT EXISTS quotation_items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
