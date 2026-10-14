@@ -7,8 +7,8 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
-import type { CreateInvoiceDto } from './dto/invoice.dto.js';
-import type { InvoiceItemRow, InvoiceRow, InvoiceStatus } from './invoice.types.js';
+import type { CreateInvoiceDto, CreateInvoicePaymentDto } from './dto/invoice.dto.js';
+import type { InvoiceItemRow, InvoicePaymentRow, InvoiceRow, InvoiceStatus } from './invoice.types.js';
 
 const INVOICE_SELECT = `
   SELECT i.id, i.company_id, i.customer_id, c.name AS customer_name,
@@ -72,6 +72,13 @@ export class InvoicesService {
       [membership.companyId, invoiceId],
     );
     invoice.items = items.rows;
+    const payments = await this.db.query<InvoicePaymentRow>(
+      `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at
+       FROM invoice_payments WHERE company_id = $1 AND invoice_id = $2
+       ORDER BY paid_at DESC, created_at DESC`,
+      [membership.companyId, invoiceId],
+    );
+    invoice.payments = payments.rows;
     return invoice;
   }
 
@@ -170,6 +177,73 @@ export class InvoicesService {
       ipAddress: null,
     });
     return this.getById(user, result.id);
+  }
+
+  async recordPayment(
+    user: AuthenticatedUser,
+    invoiceId: string,
+    dto: CreateInvoicePaymentDto,
+  ): Promise<InvoiceRow> {
+    const membership = await this.memberships.getMembership(user.userId);
+    const paymentAmount = Math.round(dto.amount * 100) / 100;
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      throw new BadRequestException('Payment amount must be greater than zero.');
+    }
+
+    const payment = await this.db.transaction(async (client) => {
+      const result = await client.query<{
+        status: InvoiceStatus;
+        customer_id: string;
+        total: string | number;
+        amount_paid: string | number;
+      }>(
+        'SELECT status, customer_id, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        [invoiceId, membership.companyId],
+      );
+      const invoice = result.rows[0];
+      if (!invoice) throw new NotFoundException('Invoice not found.');
+      if (invoice.status === 'draft' || invoice.status === 'cancelled') {
+        throw new BadRequestException('Only sent invoices can receive payments.');
+      }
+      const outstandingCents = Math.round((Number(invoice.total) - Number(invoice.amount_paid)) * 100);
+      const paymentCents = Math.round(paymentAmount * 100);
+      if (paymentCents > outstandingCents) {
+        throw new BadRequestException('Payment exceeds the outstanding invoice balance.');
+      }
+
+      const inserted = await client.query<InvoicePaymentRow>(
+        `INSERT INTO invoice_payments
+          (company_id, invoice_id, amount, method, reference, notes, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, invoice_id, amount, method, reference, paid_at, notes, created_at`,
+        [
+          membership.companyId, invoiceId, paymentAmount, dto.method,
+          dto.reference?.trim() || null, dto.notes?.trim() || null, user.userId,
+        ],
+      );
+
+      const newPaidCents = Math.round(Number(invoice.amount_paid) * 100) + paymentCents;
+      const totalCents = Math.round(Number(invoice.total) * 100);
+      const newStatus: InvoiceStatus = newPaidCents >= totalCents ? 'paid' : 'partially_paid';
+      await client.query(
+        'UPDATE invoices SET amount_paid = $1, status = $2::invoice_status, updated_at = NOW() WHERE id = $3 AND company_id = $4',
+        [newPaidCents / 100, newStatus, invoiceId, membership.companyId],
+      );
+      await client.query(
+        'UPDATE customers SET outstanding_balance = GREATEST(0, outstanding_balance - $1), updated_at = NOW() WHERE id = $2 AND company_id = $3',
+        [paymentAmount, invoice.customer_id, membership.companyId],
+      );
+      return inserted.rows[0];
+    });
+
+    await this.audit.log({
+      userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
+      action: 'invoice.payment.record', entityType: 'invoice_payment', entityId: payment.id,
+      oldValues: null,
+      newValues: { invoiceId, amount: payment.amount, method: payment.method, reference: payment.reference },
+      ipAddress: null,
+    });
+    return this.getById(user, invoiceId);
   }
 
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
