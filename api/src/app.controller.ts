@@ -6,7 +6,7 @@ import { DatabaseService } from './database.service.js';
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private readonly databaseService: DatabaseService,
+    private readonly db: DatabaseService,
   ) {}
 
   @Get()
@@ -16,11 +16,12 @@ export class AppController {
 
   @Get('health')
   async getHealth() {
-    await this.databaseService.checkConnection();
+    const dbConnected = await this.db.checkConnection();
 
     return {
       status: 'ok',
-      database: 'connected',
+      database: dbConnected ? 'connected' : 'disconnected',
+      timestamp: new Date().toISOString(),
     };
   }
 }

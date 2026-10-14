@@ -1,114 +1,141 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Omega Solutions — Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS backend for the Omega ERP SaaS platform. Uses Neon Serverless PostgreSQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Prerequisites
 
-## Description
+- Node.js 20.19+ (see root `.nvmrc`)
+- A Neon PostgreSQL project (create one at https://neon.tech)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Environment Setup
 
-## Project setup
+1. Copy the example file:
+   ```bash
+   cp .env.example .env
+   ```
 
-```bash
-$ npm install
-```
+2. Replace each placeholder with your real values:
 
-## Compile and run the project
+   | Variable | Where to get it |
+   |---|---|
+   | `DATABASE_URL` | Neon Console → your project → Connection Details → copy the connection string. It looks like `postgresql://user:password@ep-xxx.neon.tech/dbname?sslmode=require` |
+   | `JWT_SECRET` | Generate with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+   | `JWT_REFRESH_SECRET` | Generate a second, different hex string the same way |
+   | `CORS_ORIGIN` | Your frontend URL (e.g. `https://your-app.vercel.app`); use `http://localhost:5173` for local dev |
+
+3. Never commit `.env` — it is already in `.gitignore`.
+
+## Running Migrations
+
+Migrations create the database tables and reference data. Run them once your `DATABASE_URL` is configured:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm run migrate
 ```
 
-## Run tests
+This executes all `.sql` files in `src/migrations/` in order, tracking which have been applied in a `pgmigrations` table.
+
+To check migration status:
+```bash
+npm run migrate:status
+```
+
+To create a new migration:
+```bash
+npm run migrate:create -- --name describe_the_change
+```
+
+## Starting the Server
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run start:dev
 ```
 
-## Deployment
+The API will be available at `http://localhost:3000/api`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Testing the Database Connection
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Once your `.env` has a real `DATABASE_URL`:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# 1. Run migrations
+npm run migrate
+
+# 2. Start the server
+npm run start:dev
+
+# 3. In another terminal, test the health endpoint
+curl http://localhost:3000/api/health
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+A successful response looks like:
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "timestamp": "2026-10-14T..."
+}
+```
 
-## Observability
+If you get `"database": "disconnected"`, check that your `DATABASE_URL` is correct and includes `?sslmode=require`.
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+## API Endpoints
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api` | No | Health check (returns "Hello World!") |
+| GET | `/api/health` | No | Database connection status |
+| POST | `/api/auth/register` | No | Create a new user account |
+| POST | `/api/auth/login` | No | Login with email/password, returns JWT tokens |
+| POST | `/api/auth/refresh` | No | Exchange refresh token for new token pair |
+| GET | `/api/auth/me` | Yes | Get current user profile and permissions |
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+## Where to Configure Real Variables in Production
 
-## Resources
+When you deploy the backend to a hosting provider (Render, Railway, Fly.io, etc.):
 
-Check out a few resources that may come in handy when working with NestJS:
+1. **Render**: Dashboard → your service → Environment → add each variable (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN`, `PORT`)
+2. **Railway**: Project → your service → Variables tab → add each variable
+3. **Fly.io**: `fly secrets set DATABASE_URL=... JWT_SECRET=... JWT_REFRESH_SECRET=... CORS_ORIGIN=...`
+4. **Any VPS or Docker**: Pass via `--env-file .env` or set as container environment variables
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+The Neon `DATABASE_URL` should come from the Neon Console connection string. Never hardcode it in source files.
 
-## Support
+## Project Structure
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```
+src/
+  main.ts                  # App bootstrap (CORS, validation, prefix)
+  app.module.ts            # Root module
+  app.controller.ts        # Root + health endpoints
+  app.service.ts           # Hello World service
+  database.service.ts      # PostgreSQL pool, query, transaction helpers
+  database/
+    database.module.ts     # Global database module
+  common/
+    common.module.ts       # Global filters module
+    filters/
+      all-exceptions.filter.ts
+  audit/
+    audit.service.ts       # Append-only audit logging
+    audit.module.ts
+  auth/
+    auth.module.ts         # JWT + Passport module
+    auth.controller.ts     # Register, login, refresh, me
+    auth.service.ts        # Password hashing, token issuance
+    dto/auth.dto.ts        # Request validation DTOs
+    strategies/jwt.strategy.ts
+    guards/jwt-auth.guard.ts
+    interfaces/authenticated-user.ts
+  rbac/
+    rbac.module.ts
+    permissions.ts         # Permission type definitions
+    decorators/require-permissions.decorator.ts
+    guards/permissions.guard.ts
+  migrations/
+    001_extensions.sql     # uuid-ossp, citext
+    002_enums.sql          # Payment methods, document types, statuses, roles
+    003_core_tables.sql    # companies, branches, users, permissions, memberships
+    004_audit_logs.sql     # Append-only audit trail
+migrate.config.ts          # node-pg-migrate configuration
+```
