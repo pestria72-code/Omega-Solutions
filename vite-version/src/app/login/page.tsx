@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
   const [fullName, setFullName] = React.useState("")
+  const [companyName, setCompanyName] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
@@ -37,7 +38,7 @@ export default function LoginPage() {
           setSubmitting(false)
           return
         }
-        await registerUser(email, password, fullName, phone || undefined)
+        await registerUser(email, password, fullName, companyName, phone || undefined)
         await loginEmail(email, password)
       }
       navigate("/dashboard", { replace: true })
@@ -88,16 +89,29 @@ export default function LoginPage() {
         )}
 
         {mode === "register" && (
-          <div className="space-y-2">
-            <Label htmlFor="fullName">Full Name</Label>
-            <Input
-              id="fullName"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              placeholder="Jane Doe"
-            />
-          </div>
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
+                id="fullName"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+                placeholder="Jane Doe"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="companyName">Company Name</Label>
+              <Input
+                id="companyName"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                required
+                placeholder="Your company name"
+                autoComplete="organization"
+              />
+            </div>
+          </>
         )}
 
         <div className="space-y-2">
@@ -169,9 +183,6 @@ export default function LoginPage() {
         </div>
       </form>
 
-      <Link to="/dashboard" className="text-xs text-muted-foreground hover:text-foreground">
-        Continue without signing in
-      </Link>
     </div>
   )
 }

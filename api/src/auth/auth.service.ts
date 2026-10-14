@@ -24,10 +24,11 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<{ userId: string }> {
+  async register(dto: RegisterDto): Promise<{ userId: string; companyId: string }> {
+    const email = dto.email.toLowerCase();
     const existing = await this.db.query<{ id: string }>(
       'SELECT id FROM users WHERE email = $1',
-      [dto.email.toLowerCase()],
+      [email],
     );
 
     if (existing.rowCount && existing.rowCount > 0) {
@@ -35,15 +36,45 @@ export class AuthService {
     }
 
     const userId = uuidv4();
+    const companyId = uuidv4();
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
-    await this.db.query(
-      `INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)`,
-      [userId, dto.email.toLowerCase(), passwordHash, dto.fullName, dto.phone ?? null],
-    );
+    // Create the account, first company, and owner membership atomically.
+    // A failed insert rolls back all three records.
+    try {
+      await this.db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [userId, email, passwordHash, dto.fullName, dto.phone ?? null],
+        );
 
-    return { userId };
+        await client.query(
+          `INSERT INTO companies (id, name, currency, timezone, is_active)
+           VALUES ($1, $2, 'KES', 'Africa/Nairobi', true)`,
+          [companyId, dto.companyName.trim()],
+        );
+
+        await client.query(
+          `INSERT INTO company_memberships (user_id, company_id, role, is_active)
+           VALUES ($1, $2, 'owner', true)`,
+          [userId, companyId],
+        );
+      });
+    } catch (error) {
+      // Preserve a stable API response for duplicate-email races.
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === '23505'
+      ) {
+        throw new ConflictException('Email already registered');
+      }
+      throw error;
+    }
+
+    return { userId, companyId };
   }
 
   async login(dto: LoginDto): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
