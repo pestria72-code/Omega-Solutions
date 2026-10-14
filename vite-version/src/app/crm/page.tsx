@@ -38,7 +38,8 @@ export default function CrmPage() {
  const [leadStatus,setLeadStatus]=React.useState("all")
  const [opportunityStage,setOpportunityStage]=React.useState("all")
  const [activityPending,setActivityPending]=React.useState(true)
- const [leadDialog,setLeadDialog]=React.useState(false)\n const [editingLeadId,setEditingLeadId]=React.useState<string|null>(null)
+ const [leadDialog,setLeadDialog]=React.useState(false)
+ const [editingLeadId,setEditingLeadId]=React.useState<string|null>(null)
  const [opportunityDialog,setOpportunityDialog]=React.useState(false)
  const [activityDialog,setActivityDialog]=React.useState(false)
  const [leadForm,setLeadForm]=React.useState(blankLead)
@@ -91,7 +92,8 @@ export default function CrmPage() {
    setActivityDialog(false);setActivityForm(blankActivity);setTab("activities");await load()
   } catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not save activity.")} finally{setSaving(false)}
  }
- function editLead(lead:Lead){setEditingLeadId(lead.id);setLeadForm({contactName:lead.contact_name,organizationName:lead.organization_name||"",email:lead.email||"",phone:lead.phone||"",source:lead.source||"",estimatedValue:String(lead.estimated_value||0),notes:lead.notes||""});setLeadDialog(true)}\n async function updateLeadStatus(lead:Lead,status:string){
+ function editLead(lead:Lead){setEditingLeadId(lead.id);setLeadForm({contactName:lead.contact_name,organizationName:lead.organization_name||"",email:lead.email||"",phone:lead.phone||"",source:lead.source||"",estimatedValue:String(lead.estimated_value||0),notes:lead.notes||""});setLeadDialog(true)}
+ async function updateLeadStatus(lead:Lead,status:string){
   try{await api.patch<Lead>("/crm/leads/"+lead.id,{status});await load()}
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update lead status.")}
  }
