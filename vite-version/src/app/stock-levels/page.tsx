@@ -1,170 +1,63 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
-import { AlertCircle, Boxes, Package, Search } from "lucide-react"
+import { AlertCircle, Boxes, Package, RefreshCw, Warehouse as WarehouseIcon } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
-import { EmptyState } from "@/components/empty-state"
-import { StatusBadge } from "@/components/status-badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Card, CardContent } from "@/components/ui/card"
-import { useProducts } from "@/hooks/use-products"
+import { api } from "@/lib/api-client"
 import { formatKES, formatNumber } from "@/lib/format"
-import type { ProductRow } from "@/lib/api-types"
 
-type StockStatus = "In Stock" | "Low Stock" | "Out of Stock"
-
-function stockStatus(product: ProductRow): StockStatus {
-  const quantity = Number(product.stock_quantity)
-  const reorderLevel = Number(product.reorder_level)
-  if (quantity <= 0) return "Out of Stock"
-  if (quantity <= reorderLevel) return "Low Stock"
-  return "In Stock"
-}
-
-export default function StockLevelsPage() {
-  const { products, loading, error, refetch } = useProducts()
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState("all")
-
-  const inventory = products.filter((product) => product.is_active && !product.is_service)
-  const filtered = inventory.filter((product) => {
-    const matchesSearch =
-      product.name.toLowerCase().includes(search.toLowerCase()) ||
-      product.sku.toLowerCase().includes(search.toLowerCase()) ||
-      (product.category ?? "").toLowerCase().includes(search.toLowerCase())
-    const status = stockStatus(product)
-    return matchesSearch && (statusFilter === "all" || status === statusFilter)
+type StockRow={id:string;product_id:string;warehouse_id:string;quantity:string|number;reserved_quantity:string|number;reorder_level:string|number;available_quantity:string|number;status:string;warehouse_name:string;warehouse_code:string;sku:string;product_name:string;unit:string;cost_price:string|number}
+type Summary={stocked_products:number|string;low_stock_lines:number|string;out_of_stock_lines:number|string;inventory_cost_value:number|string;active_warehouses:number|string;movements_last_30_days:number|string}
+type Warehouse={id:string;code:string;name:string}
+export default function StockLevelsPage(){
+  const [rows,setRows]=React.useState<StockRow[]>([])
+  const [summary,setSummary]=React.useState<Summary|null>(null)
+  const [warehouses,setWarehouses]=React.useState<Warehouse[]>([])
+  const [search,setSearch]=React.useState("")
+  const [warehouseId,setWarehouseId]=React.useState("all")
+  const [statusFilter,setStatusFilter]=React.useState("all")
+  const [loading,setLoading]=React.useState(true)
+  const [error,setError]=React.useState<string|null>(null)
+  const load=React.useCallback(async()=>{
+    setLoading(true);setError(null)
+    try{
+      const [stock,snapshot,locations]=await Promise.all([
+        api.get<StockRow[]>("/inventory/stock"),
+        api.get<Summary>("/inventory/summary"),
+        api.get<Warehouse[]>("/inventory/warehouses"),
+      ])
+      setRows(stock);setSummary(snapshot);setWarehouses(locations)
+    }catch(e){setError((e as {message?:string}).message??"Could not load inventory balances.")}
+    finally{setLoading(false)}
+  },[])
+  React.useEffect(()=>{void load()},[load])
+  const filtered=rows.filter(r=>{
+    const q=search.toLowerCase()
+    const matches=!q||r.product_name.toLowerCase().includes(q)||r.sku.toLowerCase().includes(q)||r.warehouse_name.toLowerCase().includes(q)
+    return matches&&(warehouseId==="all"||r.warehouse_id===warehouseId)&&(statusFilter==="all"||r.status===statusFilter)
   })
-  const lowStockCount = inventory.filter((product) => stockStatus(product) === "Low Stock").length
-  const outOfStockCount = inventory.filter((product) => stockStatus(product) === "Out of Stock").length
-  const totalCostValue = inventory.reduce(
-    (total, product) => total + Number(product.stock_quantity || 0) * Number(product.cost_price || 0),
-    0,
-  )
-
-  return (
-    <BaseLayout>
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-6 px-4 sm:px-6 lg:px-8">
-        <PageHeader
-          title="Stock Levels"
-          description="Live stock quantities and reorder alerts from your product records"
-          action={
-            <Button onClick={() => void refetch()} variant="outline" disabled={loading}>
-              Refresh
-            </Button>
-          }
-        />
-
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Inventory summary">
-          <Card><CardContent className="flex items-center justify-between gap-4 pt-4">
-            <div><p className="text-sm text-muted-foreground">Stocked products</p><p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(inventory.length)}</p></div>
-            <Package className="size-5 text-muted-foreground" />
-          </CardContent></Card>
-          <Card><CardContent className="flex items-center justify-between gap-4 pt-4">
-            <div><p className="text-sm text-muted-foreground">Low stock</p><p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(lowStockCount)}</p></div>
-            <AlertCircle className="size-5 text-amber-600" />
-          </CardContent></Card>
-          <Card><CardContent className="flex items-center justify-between gap-4 pt-4">
-            <div><p className="text-sm text-muted-foreground">Out of stock</p><p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(outOfStockCount)}</p></div>
-            <Boxes className="size-5 text-muted-foreground" />
-          </CardContent></Card>
-          <Card><CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Recorded inventory cost value</p>
-            <p className="mt-1 break-words text-2xl font-semibold tabular-nums">{formatKES(totalCostValue)}</p>
-          </CardContent></Card>
-        </section>
-
-        <Card>
-          <CardContent className="space-y-4 pt-4">
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search product, SKU, or category…" className="pl-9" aria-label="Search stock" />
-              </div>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value ?? "all")}>
-                <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All stock statuses" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All stock statuses</SelectItem>
-                  <SelectItem value="In Stock">In Stock</SelectItem>
-                  <SelectItem value="Low Stock">Low Stock</SelectItem>
-                  <SelectItem value="Out of Stock">Out of Stock</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {error && (
-              <div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
-                <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                <p>{error}</p>
-              </div>
-            )}
-
-            {loading ? (
-              <LoadingSpinner />
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                icon={Boxes}
-                title={inventory.length === 0 ? "No stock records yet" : "No matching products"}
-                description={inventory.length === 0 ? "Add stocked products to begin tracking inventory. Figures on this page come from saved product records." : "Try another search term or stock status filter."}
-                action={inventory.length === 0 ? <Link to="/products" className={buttonVariants()}>Open products</Link> : undefined}
-              />
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Product</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">On hand</TableHead>
-                      <TableHead className="text-right">Reorder level</TableHead>
-                      <TableHead className="text-right">Unit cost</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((product) => {
-                      const status = stockStatus(product)
-                      return (
-                        <TableRow key={product.id}>
-                          <TableCell className="max-w-64 font-medium">{product.name}</TableCell>
-                          <TableCell className="whitespace-nowrap text-muted-foreground">{product.sku}</TableCell>
-                          <TableCell>{product.category || "—"}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatNumber(Number(product.stock_quantity))} {product.unit}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatNumber(Number(product.reorder_level))}</TableCell>
-                          <TableCell className="whitespace-nowrap text-right tabular-nums">{formatKES(Number(product.cost_price))}</TableCell>
-                          <TableCell><StatusBadge status={status} /></TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-            <div className="flex flex-col justify-between gap-2 border-t pt-3 text-sm text-muted-foreground sm:flex-row sm:items-center">
-              <span>Showing {formatNumber(filtered.length)} of {formatNumber(inventory.length)} active stocked products</span>
-              <Link to="/products" className={buttonVariants({ variant: "outline", size: "sm" })}>Manage products</Link>
-            </div>
-          </CardContent>
-        </Card>
+  const low=rows.filter(r=>r.status==="low_stock"&&Number(r.quantity)>0).length
+  const out=rows.filter(r=>Number(r.quantity)===0).length
+  const totalCost=rows.reduce((sum,r)=>sum+Number(r.quantity||0)*Number(r.cost_price||0),0)
+  return <BaseLayout><div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-6 px-4 sm:px-6 lg:px-8">
+    <PageHeader title="Stock Levels" description="Live, per-warehouse stock balances with available quantity and reorder alerts" action={<Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button>}/>
+    {error&&<div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</div>}
+    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Card><CardContent className="flex items-center justify-between gap-4 pt-4"><div><p className="text-sm text-muted-foreground">Stocked products</p><p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(Number(summary?.stocked_products||0))}</p></div><Package className="size-5 text-muted-foreground"/></CardContent></Card>
+      <Card><CardContent className="flex items-center justify-between gap-4 pt-4"><div><p className="text-sm text-muted-foreground">Low stock lines</p><p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(low)}</p></div><AlertCircle className="size-5 text-amber-600"/></CardContent></Card>
+      <Card><CardContent className="flex items-center justify-between gap-4 pt-4"><div><p className="text-sm text-muted-foreground">Out of stock</p><p className="mt-1 text-2xl font-semibold tabular-nums">{formatNumber(out)}</p></div><Boxes className="size-5 text-muted-foreground"/></CardContent></Card>
+      <Card><CardContent className="flex items-center justify-between gap-4 pt-4"><div><p className="text-sm text-muted-foreground">Recorded cost value</p><p className="mt-1 break-words text-2xl font-semibold tabular-nums">{formatKES(totalCost)}</p></div><WarehouseIcon className="size-5 text-muted-foreground"/></CardContent></Card>
+    </section>
+    <Card><CardContent className="space-y-4 pt-4">
+      <div className="grid gap-3 md:grid-cols-[1fr_220px_180px]">
+        <Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search product, SKU, or warehouse…" aria-label="Search inventory"/>
+        <select aria-label="Filter warehouse" className="h-9 rounded-md border bg-background px-3 text-sm" value={warehouseId} onChange={e=>setWarehouseId(e.target.value)}><option value="all">All warehouses</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}</select>
+        <select aria-label="Filter stock status" className="h-9 rounded-md border bg-background px-3 text-sm" value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">All stock statuses</option><option value="in_stock">In stock</option><option value="low_stock">Low stock</option><option value="out_of_stock">Out of stock</option></select>
       </div>
-    </BaseLayout>
-  )
+      {loading?<div className="flex justify-center py-12"><LoadingSpinner/></div>:filtered.length===0?<div className="py-12 text-center text-sm text-muted-foreground">{rows.length?"No stock balances match these filters.":"No stock balances yet. Add products and record a stock receipt to begin."}</div>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="px-3 py-3 font-medium">Product</th><th className="px-3 py-3 font-medium">Warehouse</th><th className="px-3 py-3 text-right font-medium">On hand</th><th className="px-3 py-3 text-right font-medium">Reserved</th><th className="px-3 py-3 text-right font-medium">Available</th><th className="px-3 py-3 text-right font-medium">Reorder at</th><th className="px-3 py-3 text-right font-medium">Stock value</th><th className="px-3 py-3 font-medium">Status</th></tr></thead><tbody>{filtered.map(r=><tr key={r.id} className="border-b last:border-0"><td className="px-3 py-3"><div className="font-medium">{r.product_name}</div><div className="text-xs text-muted-foreground">{r.sku}</div></td><td className="px-3 py-3"><div>{r.warehouse_name}</div><div className="text-xs text-muted-foreground">{r.warehouse_code}</div></td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(Number(r.quantity))} {r.unit}</td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(Number(r.reserved_quantity))}</td><td className="px-3 py-3 text-right font-medium tabular-nums">{formatNumber(Number(r.available_quantity))}</td><td className="px-3 py-3 text-right tabular-nums">{formatNumber(Number(r.reorder_level))}</td><td className="px-3 py-3 text-right tabular-nums">{formatKES(Number(r.quantity)*Number(r.cost_price))}</td><td className="px-3 py-3"><span className={r.status==="in_stock"?"rounded-full bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-300":r.status==="low_stock"?"rounded-full bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300":"rounded-full bg-destructive/10 px-2 py-1 text-xs text-destructive"}>{r.status.replaceAll("_"," ")}</span></td></tr>)}</tbody></table></div>}
+    </CardContent></Card>
+  </div></BaseLayout>
 }
