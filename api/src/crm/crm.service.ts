@@ -295,6 +295,22 @@ export class CrmService {
     return result.rows[0];
   }
 
+  async listCampaignLeads(user: AuthenticatedUser, campaignId: string) {
+    const companyId = await this.companyId(user);
+    const campaign = await this.db.query('SELECT id FROM crm_campaigns WHERE id=$1 AND company_id=$2',[campaignId,companyId]);
+    if (!campaign.rows.length) throw new NotFoundException('CRM campaign not found.');
+    const result = await this.db.query('SELECT cl.lead_id,cl.response_status,cl.added_at,l.contact_name,l.organization_name,l.email,l.phone FROM crm_campaign_leads cl JOIN crm_leads l ON l.id=cl.lead_id AND l.company_id=cl.company_id WHERE cl.company_id=$1 AND cl.campaign_id=$2 ORDER BY l.contact_name',[companyId,campaignId]);
+    return result.rows;
+  }
+
+  async updateCampaignLead(user: AuthenticatedUser, campaignId: string, leadId: string, dto: UpdateCampaignLeadDto) {
+    const companyId = await this.companyId(user);
+    const result = await this.db.query('UPDATE crm_campaign_leads SET response_status=COALESCE($4,response_status) WHERE company_id=$1 AND campaign_id=$2 AND lead_id=$3 RETURNING *',[companyId,campaignId,leadId,dto.responseStatus ?? null]);
+    if (!result.rows.length) throw new NotFoundException('Lead is not part of this campaign.');
+    await this.auditChange(user,'crm.campaign.update_response','crm_campaign',campaignId,{leadId,responseStatus:result.rows[0].response_status});
+    return result.rows[0];
+  }
+
   async addCampaignSegment(user: AuthenticatedUser, campaignId: string, dto: AddCampaignSegmentDto) {
     const companyId = await this.companyId(user);
     const campaign = await this.db.query('SELECT id FROM crm_campaigns WHERE id=$1 AND company_id=$2',[campaignId,companyId]);
