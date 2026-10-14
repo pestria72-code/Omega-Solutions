@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateLeadDto {
   @IsString() @MinLength(2) @MaxLength(180) contactName!: string;
@@ -51,5 +51,5 @@ export class CreateActivityDto {
   @IsOptional() @IsString() dueAt?: string;
 }
 export class UpdateActivityDto {
-  @IsOptional() completed?: boolean;
+  @IsOptional() @IsBoolean() completed?: boolean;
 }
