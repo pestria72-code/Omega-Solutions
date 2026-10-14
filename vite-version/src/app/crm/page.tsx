@@ -55,6 +55,7 @@ export default function CrmPage() {
    const oppParams=new URLSearchParams();if(search.trim())oppParams.set("search",search.trim());if(opportunityStage!=="all")oppParams.set("stage",opportunityStage)
    const results=await Promise.all([
     api.get<Lead[]>("/crm/leads"+(tab==="leads"&&leadParams.size?"?"+leadParams.toString():"")),
+    api.get<Customer[]>("/crm/customers"),
     api.get<Opportunity[]>("/crm/opportunities"+(tab==="opportunities"&&oppParams.size?"?"+oppParams.toString():"")),
     api.get<Activity[]>("/crm/activities?pending="+(activityPending?"true":"false")),
     api.get<Pipeline>("/crm/pipeline")
