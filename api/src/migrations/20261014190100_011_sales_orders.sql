@@ -1,3 +1,5 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quotations_id_company_unique ON quotations(id, company_id);
+
 CREATE TABLE IF NOT EXISTS sales_orders (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -22,6 +24,8 @@ CREATE TABLE IF NOT EXISTS sales_orders (
   CONSTRAINT sales_orders_company_number_unique UNIQUE (company_id, order_number),
   CONSTRAINT sales_orders_source_quote_unique UNIQUE (source_quotation_id)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_orders_id_company_unique ON sales_orders(id, company_id);
+
 CREATE TABLE IF NOT EXISTS sales_order_items (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -41,7 +45,12 @@ CREATE TABLE IF NOT EXISTS sales_order_items (
   CONSTRAINT sales_order_items_product_company_fk FOREIGN KEY (product_id, company_id)
     REFERENCES products(id, company_id) ON DELETE RESTRICT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_orders_id_company_unique ON sales_orders(id, company_id);
+CREATE TABLE IF NOT EXISTS sales_order_sequences (
+  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  order_year INTEGER NOT NULL,
+  next_number INTEGER NOT NULL DEFAULT 1 CHECK (next_number > 0),
+  PRIMARY KEY (company_id, order_year)
+);
 CREATE INDEX IF NOT EXISTS idx_sales_orders_company_created ON sales_orders(company_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sales_orders_company_status ON sales_orders(company_id, status);
 CREATE INDEX IF NOT EXISTS idx_sales_order_items_company_order ON sales_order_items(company_id, sales_order_id);
