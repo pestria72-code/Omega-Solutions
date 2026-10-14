@@ -4,8 +4,9 @@ import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type {
-  CreateActivityDto, CreateLeadDto, CreateOpportunityDto, UpdateActivityDto,
-  UpdateLeadDto, UpdateOpportunityDto,
+  AddCampaignLeadDto, AddCampaignSegmentDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto,
+  CreateLeadDto, CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto,
+  UpdateCampaignDto, UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
 } from './dto/crm.dto.js';
 
 @Injectable()
@@ -26,6 +27,12 @@ export class CrmService {
       userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
       action, entityType, entityId, oldValues: null, newValues, ipAddress: null,
     });
+  }
+
+  async listCrmCustomers(user: AuthenticatedUser, search?: string) {
+    const companyId = await this.companyId(user);
+    const result = await this.db.query('SELECT id, name, email, phone FROM customers WHERE company_id=$1 AND ($2::text IS NULL OR name ILIKE $2 OR email::text ILIKE $2 OR phone ILIKE $2) ORDER BY name ASC LIMIT 250', [companyId, search ? '%' + search + '%' : null]);
+    return result.rows;
   }
 
   async listLeads(user: AuthenticatedUser, search?: string, status?: string) {
@@ -254,6 +261,117 @@ export class CrmService {
     });
     await this.auditChange(user, 'crm.lead.convert', 'crm_lead', leadId, { customerId: String(converted.customer.id) });
     return converted;
+  }
+
+  async listCampaigns(user: AuthenticatedUser, status?: string) {
+    const companyId = await this.companyId(user);
+    const result = await this.db.query("SELECT c.*, COUNT(cl.lead_id)::int AS leads_count, COUNT(cl.lead_id) FILTER (WHERE cl.response_status IN ('responded','converted'))::int AS responses_count FROM crm_campaigns c LEFT JOIN crm_campaign_leads cl ON cl.campaign_id=c.id AND cl.company_id=c.company_id WHERE c.company_id=$1 AND ($2::text IS NULL OR c.status=$2) GROUP BY c.id ORDER BY c.created_at DESC LIMIT 200", [companyId, status ?? null]);
+    return result.rows;
+  }
+
+  async createCampaign(user: AuthenticatedUser, dto: CreateCampaignDto) {
+    const membership = await this.memberships.getMembership(user.userId);
+    const result = await this.db.query("INSERT INTO crm_campaigns (company_id,name,campaign_type,status,start_date,end_date,budget,actual_cost,target_leads,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *", [membership.companyId,dto.name.trim(),dto.campaignType ?? 'other',dto.status ?? 'planned',dto.startDate ?? null,dto.endDate ?? null,dto.budget ?? 0,dto.actualCost ?? 0,dto.targetLeads ?? 0,dto.notes ?? null,user.userId]);
+    const campaign = result.rows[0];
+    await this.auditChange(user,'crm.campaign.create','crm_campaign',String(campaign.id),{name:dto.name,status:campaign.status});
+    return campaign;
+  }
+
+  async updateCampaign(user: AuthenticatedUser, id: string, dto: UpdateCampaignDto) {
+    const companyId = await this.companyId(user);
+    const result = await this.db.query("UPDATE crm_campaigns SET name=COALESCE($3,name), campaign_type=COALESCE($4,campaign_type), status=COALESCE($5,status), start_date=COALESCE($6,start_date), end_date=COALESCE($7,end_date), budget=COALESCE($8,budget), actual_cost=COALESCE($9,actual_cost), target_leads=COALESCE($10,target_leads), notes=COALESCE($11,notes), updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *", [id,companyId,dto.name ?? null,dto.campaignType ?? null,dto.status ?? null,dto.startDate ?? null,dto.endDate ?? null,dto.budget ?? null,dto.actualCost ?? null,dto.targetLeads ?? null,dto.notes ?? null]);
+    if (!result.rows.length) throw new NotFoundException('CRM campaign not found.');
+    await this.auditChange(user,'crm.campaign.update','crm_campaign',id,{...dto});
+    return result.rows[0];
+  }
+
+  async addCampaignLead(user: AuthenticatedUser, campaignId: string, dto: AddCampaignLeadDto) {
+    const companyId = await this.companyId(user);
+    const campaign = await this.db.query('SELECT id FROM crm_campaigns WHERE id=$1 AND company_id=$2',[campaignId,companyId]);
+    if (!campaign.rows.length) throw new NotFoundException('CRM campaign not found.');
+    await this.getLead(user,dto.leadId);
+    const result = await this.db.query("INSERT INTO crm_campaign_leads(company_id,campaign_id,lead_id,response_status) VALUES($1,$2,$3,$4) ON CONFLICT(campaign_id,lead_id) DO UPDATE SET response_status=EXCLUDED.response_status RETURNING *", [companyId,campaignId,dto.leadId,dto.responseStatus ?? 'targeted']);
+    await this.auditChange(user,'crm.campaign.add_lead','crm_campaign',campaignId,{leadId:dto.leadId,responseStatus:dto.responseStatus ?? 'targeted'});
+    return result.rows[0];
+  }
+
+  async addCampaignSegment(user: AuthenticatedUser, campaignId: string, dto: AddCampaignSegmentDto) {
+    const companyId = await this.companyId(user);
+    const campaign = await this.db.query('SELECT id FROM crm_campaigns WHERE id=$1 AND company_id=$2',[campaignId,companyId]);
+    if (!campaign.rows.length) throw new NotFoundException('CRM campaign not found.');
+    const segment = await this.db.query('SELECT id FROM crm_segments WHERE id=$1 AND company_id=$2',[dto.segmentId,companyId]);
+    if (!segment.rows.length) throw new NotFoundException('CRM segment not found.');
+    const result = await this.db.query('INSERT INTO crm_campaign_segments(company_id,campaign_id,segment_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING *',[companyId,campaignId,dto.segmentId]);
+    await this.auditChange(user,'crm.campaign.add_segment','crm_campaign',campaignId,{segmentId:dto.segmentId});
+    return result.rows[0] ?? {success:true,alreadyLinked:true};
+  }
+
+  async listSegments(user: AuthenticatedUser) {
+    const companyId = await this.companyId(user);
+    const result = await this.db.query("SELECT s.*, CASE WHEN s.is_dynamic THEN (SELECT COUNT(*)::int FROM crm_leads l WHERE l.company_id=s.company_id AND (s.criteria->>'leadStatus' IS NULL OR l.status=s.criteria->>'leadStatus') AND (s.criteria->>'source' IS NULL OR l.source=s.criteria->>'source')) ELSE COUNT(sm.id)::int END AS members_count FROM crm_segments s LEFT JOIN crm_segment_members sm ON sm.segment_id=s.id AND sm.company_id=s.company_id WHERE s.company_id=$1 GROUP BY s.id ORDER BY s.name LIMIT 200", [companyId]);
+    return result.rows;
+  }
+
+  async createSegment(user: AuthenticatedUser, dto: CreateSegmentDto) {
+    const membership = await this.memberships.getMembership(user.userId);
+    const criteria = dto.criteria ?? {};
+    if (dto.isDynamic && Object.keys(criteria).some(key => !['leadStatus','source'].includes(key))) throw new BadRequestException('Dynamic segments support only leadStatus and source criteria.');
+    if (dto.isDynamic && criteria.leadStatus && !['new','qualified','unqualified','converted'].includes(String(criteria.leadStatus))) throw new BadRequestException('Invalid dynamic segment leadStatus.');
+    const result = await this.db.query("INSERT INTO crm_segments(company_id,name,description,criteria,is_dynamic,created_by) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING *", [membership.companyId,dto.name.trim(),dto.description ?? null,JSON.stringify(criteria),dto.isDynamic ?? false,user.userId]);
+    const segment = result.rows[0];
+    await this.auditChange(user,'crm.segment.create','crm_segment',String(segment.id),{name:dto.name,isDynamic:segment.is_dynamic});
+    return segment;
+  }
+
+  async addSegmentMember(user: AuthenticatedUser, segmentId: string, dto: AddSegmentMemberDto) {
+    const companyId = await this.companyId(user);
+    if (Boolean(dto.leadId) === Boolean(dto.customerId)) throw new BadRequestException('Provide exactly one lead or customer.');
+    const segment = await this.db.query('SELECT id,is_dynamic FROM crm_segments WHERE id=$1 AND company_id=$2',[segmentId,companyId]);
+    if (!segment.rows.length) throw new NotFoundException('CRM segment not found.');
+    if (segment.rows[0].is_dynamic) throw new BadRequestException('Dynamic segments calculate membership from criteria; manual membership is not allowed.');
+    if (dto.leadId) await this.getLead(user,dto.leadId);
+    if (dto.customerId) {
+      const customer = await this.db.query('SELECT id FROM customers WHERE id=$1 AND company_id=$2',[dto.customerId,companyId]);
+      if (!customer.rows.length) throw new NotFoundException('CRM customer not found.');
+    }
+    const result = await this.db.query('INSERT INTO crm_segment_members(company_id,segment_id,lead_id,customer_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING *', [companyId,segmentId,dto.leadId ?? null,dto.customerId ?? null]);
+    await this.auditChange(user,'crm.segment.add_member','crm_segment',segmentId,{leadId:dto.leadId ?? null,customerId:dto.customerId ?? null});
+    return result.rows[0] ?? {success:true,alreadyMember:true};
+  }
+
+  async listTickets(user: AuthenticatedUser, status?: string, priority?: string, search?: string) {
+    const companyId = await this.companyId(user);
+    const result = await this.db.query("SELECT t.*,c.name AS customer_name,l.contact_name AS lead_contact_name,u.full_name AS assignee_name FROM crm_support_tickets t LEFT JOIN customers c ON c.id=t.customer_id AND c.company_id=t.company_id LEFT JOIN crm_leads l ON l.id=t.lead_id AND l.company_id=t.company_id LEFT JOIN users u ON u.id=t.assigned_user_id WHERE t.company_id=$1 AND ($2::text IS NULL OR t.status=$2) AND ($3::text IS NULL OR t.priority=$3) AND ($4::text IS NULL OR t.subject ILIKE $4 OR t.description ILIKE $4 OR c.name ILIKE $4 OR l.contact_name ILIKE $4) ORDER BY CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END,t.created_at DESC LIMIT 250", [companyId,status ?? null,priority ?? null,search ? '%' + search + '%' : null]);
+    return result.rows;
+  }
+
+  async createTicket(user: AuthenticatedUser, dto: CreateTicketDto) {
+    const membership = await this.memberships.getMembership(user.userId);
+    if (!dto.customerId && !dto.leadId) throw new BadRequestException('Link the ticket to a customer or lead.');
+    if (dto.customerId) {
+      const customer = await this.db.query('SELECT id FROM customers WHERE id=$1 AND company_id=$2',[dto.customerId,membership.companyId]);
+      if (!customer.rows.length) throw new NotFoundException('CRM customer not found.');
+    }
+    if (dto.leadId) await this.getLead(user,dto.leadId);
+    const assignedUserId = dto.assignedUserId ?? user.userId;
+    const assigned = await this.db.query('SELECT user_id FROM company_memberships WHERE user_id=$1 AND company_id=$2 AND is_active=TRUE',[assignedUserId,membership.companyId]);
+    if (!assigned.rows.length) throw new BadRequestException('The assigned user must be an active member of this company.');
+    const result = await this.db.query("INSERT INTO crm_support_tickets(company_id,customer_id,lead_id,subject,description,status,priority,assigned_user_id,created_by,due_at,resolved_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CASE WHEN $6 IN ('resolved','closed') THEN NOW() ELSE NULL END) RETURNING *", [membership.companyId,dto.customerId ?? null,dto.leadId ?? null,dto.subject.trim(),dto.description ?? null,dto.status ?? 'open',dto.priority ?? 'normal',assignedUserId,user.userId,dto.dueAt ?? null]);
+    const ticket = result.rows[0];
+    await this.auditChange(user,'crm.ticket.create','crm_support_ticket',String(ticket.id),{subject:dto.subject,priority:ticket.priority});
+    return ticket;
+  }
+
+  async updateTicket(user: AuthenticatedUser, id: string, dto: UpdateTicketDto) {
+    const companyId = await this.companyId(user);
+    if (dto.assignedUserId) {
+      const assigned = await this.db.query('SELECT user_id FROM company_memberships WHERE user_id=$1 AND company_id=$2 AND is_active=TRUE',[dto.assignedUserId,companyId]);
+      if (!assigned.rows.length) throw new BadRequestException('The assigned user must be an active member of this company.');
+    }
+    const result = await this.db.query("UPDATE crm_support_tickets SET status=COALESCE($3,status), priority=COALESCE($4,priority), assigned_user_id=COALESCE($5,assigned_user_id), due_at=COALESCE($6,due_at), description=COALESCE($7,description), resolved_at=CASE WHEN COALESCE($3,status) IN ('resolved','closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END, updated_at=NOW() WHERE id=$1 AND company_id=$2 RETURNING *", [id,companyId,dto.status ?? null,dto.priority ?? null,dto.assignedUserId ?? null,dto.dueAt ?? null,dto.description ?? null]);
+    if (!result.rows.length) throw new NotFoundException('CRM support ticket not found.');
+    await this.auditChange(user,'crm.ticket.update','crm_support_ticket',id,{...dto});
+    return result.rows[0];
   }
 
   async pipelineSummary(user: AuthenticatedUser) {
