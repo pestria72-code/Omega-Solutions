@@ -83,7 +83,13 @@ export default function QuotationsPage() {
     finally { setSaving(false); }
   };
 
-  const convertToOrder = async (quotation: Quotation) => {\n    setError("");\n    try { await api.post(`/sales-orders/from-quotation/${quotation.id}`); await refresh(); }\n    catch (e) { setError(messageOf(e)); }\n  };\n\n  const updateStatus = async (quotation: Quotation, status: "sent" | "accepted" | "rejected" | "cancelled") => {
+  const convertToOrder = async (quotation: Quotation) => {
+    setError("");
+    try { await api.post(`/sales-orders/from-quotation/${quotation.id}`); await refresh(); }
+    catch (e) { setError(messageOf(e)); }
+  };
+
+  const updateStatus = async (quotation: Quotation, status: "sent" | "accepted" | "rejected" | "cancelled") => {
     setError("");
     try {
       await api.patch<Quotation>(`/quotations/${quotation.id}/status`, { status });
