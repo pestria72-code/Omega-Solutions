@@ -57,12 +57,10 @@ export class CompaniesService {
       user.companyId ?? '',
     );
 
+    // The creator must become an owner of the new tenant. Keep the company
+    // and membership inserts atomic to prevent orphaned companies.
     const currency = (dto.currency ?? 'KES').toUpperCase();
     const timezone = dto.timezone ?? 'Africa/Nairobi';
-
-    // A newly created tenant must include its creator's owner membership.
-    // Keep both inserts in one transaction so no orphaned/unmanageable company
-    // can be created if membership creation fails.
     const company = await this.db.transaction(async (client) => {
       const result = await client.query<CompanyRow>(
         `INSERT INTO companies
@@ -95,39 +93,8 @@ export class CompaniesService {
          VALUES ($1, $2, 'owner', true)`,
         [user.userId, created.id],
       );
-
       return created;
     });
-
-    const currency = (dto.currency ?? 'KES').toUpperCase();
-    const timezone = dto.timezone ?? 'Africa/Nairobi';
-
-    const result = await this.db.query<CompanyRow>(
-      `INSERT INTO companies
-        (name, registration_number, vat_number, currency, timezone,
-         address_line1, address_line2, city, county, postal_code,
-         phone, email, website, settings, is_active)
-       VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, '{}', true)
-       RETURNING ${COMPANY_COLUMNS}`,
-      [
-        dto.name,
-        dto.registrationNumber ?? null,
-        dto.vatNumber ?? null,
-        currency,
-        timezone,
-        dto.addressLine1 ?? null,
-        dto.addressLine2 ?? null,
-        dto.city ?? null,
-        dto.county ?? null,
-        dto.postalCode ?? null,
-        dto.phone ?? null,
-        dto.email ?? null,
-        dto.website ?? null,
-      ],
-    );
-
-    const company = result.rows[0];
 
     await this.audit.log({
       userId: user.userId,
@@ -137,7 +104,7 @@ export class CompaniesService {
       entityType: 'company',
       entityId: company.id,
       oldValues: null,
-      newValues: { name: dto.name, currency },
+      newValues: { name: company.name, currency },
       ipAddress: null,
     });
 
