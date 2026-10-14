@@ -86,7 +86,7 @@ export class CrmService {
       values,
     );
     if (!result.rows.length) throw new NotFoundException('CRM lead not found.');
-    await this.auditChange(user, 'crm.lead.update', 'crm_lead', leadId, dto);
+    await this.auditChange(user, 'crm.lead.update', 'crm_lead', leadId, { ...dto });
     return result.rows[0];
   }
 
@@ -154,7 +154,7 @@ export class CrmService {
       values as Array<string | number | null>,
     );
     if (!result.rows.length) throw new NotFoundException('CRM opportunity not found.');
-    await this.auditChange(user, 'crm.opportunity.update', 'crm_opportunity', id, dto);
+    await this.auditChange(user, 'crm.opportunity.update', 'crm_opportunity', id, { ...dto });
     return result.rows[0];
   }
 
