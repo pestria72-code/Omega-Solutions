@@ -63,3 +63,24 @@ export class UpdateInvoiceStatusDto {
   @MaxLength(20)
   status!: string;
 }
+
+export class CreateInvoicePaymentDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount!: number;
+
+  @IsString()
+  @MaxLength(20)
+  method!: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(100)
+  reference?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  notes?: string;
+}
