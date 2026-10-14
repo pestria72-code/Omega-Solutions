@@ -7,6 +7,7 @@ export type InvoiceStatus =
   | 'cancelled';
 
 export interface InvoiceItemRow {
+  [key: string]: unknown;
   id: string;
   invoice_id: string;
   product_id: string | null;
@@ -21,6 +22,7 @@ export interface InvoiceItemRow {
 }
 
 export interface InvoiceRow {
+  [key: string]: unknown;
   id: string;
   company_id: string;
   customer_id: string;
