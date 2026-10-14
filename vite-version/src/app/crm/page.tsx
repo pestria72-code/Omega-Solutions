@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Plus, Search, Users, AlertCircle, RefreshCw, Target, CalendarClock, CheckCircle2, Phone, Mail, CalendarDays, ClipboardCheck, UserCheck } from "lucide-react"
+import { Plus, Search, Users, AlertCircle, RefreshCw, Target, CalendarClock, CheckCircle2, Phone, Mail, CalendarDays, ClipboardCheck, UserCheck, Pencil } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -38,7 +38,7 @@ export default function CrmPage() {
  const [leadStatus,setLeadStatus]=React.useState("all")
  const [opportunityStage,setOpportunityStage]=React.useState("all")
  const [activityPending,setActivityPending]=React.useState(true)
- const [leadDialog,setLeadDialog]=React.useState(false)
+ const [leadDialog,setLeadDialog]=React.useState(false)\n const [editingLeadId,setEditingLeadId]=React.useState<string|null>(null)
  const [opportunityDialog,setOpportunityDialog]=React.useState(false)
  const [activityDialog,setActivityDialog]=React.useState(false)
  const [leadForm,setLeadForm]=React.useState(blankLead)
@@ -91,7 +91,7 @@ export default function CrmPage() {
    setActivityDialog(false);setActivityForm(blankActivity);setTab("activities");await load()
   } catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not save activity.")} finally{setSaving(false)}
  }
- async function updateLeadStatus(lead:Lead,status:string){
+ function editLead(lead:Lead){setEditingLeadId(lead.id);setLeadForm({contactName:lead.contact_name,organizationName:lead.organization_name||"",email:lead.email||"",phone:lead.phone||"",source:lead.source||"",estimatedValue:String(lead.estimated_value||0),notes:lead.notes||""});setLeadDialog(true)}\n async function updateLeadStatus(lead:Lead,status:string){
   try{await api.patch<Lead>("/crm/leads/"+lead.id,{status});await load()}
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update lead status.")}
  }
@@ -110,7 +110,7 @@ export default function CrmPage() {
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update activity.")}
  }
 
- const action=tab==="leads"?<Button onClick={()=>{setLeadForm(blankLead);setLeadDialog(true)}}><Plus className="size-4"/> Add lead</Button>:tab==="opportunities"?<Button onClick={()=>{setOpportunityForm(blankOpportunity);setOpportunityDialog(true)}}><Plus className="size-4"/> Add opportunity</Button>:<Button onClick={()=>{setActivityForm(blankActivity);setActivityDialog(true)}}><Plus className="size-4"/> Schedule activity</Button>
+ const action=tab==="leads"?<Button onClick={()=>{setEditingLeadId(null);setLeadForm(blankLead);setLeadDialog(true)}}><Plus className="size-4"/> Add lead</Button>:tab==="opportunities"?<Button onClick={()=>{setOpportunityForm(blankOpportunity);setOpportunityDialog(true)}}><Plus className="size-4"/> Add opportunity</Button>:<Button onClick={()=>{setActivityForm(blankActivity);setActivityDialog(true)}}><Plus className="size-4"/> Schedule activity</Button>
 
  return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
   <PageHeader title="Customer relationship management" description="Manage prospects, opportunities, sales follow-ups and customer engagement." action={action}/>
@@ -130,7 +130,7 @@ export default function CrmPage() {
    </div>
    {loading?<div className="flex justify-center py-12"><LoadingSpinner/></div>:tab==="leads"?(
     leads.length===0?<Empty icon={<Users className="size-6"/>} title="No leads found" description="Add a prospect to start tracking your pipeline." action={()=>{setLeadForm(blankLead);setLeadDialog(true)}}/>:
-    <Table><TableHeader><TableRow><TableHead>Contact</TableHead><TableHead className="hidden md:table-cell">Organization</TableHead><TableHead className="hidden lg:table-cell">Email / phone</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Est. value</TableHead><TableHead className="hidden sm:table-cell">Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{leads.map(l=><TableRow key={l.id}><TableCell><div className="font-medium">{l.contact_name}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{l.organization_name||"Independent contact"}</div></TableCell><TableCell className="hidden md:table-cell">{l.organization_name||"—"}</TableCell><TableCell className="hidden lg:table-cell"><div>{l.email||"—"}</div><div className="text-xs text-muted-foreground">{l.phone||""}</div></TableCell><TableCell>{l.status==="converted"?badge(l.status):<select aria-label={"Status for "+l.contact_name} value={l.status} onChange={e=>void updateLeadStatus(l,e.target.value)} className="max-w-36 rounded-md border border-input bg-background px-2 py-1.5 text-xs">{["new","qualified","unqualified"].map(s=><option key={s} value={s}>{stageLabel(s)}</option>)}</select>}</TableCell><TableCell className="text-right font-medium tabular-nums">{formatKES(Number(l.estimated_value))}</TableCell><TableCell className="hidden sm:table-cell text-muted-foreground">{formatDate(l.created_at)}</TableCell><TableCell>{l.status==="converted"?<span className="text-xs text-muted-foreground">Customer created</span>:<Button size="sm" variant="outline" onClick={()=>void convertLead(l)}><UserCheck className="size-3.5"/> Convert</Button>}</TableCell></TableRow>)}</TableBody></Table>
+    <Table><TableHeader><TableRow><TableHead>Contact</TableHead><TableHead className="hidden md:table-cell">Organization</TableHead><TableHead className="hidden lg:table-cell">Email / phone</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Est. value</TableHead><TableHead className="hidden sm:table-cell">Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{leads.map(l=><TableRow key={l.id}><TableCell><div className="font-medium">{l.contact_name}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{l.organization_name||"Independent contact"}</div></TableCell><TableCell className="hidden md:table-cell">{l.organization_name||"—"}</TableCell><TableCell className="hidden lg:table-cell"><div>{l.email||"—"}</div><div className="text-xs text-muted-foreground">{l.phone||""}</div></TableCell><TableCell>{l.status==="converted"?badge(l.status):<select aria-label={"Status for "+l.contact_name} value={l.status} onChange={e=>void updateLeadStatus(l,e.target.value)} className="max-w-36 rounded-md border border-input bg-background px-2 py-1.5 text-xs">{["new","qualified","unqualified"].map(s=><option key={s} value={s}>{stageLabel(s)}</option>)}</select>}</TableCell><TableCell className="text-right font-medium tabular-nums">{formatKES(Number(l.estimated_value))}</TableCell><TableCell className="hidden sm:table-cell text-muted-foreground">{formatDate(l.created_at)}</TableCell><TableCell><div className="flex flex-wrap justify-end gap-1"><Button size="sm" variant="outline" onClick={()=>editLead(l)}><Pencil className="size-3.5"/> Edit</Button>{l.status==="converted"?<span className="px-2 py-1 text-xs text-muted-foreground">Customer created</span>:<Button size="sm" variant="outline" onClick={()=>void convertLead(l)}><UserCheck className="size-3.5"/> Convert</Button>}</div></TableCell></TableRow>)}</TableBody></Table>
    ):tab==="opportunities"?(
     opportunities.length===0?<Empty icon={<Target className="size-6"/>} title="No opportunities yet" description="Turn a lead into a tracked sales opportunity." action={()=>{setOpportunityForm(blankOpportunity);setOpportunityDialog(true)}}/>:
     <Table><TableHeader><TableRow><TableHead>Opportunity</TableHead><TableHead className="hidden md:table-cell">Contact</TableHead><TableHead>Stage</TableHead><TableHead className="text-right">Value</TableHead><TableHead className="hidden lg:table-cell">Weighted</TableHead><TableHead className="hidden sm:table-cell">Expected close</TableHead></TableRow></TableHeader><TableBody>{opportunities.map(o=><TableRow key={o.id}><TableCell><div className="font-medium">{o.title}</div><div className="text-xs text-muted-foreground">{o.probability}% probability</div></TableCell><TableCell className="hidden md:table-cell">{o.lead_contact_name||o.customer_name||"—"}</TableCell><TableCell><select aria-label={"Stage for "+o.title} value={o.stage} onChange={e=>void updateStage(o,e.target.value)} className="max-w-40 rounded-md border border-input bg-background px-2 py-1.5 text-xs">{stages.map(s=><option key={s} value={s}>{stageLabel(s)}</option>)}</select></TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(o.expected_value))}</TableCell><TableCell className="hidden lg:table-cell text-right tabular-nums">{formatKES(Number(o.weighted_value||0))}</TableCell><TableCell className="hidden sm:table-cell">{o.expected_close_date?formatDate(o.expected_close_date):"—"}</TableCell></TableRow>)}</TableBody></Table>
@@ -139,7 +139,7 @@ export default function CrmPage() {
   </CardContent></Card>
  </div>
 
- <Dialog open={leadDialog} onOpenChange={setLeadDialog}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Add CRM lead</DialogTitle><DialogDescription>Record a prospect in your company CRM. Amounts use Kenyan shillings (KES).</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2">
+ <Dialog open={leadDialog} onOpenChange={open=>{setLeadDialog(open);if(!open)setEditingLeadId(null)}}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>{editingLeadId?"Edit CRM lead":"Add CRM lead"}</DialogTitle><DialogDescription>Record a prospect in your company CRM. Amounts use Kenyan shillings (KES).</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2">
   <Field label="Contact name *" id="crm-contact"><Input id="crm-contact" value={leadForm.contactName} onChange={e=>setLeadForm({...leadForm,contactName:e.target.value})}/></Field>
   <Field label="Organization" id="crm-org"><Input id="crm-org" value={leadForm.organizationName} onChange={e=>setLeadForm({...leadForm,organizationName:e.target.value})}/></Field>
   <Field label="Email" id="crm-email"><Input id="crm-email" type="email" value={leadForm.email} onChange={e=>setLeadForm({...leadForm,email:e.target.value})}/></Field>
@@ -147,7 +147,7 @@ export default function CrmPage() {
   <Field label="Source" id="crm-source"><Input id="crm-source" placeholder="Referral, website…" value={leadForm.source} onChange={e=>setLeadForm({...leadForm,source:e.target.value})}/></Field>
   <Field label="Estimated value (KSh)" id="crm-value"><Input id="crm-value" type="number" min="0" value={leadForm.estimatedValue} onChange={e=>setLeadForm({...leadForm,estimatedValue:e.target.value})}/></Field>
   <Field label="Notes" id="crm-notes" wide><textarea id="crm-notes" rows={3} value={leadForm.notes} onChange={e=>setLeadForm({...leadForm,notes:e.target.value})} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"/></Field>
- </div><DialogFooter><DialogClose render={<Button variant="outline">Cancel</Button>}/><Button onClick={()=>void saveLead()} disabled={saving||!leadForm.contactName.trim()}>{saving?"Saving…":"Save lead"}</Button></DialogFooter></DialogContent></Dialog>
+ </div><DialogFooter><DialogClose render={<Button variant="outline">Cancel</Button>}/><Button onClick={()=>void saveLead()} disabled={saving||!leadForm.contactName.trim()}>{saving?"Saving…":editingLeadId?"Save changes":"Save lead"}</Button></DialogFooter></DialogContent></Dialog>
 
  <Dialog open={opportunityDialog} onOpenChange={setOpportunityDialog}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Add sales opportunity</DialogTitle><DialogDescription>Track a potential deal through sales stages and weighted forecasts.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2">
   <Field label="Opportunity title *" id="opp-title" wide><Input id="opp-title" value={opportunityForm.title} onChange={e=>setOpportunityForm({...opportunityForm,title:e.target.value})}/></Field>
