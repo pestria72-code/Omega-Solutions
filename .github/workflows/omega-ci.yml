@@ -6,6 +6,7 @@ on:
       - "api/**"
       - "vite-version/**"
       - ".github/workflows/omega-ci.yml"
+      - "render.yaml"
   push:
     branches:
       - main
