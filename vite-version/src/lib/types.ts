@@ -1,4 +1,4 @@
-export type InvoiceStatus = "Draft" | "Sent" | "Paid" | "Overdue" | "Cancelled";
+export type InvoiceStatus = "Draft" | "Sent" | "Paid" | "Partially Paid" | "Overdue" | "Cancelled";
 export type StockStatus = "In Stock" | "Low Stock" | "Out of Stock";
 export type CustomerStatus = "Active" | "Inactive" | "Blocked";
 export type BranchStatus = "Active" | "Inactive";
