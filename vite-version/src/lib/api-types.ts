@@ -112,11 +112,23 @@ export interface InvoiceItemApiRow {
   quantity: number | string; unit_price: number | string; tax_rate: number | string;
   line_subtotal: number | string; tax_amount: number | string; line_total: number | string;
 }
+
+export interface InvoicePaymentApiRow {
+  id: string;
+  invoice_id: string;
+  amount: number | string;
+  method: "mpesa" | "bank" | "cash" | "card" | "cheque";
+  reference: string | null;
+  paid_at: string;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface InvoiceApiRow {
   id: string; company_id: string; customer_id: string; customer_name: string; invoice_number: string;
   issue_date: string; due_date: string;
   status: "draft" | "sent" | "paid" | "partially_paid" | "overdue" | "cancelled";
   currency: string; subtotal: number | string; tax_amount: number | string; total: number | string;
   amount_paid: number | string; notes: string | null; created_at: string; updated_at: string;
-  item_count?: number; items?: InvoiceItemApiRow[];
+  item_count?: number; items?: InvoiceItemApiRow[]; payments?: InvoicePaymentApiRow[];
 }
