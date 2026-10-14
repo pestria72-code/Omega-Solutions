@@ -87,13 +87,29 @@ export class InventoryService {
     const { companyId } = await this.memberships.getMembership(user.userId);
     const existing = await this.getWarehouse(user, warehouseId);
     if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
+    if (typeof dto.code === 'string') {
+      const normalizedCode = dto.code.trim().toUpperCase();
+      if (!normalizedCode) throw new BadRequestException('Warehouse code cannot be empty.');
+      const duplicate = await this.db.query<{ id: string }>(
+        'SELECT id FROM warehouses WHERE company_id=$1 AND UPPER(code)=UPPER($2) AND id<>$3',
+        [companyId, normalizedCode, warehouseId],
+      );
+      if (duplicate.rows.length) throw new ConflictException('A warehouse with this code already exists.');
+    }
+    if (typeof dto.name === 'string' && !dto.name.trim()) {
+      throw new BadRequestException('Warehouse name cannot be empty.');
+    }
     const map: Record<string,string> = { code:'code',name:'name',location:'location',branchId:'branch_id',capacity:'capacity',isActive:'is_active' };
     const fields: string[] = [];
     const values: unknown[] = [];
     for (const [key,column] of Object.entries(map)) {
       if (key in dto) {
         const value = (dto as Record<string,unknown>)[key];
-        values.push(key === 'code' && typeof value === 'string' ? value.trim().toUpperCase() : value);
+        values.push(
+          typeof value === 'string' && (key === 'code' || key === 'name' || key === 'location')
+            ? (key === 'code' ? value.trim().toUpperCase() : value.trim() || null)
+            : value,
+        );
         fields.push(`${column}=$${values.length}`);
       }
     }
