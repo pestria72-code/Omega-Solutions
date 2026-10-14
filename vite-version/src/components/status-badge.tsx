@@ -10,6 +10,7 @@ const statusConfig: Record<string, { variant: "default" | "secondary" | "destruc
   Draft: { variant: "secondary", label: "Draft" },
   Sent: { variant: "outline", label: "Sent" },
   Paid: { variant: "default", label: "Paid" },
+  "Partially Paid": { variant: "outline", label: "Partially Paid" },
   Overdue: { variant: "destructive", label: "Overdue" },
   Cancelled: { variant: "secondary", label: "Cancelled" },
   "In Stock": { variant: "default", label: "In Stock" },
