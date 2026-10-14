@@ -37,6 +37,11 @@ export class CrmController {
     return this.crm.updateLead(req.user, leadId, dto);
   }
 
+  @Post('leads/:leadId/convert') @RequirePermissions('crm:write')
+  convertLead(@Request() req: { user: AuthenticatedUser }, @Param('leadId') leadId: string) {
+    return this.crm.convertLeadToCustomer(req.user, leadId);
+  }
+
   @Get('opportunities') @RequirePermissions('crm:read')
   listOpportunities(@Request() req: { user: AuthenticatedUser }, @Query('stage') stage?: string, @Query('search') search?: string) {
     return this.crm.listOpportunities(req.user, stage, search);
