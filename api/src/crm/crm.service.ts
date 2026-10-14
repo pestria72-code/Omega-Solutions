@@ -190,11 +190,17 @@ export class CrmService {
       const customer = await this.db.query('SELECT id FROM customers WHERE id=$1 AND company_id=$2', [dto.customerId, membership.companyId]);
       if (!customer.rows.length) throw new NotFoundException('CRM customer not found.');
     }
+    const assignedUserId = dto.assignedUserId ?? user.userId;
+    const assignedMember = await this.db.query(
+      'SELECT user_id FROM company_memberships WHERE user_id=$1 AND company_id=$2 AND is_active=TRUE',
+      [assignedUserId, membership.companyId],
+    );
+    if (!assignedMember.rows.length) throw new BadRequestException('The assigned user must be an active member of this company.');
     const result = await this.db.query(
       `INSERT INTO crm_activities (company_id,lead_id,opportunity_id,customer_id,assigned_user_id,activity_type,subject,description,due_at,created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [membership.companyId, dto.leadId ?? null, dto.opportunityId ?? null, dto.customerId ?? null,
-       dto.assignedUserId ?? user.userId, dto.activityType, dto.subject.trim(), dto.description ?? null, dto.dueAt ?? null, user.userId],
+       assignedUserId, dto.activityType, dto.subject.trim(), dto.description ?? null, dto.dueAt ?? null, user.userId],
     );
     const activity = result.rows[0];
     await this.auditChange(user, 'crm.activity.create', 'crm_activity', String(activity.id), { subject: dto.subject, activityType: dto.activityType });
