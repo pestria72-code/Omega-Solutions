@@ -1,3 +1,6 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_id_company_unique ON customers(id, company_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_products_id_company_unique ON products(id, company_id);
+
 CREATE TABLE IF NOT EXISTS quotations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
