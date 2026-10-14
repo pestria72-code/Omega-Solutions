@@ -3,7 +3,7 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
-import type { SalesOrderRow, SalesOrderStatus } from './sales-order.types.js';
+import type { SalesOrderItemRow, SalesOrderRow, SalesOrderStatus } from './sales-order.types.js';
 
 const SELECT_ORDERS = `
   SELECT so.id, so.company_id, so.customer_id, c.name AS customer_name,
@@ -38,7 +38,7 @@ export class SalesOrdersService {
     );
     const order = result.rows[0];
     if (!order) throw new NotFoundException('Sales order not found.');
-    const items = await this.db.query(
+    const items = await this.db.query<SalesOrderItemRow>(
       `SELECT id, sales_order_id, product_id, product_name, sku, quantity, unit_price, tax_rate, line_subtotal, tax_amount, line_total
        FROM sales_order_items WHERE company_id = $1 AND sales_order_id = $2 ORDER BY created_at`,
       [membership.companyId, id],
