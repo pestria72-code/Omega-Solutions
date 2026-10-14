@@ -16,6 +16,9 @@ export const routes: RouteObject[] = [
       { path: "/dashboard", lazy: page(() => import("@/app/dashboard/page")) },
       // CRM and sales
       { path: "/crm", lazy: page(() => import("@/app/crm/page")) },
+      { path: "/crm/campaigns", lazy: page(() => import("@/app/crm/campaigns/page")) },
+      { path: "/crm/segments", lazy: page(() => import("@/app/crm/segments/page")) },
+      { path: "/crm/tickets", lazy: page(() => import("@/app/crm/tickets/page")) },
       { path: "/customers", lazy: page(() => import("@/app/customers/page")) },
       { path: "/quotations", lazy: page(() => import("@/app/quotations/page")) },
       { path: "/sales-orders", lazy: page(() => import("@/app/sales-orders/page")) },
