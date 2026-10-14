@@ -46,6 +46,12 @@ const navGroups = [
     ],
   },
   {
+    label: "CRM",
+    items: [
+      { title: "Leads & Pipeline", url: "/crm", icon: Users },
+    ],
+  },
+  {
     label: "Sales",
     items: [
       { title: "Customers", url: "/customers", icon: Users },
@@ -91,16 +97,8 @@ const navGroups = [
   {
     label: "Administration",
     items: [
-      {
-        title: "Companies & Branches",
-        url: "/companies",
-        icon: Building2,
-      },
-      {
-        title: "Users & Roles",
-        url: "/users-roles",
-        icon: UserCog,
-      },
+      { title: "Companies & Branches", url: "/companies", icon: Building2 },
+      { title: "Users & Roles", url: "/users-roles", icon: UserCog },
       { title: "Audit Logs", url: "/audit-logs", icon: ScrollText },
       { title: "Settings", url: "/settings", icon: Settings },
     ],
