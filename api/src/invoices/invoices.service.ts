@@ -8,7 +8,7 @@ import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { CreateInvoiceDto } from './dto/invoice.dto.js';
-import type { InvoiceRow, InvoiceStatus } from './invoice.types.js';
+import type { InvoiceItemRow, InvoiceRow, InvoiceStatus } from './invoice.types.js';
 
 const INVOICE_SELECT = `
   SELECT i.id, i.company_id, i.customer_id, c.name AS customer_name,
@@ -64,14 +64,14 @@ export class InvoicesService {
     );
     const invoice = result.rows[0];
     if (!invoice) throw new NotFoundException('Invoice not found.');
-    const items = await this.db.query(
+    const items = await this.db.query<InvoiceItemRow>(
       `SELECT id, invoice_id, product_id, product_name, sku, quantity,
               unit_price, tax_rate, line_subtotal, tax_amount, line_total
        FROM invoice_items WHERE company_id = $1 AND invoice_id = $2
        ORDER BY created_at ASC`,
       [membership.companyId, invoiceId],
     );
-    invoice.items = items.rows as InvoiceRow['items'];
+    invoice.items = items.rows;
     return invoice;
   }
 
@@ -175,30 +175,60 @@ export class InvoicesService {
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
     if (!this.isInvoiceStatus(status)) throw new BadRequestException('Invalid invoice status.');
-    const allowed = new Set<InvoiceStatus>(['draft', 'sent', 'cancelled']);
-    if (!allowed.has(status)) {
-      throw new BadRequestException('Only draft, sent, or cancelled status changes are supported here. Record payments to mark an invoice paid.');
+    if (status !== 'sent' && status !== 'cancelled') {
+      throw new BadRequestException('Only draft invoices can be sent, and unpaid invoices can be cancelled.');
     }
-    const existing = await this.db.query<{ status: InvoiceStatus }>(
-      'SELECT status FROM invoices WHERE id = $1 AND company_id = $2',
-      [invoiceId, membership.companyId],
-    );
-    if (!existing.rows[0]) throw new NotFoundException('Invoice not found.');
-    if (existing.rows[0].status === 'paid' || existing.rows[0].status === 'partially_paid') {
-      throw new BadRequestException('Paid invoices cannot be changed to draft, sent, or cancelled.');
-    }
-    if (existing.rows[0].status === 'cancelled' && status !== 'cancelled') {
-      throw new BadRequestException('Cancelled invoices cannot be reopened.');
-    }
-    await this.db.query(
-      'UPDATE invoices SET status = $1::invoice_status, updated_at = NOW() WHERE id = $2 AND company_id = $3',
-      [status, invoiceId, membership.companyId],
-    );
-    await this.audit.log({
-      userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
-      action: 'invoice.status.update', entityType: 'invoice', entityId: invoiceId,
-      oldValues: { status: existing.rows[0].status }, newValues: { status }, ipAddress: null,
+
+    const previousStatus = await this.db.transaction(async (client) => {
+      const existing = await client.query<{
+        status: InvoiceStatus;
+        customer_id: string;
+        total: string | number;
+        amount_paid: string | number;
+      }>(
+        'SELECT status, customer_id, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        [invoiceId, membership.companyId],
+      );
+      const invoice = existing.rows[0];
+      if (!invoice) throw new NotFoundException('Invoice not found.');
+      if (invoice.status === 'paid' || invoice.status === 'partially_paid') {
+        throw new BadRequestException('Paid invoices cannot be sent again or cancelled.');
+      }
+      if (invoice.status === 'cancelled' && status !== 'cancelled') {
+        throw new BadRequestException('Cancelled invoices cannot be reopened.');
+      }
+      if (status === 'sent' && invoice.status !== 'draft' && invoice.status !== 'sent') {
+        throw new BadRequestException('Only draft invoices can be sent.');
+      }
+      if (invoice.status === status) return invoice.status;
+
+      if (status === 'sent' && invoice.status === 'draft') {
+        await client.query(
+          'UPDATE customers SET outstanding_balance = outstanding_balance + $1, updated_at = NOW() WHERE id = $2 AND company_id = $3',
+          [invoice.total, invoice.customer_id, membership.companyId],
+        );
+      }
+      if (status === 'cancelled' && (invoice.status === 'sent' || invoice.status === 'overdue')) {
+        const remaining = Math.max(0, Number(invoice.total) - Number(invoice.amount_paid));
+        await client.query(
+          'UPDATE customers SET outstanding_balance = GREATEST(0, outstanding_balance - $1), updated_at = NOW() WHERE id = $2 AND company_id = $3',
+          [remaining, invoice.customer_id, membership.companyId],
+        );
+      }
+      await client.query(
+        'UPDATE invoices SET status = $1::invoice_status, updated_at = NOW() WHERE id = $2 AND company_id = $3',
+        [status, invoiceId, membership.companyId],
+      );
+      return invoice.status;
     });
+
+    if (previousStatus !== status) {
+      await this.audit.log({
+        userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
+        action: 'invoice.status.update', entityType: 'invoice', entityId: invoiceId,
+        oldValues: { status: previousStatus }, newValues: { status }, ipAddress: null,
+      });
+    }
     return this.getById(user, invoiceId);
   }
 
