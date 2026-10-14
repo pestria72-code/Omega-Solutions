@@ -23,7 +23,7 @@ export class RegisterDto {
   @IsString()
   @MinLength(1)
   @MaxLength(200)
-  @Matches(/\\S/, { message: 'companyName must not be blank' })
+  @Matches(/\S/, { message: 'companyName must not be blank' })
   companyName!: string;
 
   @IsString()
