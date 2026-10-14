@@ -1,0 +1,294 @@
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
+import { DatabaseService } from '../database.service.js';
+import { MembershipsService } from '../memberships/memberships.service.js';
+import { AuditService } from '../audit/audit.service.js';
+import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import type { AdjustStockDto, CreateStockMovementDto, CreateWarehouseDto, TransferStockDto, UpdateWarehouseDto } from './dto/inventory.dto.js';
+
+type WarehouseRow = {
+  id: string; company_id: string; branch_id: string | null; code: string; name: string;
+  location: string | null; capacity: string | number; is_active: boolean;
+  created_at: string; updated_at: string; branch_name?: string | null;
+  product_count?: string | number; total_quantity?: string | number;
+};
+type StockRow = {
+  id: string; company_id: string; warehouse_id: string; product_id: string;
+  quantity: string | number; reserved_quantity: string | number; reorder_level: string | number;
+  updated_at: string; warehouse_name: string; warehouse_code: string; sku: string;
+  product_name: string; unit: string; cost_price: string | number; selling_price: string | number;
+  available_quantity?: string | number; status?: string;
+};
+type MovementRow = {
+  id: string; company_id: string; product_id: string; warehouse_id: string;
+  movement_type: string; quantity: string | number; unit_cost: string | number;
+  reference: string | null; notes: string | null; transfer_group_id: string | null;
+  created_by: string | null; created_at: string; product_name?: string; sku?: string;
+  warehouse_name?: string;
+};
+
+@Injectable()
+export class InventoryService {
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly memberships: MembershipsService,
+    private readonly audit: AuditService,
+  ) {}
+
+  async listWarehouses(user: AuthenticatedUser): Promise<WarehouseRow[]> {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    await this.ensureDefaultWarehouse(companyId);
+    const result = await this.db.query<WarehouseRow>(
+      `SELECT w.id,w.company_id,w.branch_id,w.code,w.name,w.location,w.capacity,w.is_active,w.created_at,w.updated_at,
+              b.name AS branch_name,
+              COUNT(DISTINCT s.product_id)::int AS product_count,
+              COALESCE(SUM(s.quantity),0) AS total_quantity
+       FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id AND b.company_id=w.company_id
+       LEFT JOIN inventory_stock_levels s ON s.warehouse_id=w.id AND s.company_id=w.company_id
+       WHERE w.company_id=$1 GROUP BY w.id,b.name ORDER BY w.is_active DESC,w.name`,
+      [companyId],
+    );
+    return result.rows;
+  }
+
+  async getWarehouse(user: AuthenticatedUser, warehouseId: string): Promise<WarehouseRow> {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    const result = await this.db.query<WarehouseRow>(
+      `SELECT w.*,b.name AS branch_name,
+        COUNT(DISTINCT s.product_id)::int AS product_count,COALESCE(SUM(s.quantity),0) AS total_quantity
+       FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id AND b.company_id=w.company_id
+       LEFT JOIN inventory_stock_levels s ON s.warehouse_id=w.id AND s.company_id=w.company_id
+       WHERE w.id=$1 AND w.company_id=$2 GROUP BY w.id,b.name`,
+      [warehouseId, companyId],
+    );
+    if (!result.rows[0]) throw new NotFoundException('Warehouse not found.');
+    return result.rows[0];
+  }
+
+  async createWarehouse(user: AuthenticatedUser, dto: CreateWarehouseDto): Promise<WarehouseRow> {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
+    const exists = await this.db.query<{ id: string }>(
+      'SELECT id FROM warehouses WHERE company_id=$1 AND UPPER(code)=UPPER($2)', [companyId, dto.code.trim()],
+    );
+    if (exists.rows.length) throw new ConflictException('A warehouse with this code already exists.');
+    const result = await this.db.query<WarehouseRow>(
+      `INSERT INTO warehouses(company_id,branch_id,code,name,location,capacity,is_active)
+       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [companyId,dto.branchId ?? null,dto.code.trim().toUpperCase(),dto.name.trim(),dto.location ?? null,dto.capacity ?? 0,dto.isActive ?? true],
+    );
+    const warehouse = result.rows[0];
+    await this.audit.log({userId:user.userId,companyId,branchId:dto.branchId ?? null,action:'inventory.warehouse.create',entityType:'warehouse',entityId:warehouse.id,oldValues:null,newValues:{code:warehouse.code,name:warehouse.name},ipAddress:null});
+    return warehouse;
+  }
+
+  async updateWarehouse(user: AuthenticatedUser, warehouseId: string, dto: UpdateWarehouseDto): Promise<WarehouseRow> {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    const existing = await this.getWarehouse(user, warehouseId);
+    if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
+    const map: Record<string,string> = { code:'code',name:'name',location:'location',branchId:'branch_id',capacity:'capacity',isActive:'is_active' };
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    for (const [key,column] of Object.entries(map)) {
+      if (key in dto) {
+        const value = (dto as Record<string,unknown>)[key];
+        values.push(key === 'code' && typeof value === 'string' ? value.trim().toUpperCase() : value);
+        fields.push(`${column}=$${values.length}`);
+      }
+    }
+    if (!fields.length) return existing;
+    fields.push('updated_at=NOW()');
+    values.push(warehouseId,companyId);
+    const result = await this.db.query<WarehouseRow>(
+      `UPDATE warehouses SET ${fields.join(',')} WHERE id=$${values.length-1} AND company_id=$${values.length} RETURNING *`, values as (string|number|boolean|null)[],
+    );
+    if (!result.rows[0]) throw new NotFoundException('Warehouse not found.');
+    await this.audit.log({userId:user.userId,companyId,branchId:result.rows[0].branch_id,action:'inventory.warehouse.update',entityType:'warehouse',entityId:warehouseId,oldValues:{name:existing.name,code:existing.code},newValues:{name:result.rows[0].name,code:result.rows[0].code},ipAddress:null});
+    return result.rows[0];
+  }
+
+  async listStock(user: AuthenticatedUser, warehouseId?: string, search?: string): Promise<StockRow[]> {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    const values: (string|number)[] = [companyId];
+    let filters = 's.company_id=$1';
+    if (warehouseId) { values.push(warehouseId); filters += ` AND s.warehouse_id=$${values.length}`; }
+    if (search?.trim()) { values.push(`%${search.trim()}%`); filters += ` AND (p.name ILIKE $${values.length} OR p.sku ILIKE $${values.length} OR w.name ILIKE $${values.length})`; }
+    const result = await this.db.query<StockRow>(
+      `SELECT s.*,w.name AS warehouse_name,w.code AS warehouse_code,p.sku,p.name AS product_name,p.unit,p.cost_price,p.selling_price,
+        (s.quantity-s.reserved_quantity) AS available_quantity,
+        CASE WHEN s.quantity<=0 THEN 'out_of_stock' WHEN s.quantity<=s.reorder_level THEN 'low_stock' ELSE 'in_stock' END AS status
+       FROM inventory_stock_levels s JOIN warehouses w ON w.id=s.warehouse_id AND w.company_id=s.company_id
+       JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
+       WHERE ${filters} ORDER BY p.name,w.name`, values,
+    );
+    return result.rows;
+  }
+
+  async listMovements(user: AuthenticatedUser, limit?: string): Promise<MovementRow[]> {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    const parsed = Number.parseInt(limit ?? '100', 10);
+    const safeLimit = Number.isFinite(parsed) ? Math.max(1,Math.min(parsed,250)) : 100;
+    const result = await this.db.query<MovementRow>(
+      `SELECT m.*,p.name AS product_name,p.sku,w.name AS warehouse_name
+       FROM inventory_stock_movements m JOIN products p ON p.id=m.product_id AND p.company_id=m.company_id
+       JOIN warehouses w ON w.id=m.warehouse_id AND w.company_id=m.company_id
+       WHERE m.company_id=$1 ORDER BY m.created_at DESC LIMIT $2`, [companyId,safeLimit],
+    );
+    return result.rows;
+  }
+
+  async summary(user: AuthenticatedUser) {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    await this.ensureDefaultWarehouse(companyId);
+    const result = await this.db.query<Record<string, string|number>>(
+      `SELECT COUNT(DISTINCT s.product_id)::int AS stocked_products,
+        COUNT(*) FILTER(WHERE s.quantity>0 AND s.quantity<=s.reorder_level)::int AS low_stock_lines,
+        COUNT(*) FILTER(WHERE s.quantity=0)::int AS out_of_stock_lines,
+        COALESCE(SUM(s.quantity*p.cost_price),0) AS inventory_cost_value,
+        (SELECT COUNT(*)::int FROM warehouses WHERE company_id=$1 AND is_active=true) AS active_warehouses,
+        (SELECT COUNT(*)::int FROM inventory_stock_movements WHERE company_id=$1 AND created_at >= NOW()-INTERVAL '30 days') AS movements_last_30_days
+       FROM inventory_stock_levels s JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
+       WHERE s.company_id=$1 AND p.is_service=false`, [companyId],
+    );
+    return result.rows[0];
+  }
+
+  receive(user: AuthenticatedUser, dto: CreateStockMovementDto) {
+    return this.postSingleMovement(user,dto,'receipt',dto.quantity);
+  }
+
+  issue(user: AuthenticatedUser, dto: CreateStockMovementDto) {
+    return this.postSingleMovement(user,dto,'issue',-dto.quantity);
+  }
+
+  async adjust(user: AuthenticatedUser, dto: AdjustStockDto) {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    const result = await this.db.transaction(async client => {
+      await this.assertProduct(client,companyId,dto.productId);
+      await this.assertWarehouse(client,companyId,dto.warehouseId);
+      await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
+      const stock = await client.query<{quantity:string;reserved_quantity:string}>(
+        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+        [companyId,dto.warehouseId,dto.productId],
+      );
+      const oldQuantity = Number(stock.rows[0].quantity);
+      const delta = Number(dto.newQuantity)-oldQuantity;
+      if (Math.abs(delta)<0.00005) throw new BadRequestException('The adjusted quantity matches the current stock.');
+      if (Number(dto.newQuantity)<Number(stock.rows[0].reserved_quantity)) throw new BadRequestException('Adjusted stock cannot be lower than reserved stock.');
+      await client.query('UPDATE inventory_stock_levels SET quantity=$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.newQuantity,companyId,dto.warehouseId,dto.productId]);
+      const movement = await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.warehouseId,type:'adjustment',quantity:delta,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId});
+      await this.syncLegacyProductQuantity(client,companyId,dto.productId);
+      return movement;
+    });
+    await this.logMovement(user,companyId,result.id,'inventory.stock.adjust',{productId:dto.productId,warehouseId:dto.warehouseId,quantity:dto.newQuantity});
+    return result;
+  }
+
+  async transfer(user: AuthenticatedUser, dto: TransferStockDto) {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    if (dto.sourceWarehouseId===dto.destinationWarehouseId) throw new BadRequestException('Choose two different warehouses.');
+    const transferGroupId = randomUUID();
+    const result = await this.db.transaction(async client => {
+      await this.assertProduct(client,companyId,dto.productId);
+      await this.assertWarehouse(client,companyId,dto.sourceWarehouseId);
+      await this.assertWarehouse(client,companyId,dto.destinationWarehouseId);
+      await this.ensureStockRow(client,companyId,dto.sourceWarehouseId,dto.productId);
+      await this.ensureStockRow(client,companyId,dto.destinationWarehouseId,dto.productId);
+      const ids=[dto.sourceWarehouseId,dto.destinationWarehouseId].sort();
+      for (const id of ids) await client.query(
+        'SELECT quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+        [companyId,id,dto.productId],
+      );
+      const source=await client.query<{quantity:string;reserved_quantity:string}>(
+        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3',
+        [companyId,dto.sourceWarehouseId,dto.productId],
+      );
+      if (Number(source.rows[0].quantity)-Number(source.rows[0].reserved_quantity)<dto.quantity) throw new BadRequestException('Insufficient available stock in the source warehouse.');
+      await client.query('UPDATE inventory_stock_levels SET quantity=quantity-$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.quantity,companyId,dto.sourceWarehouseId,dto.productId]);
+      await client.query('UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.quantity,companyId,dto.destinationWarehouseId,dto.productId]);
+      const out=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.sourceWarehouseId,type:'transfer_out',quantity:-dto.quantity,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId,transferGroupId});
+      const into=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.destinationWarehouseId,type:'transfer_in',quantity:dto.quantity,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId,transferGroupId});
+      await this.syncLegacyProductQuantity(client,companyId,dto.productId);
+      return {transferGroupId,sourceMovement:out,destinationMovement:into};
+    });
+    await this.logMovement(user,companyId,result.transferGroupId,'inventory.stock.transfer',{productId:dto.productId,sourceWarehouseId:dto.sourceWarehouseId,destinationWarehouseId:dto.destinationWarehouseId,quantity:dto.quantity});
+    return result;
+  }
+
+  private async postSingleMovement(user: AuthenticatedUser,dto: CreateStockMovementDto,type:'receipt'|'issue',signedQuantity:number) {
+    const { companyId } = await this.memberships.getMembership(user.userId);
+    const movement = await this.db.transaction(async client => {
+      await this.assertProduct(client,companyId,dto.productId);
+      await this.assertWarehouse(client,companyId,dto.warehouseId);
+      await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
+      const stock=await client.query<{quantity:string;reserved_quantity:string}>(
+        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+        [companyId,dto.warehouseId,dto.productId],
+      );
+      if (type==='issue' && Number(stock.rows[0].quantity)-Number(stock.rows[0].reserved_quantity)<dto.quantity) throw new BadRequestException('Insufficient available stock.');
+      await client.query(
+        'UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',
+        [signedQuantity,companyId,dto.warehouseId,dto.productId],
+      );
+      const saved=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.warehouseId,type,quantity:signedQuantity,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId});
+      await this.syncLegacyProductQuantity(client,companyId,dto.productId);
+      return saved;
+    });
+    await this.logMovement(user,companyId,movement.id,type==='receipt'?'inventory.stock.receipt':'inventory.stock.issue',{productId:dto.productId,warehouseId:dto.warehouseId,quantity:dto.quantity});
+    return movement;
+  }
+
+  private async insertMovement(client:PoolClient,input:{companyId:string;productId:string;warehouseId:string;type:string;quantity:number;unitCost:number;reference?:string;notes?:string;userId:string;transferGroupId?:string}) {
+    const result=await client.query<MovementRow>(
+      `INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by,transfer_group_id)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [input.companyId,input.productId,input.warehouseId,input.type,input.quantity,input.unitCost,input.reference ?? null,input.notes ?? null,input.userId,input.transferGroupId ?? null],
+    );
+    return result.rows[0];
+  }
+
+  private async ensureStockRow(client:PoolClient,companyId:string,warehouseId:string,productId:string) {
+    await client.query(
+      `INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,reorder_level)
+       SELECT $1,$2,p.id,p.reorder_level FROM products p WHERE p.id=$3 AND p.company_id=$1 AND p.is_service=false
+       ON CONFLICT(warehouse_id,product_id) DO NOTHING`,
+      [companyId,warehouseId,productId],
+    );
+  }
+
+  private async assertProduct(client:PoolClient,companyId:string,productId:string) {
+    const result=await client.query<{id:string;is_service:boolean}>('SELECT id,is_service FROM products WHERE id=$1 AND company_id=$2 AND is_active=true',[productId,companyId]);
+    if(!result.rows[0]) throw new NotFoundException('Active product not found in this company.');
+    if(result.rows[0].is_service) throw new BadRequestException('Service items do not have stock.');
+  }
+
+  private async assertWarehouse(client:PoolClient,companyId:string,warehouseId:string) {
+    const result=await client.query<{id:string}>('SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',[warehouseId,companyId]);
+    if(!result.rows[0]) throw new NotFoundException('Active warehouse not found in this company.');
+  }
+
+  private async assertBranch(companyId:string,branchId:string) {
+    const result=await this.db.query<{id:string}>('SELECT id FROM branches WHERE id=$1 AND company_id=$2 AND is_active=true',[branchId,companyId]);
+    if(!result.rows[0]) throw new NotFoundException('Active branch not found in this company.');
+  }
+
+  private async ensureDefaultWarehouse(companyId:string) {
+    await this.db.query(
+      `INSERT INTO warehouses(company_id,code,name,location)
+       VALUES($1,'MAIN','Main Warehouse','Default warehouse')
+       ON CONFLICT(company_id,code) DO NOTHING`,[companyId],
+    );
+  }
+
+  private async syncLegacyProductQuantity(client:PoolClient,companyId:string,productId:string) {
+    await client.query(
+      `UPDATE products SET stock_quantity=COALESCE((SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0),updated_at=NOW()
+       WHERE company_id=$1 AND id=$2`,[companyId,productId],
+    );
+  }
+
+  private async logMovement(user:AuthenticatedUser,companyId:string,entityId:string,action:string,values:Record<string,unknown>) {
+    await this.audit.log({userId:user.userId,companyId,branchId:null,action,entityType:'inventory_movement',entityId,oldValues:null,newValues:values,ipAddress:null});
+  }
+}
