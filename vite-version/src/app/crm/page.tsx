@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Plus, Search, Users, AlertCircle, RefreshCw, Target, CalendarClock, CheckCircle2, Phone, Mail, CalendarDays, ClipboardCheck } from "lucide-react"
+import { Plus, Search, Users, AlertCircle, RefreshCw, Target, CalendarClock, CheckCircle2, Phone, Mail, CalendarDays, ClipboardCheck, UserCheck } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -91,6 +91,15 @@ export default function CrmPage() {
    setActivityDialog(false);setActivityForm(blankActivity);setTab("activities");await load()
   } catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not save activity.")} finally{setSaving(false)}
  }
+ async function updateLeadStatus(lead:Lead,status:string){
+  try{await api.patch<Lead>("/crm/leads/"+lead.id,{status});await load()}
+  catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update lead status.")}
+ }
+ async function convertLead(lead:Lead){
+  setError(null)
+  try{await api.post("/crm/leads/"+lead.id+"/convert");await load()}
+  catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not convert lead to customer.")}
+ }
  async function updateStage(o:Opportunity,stage:string){
   setError(null)
   try{await api.patch<Opportunity>("/crm/opportunities/"+o.id,{stage,probability:stage==="won"?100:stage==="lost"?0:o.probability});await load()}
@@ -121,7 +130,7 @@ export default function CrmPage() {
    </div>
    {loading?<div className="flex justify-center py-12"><LoadingSpinner/></div>:tab==="leads"?(
     leads.length===0?<Empty icon={<Users className="size-6"/>} title="No leads found" description="Add a prospect to start tracking your pipeline." action={()=>{setLeadForm(blankLead);setLeadDialog(true)}}/>:
-    <Table><TableHeader><TableRow><TableHead>Contact</TableHead><TableHead className="hidden md:table-cell">Organization</TableHead><TableHead className="hidden lg:table-cell">Email / phone</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Est. value</TableHead><TableHead className="hidden sm:table-cell">Created</TableHead></TableRow></TableHeader><TableBody>{leads.map(l=><TableRow key={l.id}><TableCell><div className="font-medium">{l.contact_name}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{l.organization_name||"Independent contact"}</div></TableCell><TableCell className="hidden md:table-cell">{l.organization_name||"—"}</TableCell><TableCell className="hidden lg:table-cell"><div>{l.email||"—"}</div><div className="text-xs text-muted-foreground">{l.phone||""}</div></TableCell><TableCell>{badge(l.status)}</TableCell><TableCell className="text-right font-medium tabular-nums">{formatKES(Number(l.estimated_value))}</TableCell><TableCell className="hidden sm:table-cell text-muted-foreground">{formatDate(l.created_at)}</TableCell></TableRow>)}</TableBody></Table>
+    <Table><TableHeader><TableRow><TableHead>Contact</TableHead><TableHead className="hidden md:table-cell">Organization</TableHead><TableHead className="hidden lg:table-cell">Email / phone</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Est. value</TableHead><TableHead className="hidden sm:table-cell">Created</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{leads.map(l=><TableRow key={l.id}><TableCell><div className="font-medium">{l.contact_name}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{l.organization_name||"Independent contact"}</div></TableCell><TableCell className="hidden md:table-cell">{l.organization_name||"—"}</TableCell><TableCell className="hidden lg:table-cell"><div>{l.email||"—"}</div><div className="text-xs text-muted-foreground">{l.phone||""}</div></TableCell><TableCell><select aria-label={"Status for "+l.contact_name} value={l.status} onChange={e=>void updateLeadStatus(l,e.target.value)} className="max-w-36 rounded-md border border-input bg-background px-2 py-1.5 text-xs">{["new","qualified","unqualified","converted"].map(s=><option key={s} value={s}>{stageLabel(s)}</option>)}</select></TableCell><TableCell className="text-right font-medium tabular-nums">{formatKES(Number(l.estimated_value))}</TableCell><TableCell className="hidden sm:table-cell text-muted-foreground">{formatDate(l.created_at)}</TableCell><TableCell>{l.status==="converted"?<span className="text-xs text-muted-foreground">Customer created</span>:<Button size="sm" variant="outline" onClick={()=>void convertLead(l)}><UserCheck className="size-3.5"/> Convert</Button>}</TableCell></TableRow>)}</TableBody></Table>
    ):tab==="opportunities"?(
     opportunities.length===0?<Empty icon={<Target className="size-6"/>} title="No opportunities yet" description="Turn a lead into a tracked sales opportunity." action={()=>{setOpportunityForm(blankOpportunity);setOpportunityDialog(true)}}/>:
     <Table><TableHeader><TableRow><TableHead>Opportunity</TableHead><TableHead className="hidden md:table-cell">Contact</TableHead><TableHead>Stage</TableHead><TableHead className="text-right">Value</TableHead><TableHead className="hidden lg:table-cell">Weighted</TableHead><TableHead className="hidden sm:table-cell">Expected close</TableHead></TableRow></TableHeader><TableBody>{opportunities.map(o=><TableRow key={o.id}><TableCell><div className="font-medium">{o.title}</div><div className="text-xs text-muted-foreground">{o.probability}% probability</div></TableCell><TableCell className="hidden md:table-cell">{o.lead_contact_name||o.customer_name||"—"}</TableCell><TableCell><select aria-label={"Stage for "+o.title} value={o.stage} onChange={e=>void updateStage(o,e.target.value)} className="max-w-40 rounded-md border border-input bg-background px-2 py-1.5 text-xs">{stages.map(s=><option key={s} value={s}>{stageLabel(s)}</option>)}</select></TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(o.expected_value))}</TableCell><TableCell className="hidden lg:table-cell text-right tabular-nums">{formatKES(Number(o.weighted_value||0))}</TableCell><TableCell className="hidden sm:table-cell">{o.expected_close_date?formatDate(o.expected_close_date):"—"}</TableCell></TableRow>)}</TableBody></Table>
