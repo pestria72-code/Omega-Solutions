@@ -35,11 +35,6 @@ npm run migrate
 
 This executes all `.sql` files in `src/migrations/` in order, tracking which have been applied in a `pgmigrations` table.
 
-To check migration status:
-```bash
-npm run migrate:status
-```
-
 To create a new migration:
 ```bash
 npm run migrate:create -- --name describe_the_change
@@ -90,16 +85,11 @@ If you get `"database": "disconnected"`, check that your `DATABASE_URL` is corre
 | POST | `/api/auth/refresh` | No | Exchange refresh token for new token pair |
 | GET | `/api/auth/me` | Yes | Get current user profile and permissions |
 
-## Where to Configure Real Variables in Production
+## Where to Configure Real Variables
 
-When you deploy the backend to a hosting provider (Render, Railway, Fly.io, etc.):
+When deploying, set environment variables through your hosting provider's environment/secrets interface. Never hardcode credentials in source files.
 
-1. **Render**: Dashboard → your service → Environment → add each variable (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN`, `PORT`)
-2. **Railway**: Project → your service → Variables tab → add each variable
-3. **Fly.io**: `fly secrets set DATABASE_URL=... JWT_SECRET=... JWT_REFRESH_SECRET=... CORS_ORIGIN=...`
-4. **Any VPS or Docker**: Pass via `--env-file .env` or set as container environment variables
-
-The Neon `DATABASE_URL` should come from the Neon Console connection string. Never hardcode it in source files.
+The Neon `DATABASE_URL` should come from the Neon Console connection string.
 
 ## Project Structure
 
