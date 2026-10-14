@@ -13,7 +13,7 @@ import {
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { api } from "@/lib/api-client"
 import { formatKES, formatNumber } from "@/lib/format"
@@ -77,9 +77,7 @@ function StatCard({
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-2">
         <p className="min-w-0 text-sm text-muted-foreground">{detail}</p>
-        <Button asChild variant="ghost" size="sm" className="shrink-0">
-          <Link to={href}>View <ArrowUpRight className="ml-1 size-3.5" /></Link>
-        </Button>
+        <Link to={href} className={buttonVariants({ variant: "ghost", size: "sm", className: "shrink-0" })}>View <ArrowUpRight className="ml-1 size-3.5" /></Link>
       </CardContent>
     </Card>
   )
@@ -184,7 +182,7 @@ export default function Page() {
                 </CardHeader>
                 <CardContent className="flex items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">Sum of outstanding balances on customer records</p>
-                  <Button asChild variant="outline" size="sm"><Link to="/customers">Customers</Link></Button>
+                  <Link to="/customers" className={buttonVariants({ variant: "outline", size: "sm" })}>Customers</Link>
                 </CardContent>
               </Card>
               <Card>
@@ -194,7 +192,7 @@ export default function Page() {
                 </CardHeader>
                 <CardContent className="flex items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">Sum of outstanding balances on supplier records</p>
-                  <Button asChild variant="outline" size="sm"><Link to="/suppliers">Suppliers</Link></Button>
+                  <Link to="/suppliers" className={buttonVariants({ variant: "outline", size: "sm" })}>Suppliers</Link>
                 </CardContent>
               </Card>
             </section>
@@ -235,9 +233,7 @@ export default function Page() {
                       </table>
                     </div>
                   )}
-                  <Button asChild variant="outline" size="sm" className="mt-4">
-                    <Link to="/stock-levels">Open stock levels</Link>
-                  </Button>
+                  <Link to="/products" className={buttonVariants({ variant: "outline", size: "sm", className: "mt-4" })}>Open products</Link>
                 </CardContent>
               </Card>
 
@@ -247,10 +243,10 @@ export default function Page() {
                   <CardDescription>Create and maintain your core business records</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                  <Button asChild variant="outline" className="justify-start"><Link to="/customers"><Users className="mr-2 size-4" />Manage customers</Link></Button>
-                  <Button asChild variant="outline" className="justify-start"><Link to="/suppliers"><BriefcaseBusiness className="mr-2 size-4" />Manage suppliers</Link></Button>
-                  <Button asChild variant="outline" className="justify-start"><Link to="/products"><Package className="mr-2 size-4" />Manage products</Link></Button>
-                  <Button asChild variant="outline" className="justify-start"><Link to="/invoices"><Wallet className="mr-2 size-4" />Sales invoices</Link></Button>
+                  <Link to="/customers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Users className="mr-2 size-4" />Manage customers</Link>
+                  <Link to="/suppliers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><BriefcaseBusiness className="mr-2 size-4" />Manage suppliers</Link>
+                  <Link to="/products" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Package className="mr-2 size-4" />Manage products</Link>
+                  <Link to="/invoices" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Wallet className="mr-2 size-4" />Sales invoices</Link>
                   {lowStock.length > 0 && (
                     <p className="flex items-center gap-2 text-sm text-amber-700 sm:col-span-2 xl:col-span-1">
                       <ArrowDownRight className="size-4 shrink-0" />
