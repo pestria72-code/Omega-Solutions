@@ -213,6 +213,43 @@ export class CrmService {
     return result.rows[0];
   }
 
+  async convertLeadToCustomer(user: AuthenticatedUser, leadId: string) {
+    const membership = await this.memberships.getMembership(user.userId);
+    const converted = await this.db.transaction(async (client) => {
+      const leadResult = await client.query(
+        `SELECT id, company_id, contact_name, organization_name, email, phone, status, converted_customer_id
+         FROM crm_leads WHERE id=$1 AND company_id=$2 FOR UPDATE`,
+        [leadId, membership.companyId],
+      );
+      const lead = leadResult.rows[0];
+      if (!lead) throw new NotFoundException('CRM lead not found.');
+      if (lead.converted_customer_id || lead.status === 'converted') throw new BadRequestException('This lead has already been converted.');
+      if (lead.email) {
+        const duplicate = await client.query(
+          'SELECT id FROM customers WHERE company_id=$1 AND email=$2 LIMIT 1',
+          [membership.companyId, lead.email],
+        );
+        if (duplicate.rows.length) throw new BadRequestException('A customer with this email already exists in this company.');
+      }
+      const customerResult = await client.query(
+        `INSERT INTO customers (company_id,name,email,phone)
+         VALUES ($1,$2,$3,$4)
+         RETURNING id,name,email,phone,created_at`,
+        [membership.companyId, lead.organization_name || lead.contact_name, lead.email, lead.phone],
+      );
+      const customer = customerResult.rows[0];
+      const updated = await client.query(
+        `UPDATE crm_leads SET status='converted', converted_customer_id=$1, updated_at=NOW()
+         WHERE id=$2 AND company_id=$3
+         RETURNING id,contact_name,organization_name,status,converted_customer_id,updated_at`,
+        [customer.id, leadId, membership.companyId],
+      );
+      return { customer, lead: updated.rows[0] };
+    });
+    await this.auditChange(user, 'crm.lead.convert', 'crm_lead', leadId, { customerId: String(converted.customer.id) });
+    return converted;
+  }
+
   async pipelineSummary(user: AuthenticatedUser) {
     const companyId = await this.companyId(user);
     const [leads, opportunities, activities] = await Promise.all([
