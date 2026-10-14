@@ -7,6 +7,9 @@ import { CommonModule } from './common/common.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
+import { MembershipsModule } from './memberships/memberships.module.js';
+import { CompaniesModule } from './companies/companies.module.js';
+import { BranchesModule } from './branches/branches.module.js';
 
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { RbacModule } from './rbac/rbac.module.js';
     AuditModule,
     AuthModule,
     RbacModule,
+    MembershipsModule,
+    CompaniesModule,
+    BranchesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

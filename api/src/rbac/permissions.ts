@@ -1,6 +1,8 @@
 export type Permission =
   | 'companies:read'
   | 'companies:write'
+  | 'branches:read'
+  | 'branches:write'
   | 'users:read'
   | 'users:write'
   | 'customers:read'
