@@ -66,3 +66,20 @@ VALUES
   ('crm:read', 'View CRM leads, opportunities and activities', 'crm'),
   ('crm:write', 'Create and update CRM leads, opportunities and activities', 'crm')
 ON CONFLICT (permission) DO NOTHING;
+
+-- Match the application's existing role-based access control defaults.
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'owner', id FROM permissions WHERE permission IN ('crm:read', 'crm:write')
+ON CONFLICT (role, permission_id) DO NOTHING;
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'admin', id FROM permissions WHERE permission IN ('crm:read', 'crm:write')
+ON CONFLICT (role, permission_id) DO NOTHING;
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'manager', id FROM permissions WHERE permission IN ('crm:read', 'crm:write')
+ON CONFLICT (role, permission_id) DO NOTHING;
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'staff', id FROM permissions WHERE permission = 'crm:read'
+ON CONFLICT (role, permission_id) DO NOTHING;
+INSERT INTO role_permissions (role, permission_id)
+SELECT 'viewer', id FROM permissions WHERE permission = 'crm:read'
+ON CONFLICT (role, permission_id) DO NOTHING;
