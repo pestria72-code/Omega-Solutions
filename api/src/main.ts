@@ -8,8 +8,15 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  // Allow an explicit comma-separated list of frontend origins. Never use
+  // wildcard origins when credentials are enabled.
+  const configuredOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: configuredOrigins,
     methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     credentials: true,
   });
