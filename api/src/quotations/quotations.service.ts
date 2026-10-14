@@ -139,7 +139,7 @@ export class QuotationsService {
     if (!quotation) throw new NotFoundException('Quotation not found.');
     const allowed: Record<QuotationStatus, QuotationStatus[]> = {
       draft: ['sent', 'cancelled'], sent: ['accepted', 'rejected', 'expired', 'cancelled'],
-      accepted: ['converted', 'cancelled'], rejected: [], expired: [], cancelled: [], converted: [],
+      accepted: ['cancelled'], rejected: [], expired: [], cancelled: [], converted: [],
     };
     const from = quotation.status as QuotationStatus;
     if (!this.isStatus(nextStatus) || !allowed[from]?.includes(nextStatus as QuotationStatus)) {
