@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { CommandSearch, SearchTrigger } from "@/components/command-search"
 import { ModeToggle } from "@/components/mode-toggle"
-import { DEMO_NOTIFICATIONS } from "@/data/mock-data"
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,7 +59,7 @@ function Breadcrumb() {
 
 export function SiteHeader() {
   const [searchOpen, setSearchOpen] = React.useState(false)
-  const [notifications, setNotifications] = React.useState(DEMO_NOTIFICATIONS)
+  const [notifications, setNotifications] = React.useState<{ id: string; title: string; message: string; time: string; read: boolean }[]>([])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 

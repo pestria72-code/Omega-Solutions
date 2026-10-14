@@ -7,7 +7,7 @@ import {
   CircleUser,
   Settings,
 } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 
 import {
   DropdownMenu,
@@ -24,24 +24,25 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useAuth } from "@/contexts/auth-context"
 
-interface NavUserProps {
-  user: {
-    name: string
-    email: string
-    role: string
-    company: string
-  }
-}
-
-export function NavUser({ user }: NavUserProps) {
+export function NavUser() {
   const { isMobile } = useSidebar()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
-  const initials = user.name
+  if (!user) return null
+
+  const initials = user.fullName
     .split(" ")
     .map((n) => n[0])
     .slice(0, 2)
     .join("")
+
+  const handleLogout = () => {
+    logout()
+    navigate("/login", { replace: true })
+  }
 
   return (
     <SidebarMenu>
@@ -59,9 +60,9 @@ export function NavUser({ user }: NavUserProps) {
               {initials}
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
-              <span className="text-muted-foreground truncate text-xs">
-                {user.role} · {user.company}
+              <span className="truncate font-medium">{user.fullName}</span>
+              <span className="text-muted-foreground truncate text-xs capitalize">
+                {user.role}
               </span>
             </div>
             <EllipsisVertical className="ml-auto" />
@@ -79,7 +80,7 @@ export function NavUser({ user }: NavUserProps) {
                     {initials}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{user.name}</span>
+                    <span className="truncate font-medium">{user.fullName}</span>
                     <span className="text-muted-foreground truncate text-xs">
                       {user.email}
                     </span>
@@ -113,7 +114,10 @@ export function NavUser({ user }: NavUserProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem className="cursor-pointer text-destructive">
+              <DropdownMenuItem
+                className="cursor-pointer text-destructive"
+                onClick={handleLogout}
+              >
                 <LogOut />
                 Log out
               </DropdownMenuItem>

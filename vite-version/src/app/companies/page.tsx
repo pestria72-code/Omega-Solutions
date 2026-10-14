@@ -1,12 +1,13 @@
 import * as React from "react"
-import { Plus, Pencil } from "lucide-react"
+import { Plus, Pencil, AlertCircle, Building2 } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
-import { DemoBanner } from "@/components/demo-banner"
 import { StatusBadge } from "@/components/status-badge"
+import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import {
   Select,
   SelectContent,
@@ -32,14 +33,19 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { DEMO_COMPANY, DEMO_COMPANIES } from "@/data/mock-data"
-import type { Branch, BranchStatus } from "@/lib/types"
+import { useAuth } from "@/contexts/auth-context"
+import { useCompany, useBranches, createBranch, updateBranch } from "@/hooks/use-company"
+import type { BranchRow } from "@/lib/api-types"
 
 export default function CompaniesPage() {
-  const [company] = React.useState(DEMO_COMPANY)
-  const [branches, setBranches] = React.useState<Branch[]>(DEMO_COMPANY.branches)
+  const { user } = useAuth()
+  const companyId = user?.companyId ?? null
+  const { company, loading: companyLoading, error: companyError } = useCompany(companyId)
+  const { branches, loading: branchesLoading, error: branchesError, refetch } = useBranches(companyId)
   const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [editingBranch, setEditingBranch] = React.useState<Branch | null>(null)
+  const [editingBranch, setEditingBranch] = React.useState<BranchRow | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+  const [formError, setFormError] = React.useState<string | null>(null)
 
   const [formData, setFormData] = React.useState({
     name: "",
@@ -47,47 +53,89 @@ export default function CompaniesPage() {
     city: "",
     phone: "",
     email: "",
-    status: "Active" as BranchStatus,
-    manager: "",
+    isActive: true,
   })
-  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
 
   const openAddDialog = () => {
     setEditingBranch(null)
-    setFormData({ name: "", code: "", city: "", phone: "", email: "", status: "Active", manager: "" })
-    setFormErrors({})
+    setFormData({ name: "", code: "", city: "", phone: "", email: "", isActive: true })
+    setFormError(null)
     setDialogOpen(true)
   }
 
-  const openEditDialog = (branch: Branch) => {
+  const openEditDialog = (branch: BranchRow) => {
     setEditingBranch(branch)
     setFormData({
       name: branch.name,
-      code: branch.code,
-      city: branch.city,
-      phone: branch.phone,
-      email: branch.email,
-      status: branch.status,
-      manager: branch.manager,
+      code: branch.code ?? "",
+      city: branch.city ?? "",
+      phone: branch.phone ?? "",
+      email: branch.email ?? "",
+      isActive: branch.is_active,
     })
-    setFormErrors({})
+    setFormError(null)
     setDialogOpen(true)
   }
 
-  const handleSubmit = () => {
-    const errors: Record<string, string> = {}
-    if (!formData.name.trim()) errors.name = "Branch name is required"
-    if (!formData.code.trim()) errors.code = "Branch code is required"
-    setFormErrors(errors)
-    if (Object.keys(errors).length > 0) return
-
-    if (editingBranch) {
-      setBranches((prev) => prev.map((b) => (b.id === editingBranch.id ? { ...b, ...formData } : b)))
-    } else {
-      const newBranch: Branch = { id: `br-${Date.now()}`, ...formData }
-      setBranches((prev) => [...prev, newBranch])
+  const handleSubmit = async () => {
+    if (!companyId) return
+    if (!formData.name.trim()) {
+      setFormError("Branch name is required")
+      return
     }
-    setDialogOpen(false)
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      if (editingBranch) {
+        await updateBranch(companyId, editingBranch.id, {
+          name: formData.name,
+          code: formData.code || undefined,
+          city: formData.city || undefined,
+          phone: formData.phone || undefined,
+          email: formData.email || undefined,
+          isActive: formData.isActive,
+        })
+      } else {
+        await createBranch(companyId, {
+          name: formData.name,
+          code: formData.code || undefined,
+          city: formData.city || undefined,
+          phone: formData.phone || undefined,
+          email: formData.email || undefined,
+        })
+      }
+      await refetch()
+      setDialogOpen(false)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to save branch")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (companyLoading) {
+    return (
+      <BaseLayout>
+        <div className="flex flex-1 items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      </BaseLayout>
+    )
+  }
+
+  if (companyError || !company) {
+    return (
+      <BaseLayout>
+        <div className="px-4 lg:px-6 flex flex-col gap-6">
+          <PageHeader title="Companies & Branches" description="Manage company profile and branch locations" />
+          <EmptyState
+            icon={AlertCircle}
+            title="Unable to load company"
+            description={companyError ?? "You may not have a company membership yet. Contact your administrator."}
+          />
+        </div>
+      </BaseLayout>
+    )
   }
 
   return (
@@ -103,61 +151,51 @@ export default function CompaniesPage() {
             </Button>
           }
         />
-        <DemoBanner message="Company and branch data shown here is demo data. It is not yet connected to the backend API." />
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Company Profile</CardTitle>
-              <CardDescription>{company.name}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">Registration Number</span>
-                  <span className="text-sm font-medium">{company.registrationNumber}</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">VAT Number</span>
-                  <span className="text-sm font-medium">{company.vatNumber}</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">Email</span>
-                  <span className="text-sm font-medium">{company.email}</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">Phone</span>
-                  <span className="text-sm font-medium">{company.phone}</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">Address</span>
-                  <span className="text-sm font-medium">{company.address}, {company.city}</span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-muted-foreground">Website</span>
-                  <span className="text-sm font-medium">{company.website}</span>
-                </div>
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Company Profile</CardTitle>
+            <CardDescription>{company.name}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Registration Number</span>
+                <span className="text-sm font-medium">{company.registration_number ?? "—"}</span>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Company Switcher</CardTitle>
-              <CardDescription>Select active company</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select defaultValue={DEMO_COMPANIES[0].id}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DEMO_COMPANIES.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-        </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">VAT Number</span>
+                <span className="text-sm font-medium">{company.vat_number ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Email</span>
+                <span className="text-sm font-medium">{company.email ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Phone</span>
+                <span className="text-sm font-medium">{company.phone ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Address</span>
+                <span className="text-sm font-medium">
+                  {[company.address_line1, company.city].filter(Boolean).join(", ") || "—"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Website</span>
+                <span className="text-sm font-medium">{company.website ?? "—"}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Currency</span>
+                <span className="text-sm font-medium">{company.currency}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Timezone</span>
+                <span className="text-sm font-medium">{company.timezone}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -165,42 +203,68 @@ export default function CompaniesPage() {
             <CardDescription>{branches.length} branch location(s)</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Code</TableHead>
-                  <TableHead className="hidden sm:table-cell">City</TableHead>
-                  <TableHead className="hidden md:table-cell">Manager</TableHead>
-                  <TableHead className="hidden lg:table-cell">Phone</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {branches.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-medium">{b.name}</TableCell>
-                    <TableCell className="font-mono text-xs">{b.code}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">{b.city}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">{b.manager}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">{b.phone}</TableCell>
-                    <TableCell><StatusBadge status={b.status} /></TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="cursor-pointer"
-                        onClick={() => openEditDialog(b)}
-                        aria-label={`Edit ${b.name}`}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                    </TableCell>
+            {branchesLoading ? (
+              <div className="flex justify-center py-8">
+                <LoadingSpinner />
+              </div>
+            ) : branchesError ? (
+              <EmptyState
+                icon={AlertCircle}
+                title="Failed to load branches"
+                description={branchesError}
+              />
+            ) : branches.length === 0 ? (
+              <EmptyState
+                icon={Building2}
+                title="No branches yet"
+                description="Add your first branch to get started."
+                action={
+                  <Button onClick={openAddDialog} size="sm">
+                    <Plus className="size-4" />
+                    Add Branch
+                  </Button>
+                }
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Code</TableHead>
+                    <TableHead className="hidden sm:table-cell">City</TableHead>
+                    <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                    <TableHead className="hidden lg:table-cell">Email</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {branches.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell className="font-medium">{b.name}</TableCell>
+                      <TableCell className="font-mono text-xs">{b.code ?? "—"}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-muted-foreground">{b.city ?? "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-muted-foreground">{b.phone ?? "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-muted-foreground">{b.email ?? "—"}</TableCell>
+                      <TableCell>
+                        <StatusBadge status={b.is_active ? "Active" : "Inactive"} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="cursor-pointer"
+                          onClick={() => openEditDialog(b)}
+                          aria-label={`Edit ${b.name}`}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -213,17 +277,20 @@ export default function CompaniesPage() {
               {editingBranch ? "Update branch details below." : "Enter the new branch details below."}
             </DialogDescription>
           </DialogHeader>
+          {formError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {formError}
+            </div>
+          )}
           <div className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="br-name">Branch Name *</Label>
-                <Input id="br-name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} aria-invalid={!!formErrors.name} />
-                {formErrors.name && <span className="text-xs text-destructive">{formErrors.name}</span>}
+                <Input id="br-name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="br-code">Code *</Label>
-                <Input id="br-code" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} aria-invalid={!!formErrors.code} />
-                {formErrors.code && <span className="text-xs text-destructive">{formErrors.code}</span>}
+                <Label htmlFor="br-code">Code</Label>
+                <Input id="br-code" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -232,35 +299,34 @@ export default function CompaniesPage() {
                 <Input id="br-city" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="br-manager">Manager</Label>
-                <Input id="br-manager" value={formData.manager} onChange={(e) => setFormData({ ...formData, manager: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="br-phone">Phone</Label>
                 <Input id="br-phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="br-email">Email</Label>
-                <Input id="br-email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
-              </div>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="br-status">Status</Label>
-              <Select value={formData.status} onValueChange={(v) => v && setFormData({ ...formData, status: v as BranchStatus })}>
-                <SelectTrigger id="br-status" size="sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="br-email">Email</Label>
+              <Input id="br-email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
             </div>
+            {editingBranch && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="br-status">Status</Label>
+                <Select
+                  value={formData.isActive ? "Active" : "Inactive"}
+                  onValueChange={(v) => v && setFormData({ ...formData, isActive: v === "Active" })}
+                >
+                  <SelectTrigger id="br-status" size="sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button onClick={handleSubmit} className="cursor-pointer">
-              {editingBranch ? "Save Changes" : "Add Branch"}
+            <Button onClick={handleSubmit} disabled={submitting} className="cursor-pointer">
+              {submitting ? <LoadingSpinner className="size-4" /> : editingBranch ? "Save Changes" : "Add Branch"}
             </Button>
           </DialogFooter>
         </DialogContent>

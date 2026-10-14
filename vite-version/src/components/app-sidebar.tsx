@@ -36,7 +36,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { DEMO_COMPANY, DEMO_COMPANIES, DEMO_USER } from "@/data/mock-data"
+import { useMyCompany } from "@/hooks/use-company"
 
 const navGroups = [
   {
@@ -108,7 +108,7 @@ const navGroups = [
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [selectedCompanyId, setSelectedCompanyId] = React.useState(DEMO_COMPANY.id)
+  const { company } = useMyCompany()
 
   return (
     <Sidebar {...props}>
@@ -121,24 +121,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">Omega Solutions</span>
-                <span className="truncate text-xs text-muted-foreground">ERP Platform</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {company ? company.name : "ERP Platform"}
+                </span>
               </div>
             </SidebarMenuButton>
-          </SidebarMenuItem>
-          {/* Company selector */}
-          <SidebarMenuItem>
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
-              aria-label="Select company"
-            >
-              {DEMO_COMPANIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -148,7 +135,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={DEMO_USER} />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   )
