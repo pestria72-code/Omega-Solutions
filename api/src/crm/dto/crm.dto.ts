@@ -16,7 +16,7 @@ export class UpdateLeadDto {
   @IsOptional() @IsEmail() @MaxLength(320) email?: string;
   @IsOptional() @IsString() @MaxLength(40) phone?: string;
   @IsOptional() @IsString() @MaxLength(60) source?: string;
-  @IsOptional() @IsIn(['new','qualified','unqualified','converted']) status?: 'new'|'qualified'|'unqualified'|'converted';
+  @IsOptional() @IsIn(['new','qualified','unqualified']) status?: 'new'|'qualified'|'unqualified';
   @IsOptional() @IsNumber() @Min(0) estimatedValue?: number;
   @IsOptional() @IsString() @MaxLength(3) currency?: string;
   @IsOptional() @IsString() notes?: string;
