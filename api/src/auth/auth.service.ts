@@ -24,7 +24,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(dto: RegisterDto): Promise<{ userId: string }> {
+  async register(dto: RegisterDto): Promise<{ userId: string; companyId: string | null }> {
     const existing = await this.db.query<{ id: string }>(
       'SELECT id FROM users WHERE email = $1',
       [dto.email.toLowerCase()],
@@ -36,14 +36,34 @@ export class AuthService {
 
     const userId = uuidv4();
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const companyName = dto.companyName?.trim() || `${dto.fullName}'s Company`;
 
-    await this.db.query(
-      `INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)`,
-      [userId, dto.email.toLowerCase(), passwordHash, dto.fullName, dto.phone ?? null],
-    );
+    const result = await this.db.transaction(async (client) => {
+      await client.query(
+        `INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
+         VALUES ($1, $2, $3, $4, $5, true)`,
+        [userId, dto.email.toLowerCase(), passwordHash, dto.fullName, dto.phone ?? null],
+      );
 
-    return { userId };
+      const companyResult = await client.query<{ id: string }>(
+        `INSERT INTO companies (name, currency, timezone, is_active)
+         VALUES ($1, 'KES', 'Africa/Nairobi', true)
+         RETURNING id`,
+        [companyName],
+      );
+
+      const companyId = companyResult.rows[0].id;
+
+      await client.query(
+        `INSERT INTO company_memberships (user_id, company_id, role, is_active)
+         VALUES ($1, $2, 'owner', true)`,
+        [userId, companyId],
+      );
+
+      return { companyId };
+    });
+
+    return { userId, companyId: result.companyId };
   }
 
   async login(dto: LoginDto): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {

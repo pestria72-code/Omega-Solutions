@@ -10,6 +10,9 @@ import { RbacModule } from './rbac/rbac.module.js';
 import { MembershipsModule } from './memberships/memberships.module.js';
 import { CompaniesModule } from './companies/companies.module.js';
 import { BranchesModule } from './branches/branches.module.js';
+import { CustomersModule } from './customers/customers.module.js';
+import { SuppliersModule } from './suppliers/suppliers.module.js';
+import { ProductsModule } from './products/products.module.js';
 
 @Module({
   imports: [
@@ -22,6 +25,9 @@ import { BranchesModule } from './branches/branches.module.js';
     MembershipsModule,
     CompaniesModule,
     BranchesModule,
+    CustomersModule,
+    SuppliersModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

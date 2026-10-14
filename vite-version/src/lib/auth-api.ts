@@ -30,11 +30,11 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return res.json();
 }
 
-export async function register(email: string, password: string, fullName: string, phone?: string): Promise<RegisterResponse> {
+export async function register(email: string, password: string, fullName: string, phone?: string, companyName?: string): Promise<RegisterResponse> {
   const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api"}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, fullName, phone }),
+    body: JSON.stringify({ email, password, fullName, phone, companyName }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: "Registration failed" }));

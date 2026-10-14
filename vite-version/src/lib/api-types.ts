@@ -51,3 +51,58 @@ export interface ApiError {
   message: string;
   details?: unknown;
 }
+
+export interface CustomerRow {
+  id: string;
+  company_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  county: string | null;
+  address_line1: string | null;
+  postal_code: string | null;
+  credit_limit: number;
+  outstanding_balance: number;
+  status: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductRow {
+  id: string;
+  company_id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  unit: string;
+  selling_price: number;
+  cost_price: number;
+  stock_quantity: number;
+  reorder_level: number;
+  is_service: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SupplierRow {
+  id: string;
+  company_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  county: string | null;
+  address_line1: string | null;
+  postal_code: string | null;
+  contact_person: string | null;
+  payment_terms: string | null;
+  outstanding_balance: number;
+  status: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}

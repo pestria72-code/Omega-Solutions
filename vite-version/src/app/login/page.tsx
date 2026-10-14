@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate, Link } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState("")
   const [fullName, setFullName] = React.useState("")
   const [phone, setPhone] = React.useState("")
+  const [companyName, setCompanyName] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
 
@@ -37,7 +38,7 @@ export default function LoginPage() {
           setSubmitting(false)
           return
         }
-        await registerUser(email, password, fullName, phone || undefined)
+        await registerUser(email, password, fullName, phone || undefined, companyName || undefined)
         await loginEmail(email, password)
       }
       navigate("/dashboard", { replace: true })
@@ -96,6 +97,18 @@ export default function LoginPage() {
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="Jane Doe"
+            />
+          </div>
+        )}
+
+        {mode === "register" && (
+          <div className="space-y-2">
+            <Label htmlFor="companyName">Company Name</Label>
+            <Input
+              id="companyName"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="Acacia Trading Ltd"
             />
           </div>
         )}
@@ -168,10 +181,6 @@ export default function LoginPage() {
           )}
         </div>
       </form>
-
-      <Link to="/dashboard" className="text-xs text-muted-foreground hover:text-foreground">
-        Continue without signing in
-      </Link>
     </div>
   )
 }

@@ -1,13 +1,13 @@
 import * as React from "react"
-import { Plus, Search, Pencil, Package, AlertTriangle } from "lucide-react"
+import { Plus, Search, Pencil, Trash2, Eye, AlertCircle, Package, AlertTriangle } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
-import { DemoBanner } from "@/components/demo-banner"
 import { EmptyState } from "@/components/empty-state"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import {
   Select,
   SelectContent,
@@ -33,67 +33,83 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { Card, CardContent } from "@/components/ui/card"
-import { DEMO_PRODUCTS } from "@/data/mock-data"
+import { useProducts, createProduct, updateProduct, deleteProduct } from "@/hooks/use-products"
 import { formatKES } from "@/lib/format"
-import type { Product, StockStatus } from "@/lib/types"
+import type { ProductRow } from "@/lib/api-types"
 
-const categories = ["All", "Electronics", "Stationery", "Cleaning", "Furniture"]
+type StockStatus = "In Stock" | "Low Stock" | "Out of Stock"
+
+const computeStockStatus = (qty: number, reorder: number): StockStatus => {
+  if (qty === 0) return "Out of Stock"
+  if (qty <= reorder) return "Low Stock"
+  return "In Stock"
+}
 
 export default function ProductsPage() {
-  const [products, setProducts] = React.useState<Product[]>(DEMO_PRODUCTS)
+  const { products, loading, error, refetch } = useProducts()
   const [search, setSearch] = React.useState("")
-  const [categoryFilter, setCategoryFilter] = React.useState("All")
+  const [categoryFilter, setCategoryFilter] = React.useState("all")
   const [dialogOpen, setDialogOpen] = React.useState(false)
-  const [editingProduct, setEditingProduct] = React.useState<Product | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [editingProduct, setEditingProduct] = React.useState<ProductRow | null>(null)
+  const [viewingProduct, setViewingProduct] = React.useState<ProductRow | null>(null)
+  const [deletingProduct, setDeletingProduct] = React.useState<ProductRow | null>(null)
+  const [submitting, setSubmitting] = React.useState(false)
+  const [deleting, setDeleting] = React.useState(false)
+  const [formError, setFormError] = React.useState<string | null>(null)
 
   const [formData, setFormData] = React.useState({
     sku: "",
     name: "",
-    category: "Electronics",
-    unitPrice: 0,
+    category: "",
+    unit: "pcs",
+    sellingPrice: 0,
     costPrice: 0,
     stockQuantity: 0,
     reorderLevel: 0,
-    unit: "pcs",
+    isService: false,
   })
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
 
-  const computeStockStatus = (qty: number, reorder: number): StockStatus => {
-    if (qty === 0) return "Out of Stock"
-    if (qty <= reorder) return "Low Stock"
-    return "In Stock"
-  }
+  const categories = React.useMemo(() => {
+    const set = new Set<string>()
+    products.forEach((p) => { if (p.category) set.add(p.category) })
+    return Array.from(set).sort()
+  }, [products])
 
   const filtered = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase())
-    const matchesCategory = categoryFilter === "All" || p.category === categoryFilter
+    const matchesCategory = categoryFilter === "all" || p.category === categoryFilter
     return matchesSearch && matchesCategory
   })
 
-  const lowStockCount = products.filter((p) => p.stockStatus !== "In Stock").length
+  const lowStockCount = products.filter((p) => computeStockStatus(Number(p.stock_quantity), Number(p.reorder_level)) !== "In Stock").length
 
   const openAddDialog = () => {
     setEditingProduct(null)
-    setFormData({ sku: "", name: "", category: "Electronics", unitPrice: 0, costPrice: 0, stockQuantity: 0, reorderLevel: 0, unit: "pcs" })
+    setFormData({ sku: "", name: "", category: "", unit: "pcs", sellingPrice: 0, costPrice: 0, stockQuantity: 0, reorderLevel: 0, isService: false })
     setFormErrors({})
+    setFormError(null)
     setDialogOpen(true)
   }
 
-  const openEditDialog = (product: Product) => {
+  const openEditDialog = (product: ProductRow) => {
     setEditingProduct(product)
     setFormData({
       sku: product.sku,
       name: product.name,
-      category: product.category,
-      unitPrice: product.unitPrice,
-      costPrice: product.costPrice,
-      stockQuantity: product.stockQuantity,
-      reorderLevel: product.reorderLevel,
+      category: product.category ?? "",
       unit: product.unit,
+      sellingPrice: Number(product.selling_price),
+      costPrice: Number(product.cost_price),
+      stockQuantity: Number(product.stock_quantity),
+      reorderLevel: Number(product.reorder_level),
+      isService: product.is_service,
     })
     setFormErrors({})
+    setFormError(null)
     setDialogOpen(true)
   }
 
@@ -101,27 +117,54 @@ export default function ProductsPage() {
     const errors: Record<string, string> = {}
     if (!formData.sku.trim()) errors.sku = "SKU is required"
     if (!formData.name.trim()) errors.name = "Product name is required"
-    if (formData.unitPrice <= 0) errors.unitPrice = "Price must be greater than 0"
+    if (formData.sellingPrice < 0) errors.sellingPrice = "Price cannot be negative"
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return
-    const stockStatus = computeStockStatus(formData.stockQuantity, formData.reorderLevel)
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === editingProduct.id ? { ...p, ...formData, stockStatus } : p))
-      )
-    } else {
-      const newProduct: Product = {
-        id: `prod-${Date.now()}`,
-        ...formData,
-        stockStatus,
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      const payload = {
+        sku: formData.sku.trim(),
+        name: formData.name.trim(),
+        category: formData.category.trim() || undefined,
+        unit: formData.unit.trim() || "pcs",
+        sellingPrice: formData.sellingPrice,
+        costPrice: formData.costPrice,
+        stockQuantity: formData.stockQuantity,
+        reorderLevel: formData.reorderLevel,
+        isService: formData.isService,
       }
-      setProducts((prev) => [newProduct, ...prev])
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, payload)
+      } else {
+        await createProduct(payload)
+      }
+      await refetch()
+      setDialogOpen(false)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to save product")
+    } finally {
+      setSubmitting(false)
     }
-    setDialogOpen(false)
+  }
+
+  const handleDelete = async () => {
+    if (!deletingProduct) return
+    setDeleting(true)
+    try {
+      await deleteProduct(deletingProduct.id)
+      await refetch()
+      setDeleteDialogOpen(false)
+      setDeletingProduct(null)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to delete product")
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -137,9 +180,15 @@ export default function ProductsPage() {
             </Button>
           }
         />
-        <DemoBanner />
 
-        {lowStockCount > 0 && (
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <AlertCircle className="size-4" />
+            {error}
+          </div>
+        )}
+
+        {lowStockCount > 0 && !loading && (
           <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
             <AlertTriangle className="size-4 text-warning" />
             <span>{lowStockCount} product(s) need attention — low or out of stock.</span>
@@ -161,22 +210,32 @@ export default function ProductsPage() {
               </div>
               <Select value={categoryFilter} onValueChange={(v) => v && setCategoryFilter(v)}>
                 <SelectTrigger size="sm" className="w-full sm:w-40" aria-label="Filter by category">
-                  <SelectValue />
+                  <SelectValue placeholder="All categories" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
                   {categories.map((c) => (
-                    <SelectItem key={c} value={c}>{c === "All" ? "All categories" : c}</SelectItem>
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner />
+              </div>
+            ) : filtered.length === 0 ? (
               <EmptyState
                 icon={Package}
-                title="No products found"
-                description="Try adjusting your search or filters, or add a new product."
-                action={<Button onClick={openAddDialog} variant="outline" className="cursor-pointer"><Plus className="size-4" />Add Product</Button>}
+                title={products.length === 0 ? "No products yet" : "No products found"}
+                description={products.length === 0 ? "Add your first product to get started." : "Try adjusting your search or filters."}
+                action={
+                  <Button onClick={openAddDialog} variant="outline" className="cursor-pointer">
+                    <Plus className="size-4" />
+                    Add Product
+                  </Button>
+                }
               />
             ) : (
               <Table>
@@ -192,29 +251,34 @@ export default function ProductsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground">{p.category}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">{formatKES(p.unitPrice)}</TableCell>
-                      <TableCell className="text-right tabular-nums hidden md:table-cell">
-                        {p.stockQuantity} {p.unit}
-                      </TableCell>
-                      <TableCell><StatusBadge status={p.stockStatus} /></TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="cursor-pointer"
-                          onClick={() => openEditDialog(p)}
-                          aria-label={`Edit ${p.name}`}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filtered.map((p) => {
+                    const stockStatus = computeStockStatus(Number(p.stock_quantity), Number(p.reorder_level))
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-mono text-xs">{p.sku}</TableCell>
+                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-muted-foreground">{p.category ?? "—"}</TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">{formatKES(Number(p.selling_price))}</TableCell>
+                        <TableCell className="text-right tabular-nums hidden md:table-cell">
+                          {Number(p.stock_quantity)} {p.unit}
+                        </TableCell>
+                        <TableCell><StatusBadge status={stockStatus} /></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon-sm" className="cursor-pointer" onClick={() => setViewingProduct(p)} aria-label={`View ${p.name}`}>
+                              <Eye className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon-sm" className="cursor-pointer" onClick={() => openEditDialog(p)} aria-label={`Edit ${p.name}`}>
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon-sm" className="cursor-pointer text-destructive hover:text-destructive" onClick={() => { setDeletingProduct(p); setDeleteDialogOpen(true) }} aria-label={`Delete ${p.name}`}>
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -230,6 +294,9 @@ export default function ProductsPage() {
               {editingProduct ? "Update product details below." : "Enter the new product's details below."}
             </DialogDescription>
           </DialogHeader>
+          {formError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</div>
+          )}
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="prod-sku">SKU *</Label>
@@ -244,14 +311,7 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prod-category">Category</Label>
-                <Select value={formData.category} onValueChange={(v) => v && setFormData({ ...formData, category: v })}>
-                  <SelectTrigger id="prod-category" size="sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {categories.filter((c) => c !== "All").map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input id="prod-category" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} placeholder="Electronics" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prod-unit">Unit</Label>
@@ -261,8 +321,8 @@ export default function ProductsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prod-price">Selling Price (KSh) *</Label>
-                <Input id="prod-price" type="number" value={formData.unitPrice} onChange={(e) => setFormData({ ...formData, unitPrice: Number(e.target.value) })} aria-invalid={!!formErrors.unitPrice} />
-                {formErrors.unitPrice && <span className="text-xs text-destructive">{formErrors.unitPrice}</span>}
+                <Input id="prod-price" type="number" value={formData.sellingPrice} onChange={(e) => setFormData({ ...formData, sellingPrice: Number(e.target.value) })} aria-invalid={!!formErrors.sellingPrice} />
+                {formErrors.sellingPrice && <span className="text-xs text-destructive">{formErrors.sellingPrice}</span>}
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="prod-cost">Cost Price (KSh)</Label>
@@ -279,11 +339,63 @@ export default function ProductsPage() {
                 <Input id="prod-reorder" type="number" value={formData.reorderLevel} onChange={(e) => setFormData({ ...formData, reorderLevel: Number(e.target.value) })} />
               </div>
             </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={formData.isService} onChange={(e) => setFormData({ ...formData, isService: e.target.checked })} className="size-4" />
+              This is a service (not a physical product)
+            </label>
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline">Cancel</Button>} />
-            <Button onClick={handleSubmit} className="cursor-pointer">
-              {editingProduct ? "Save Changes" : "Add Product"}
+            <Button onClick={handleSubmit} disabled={submitting} className="cursor-pointer">
+              {submitting ? <LoadingSpinner className="size-4" /> : editingProduct ? "Save Changes" : "Add Product"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewingProduct} onOpenChange={(open) => !open && setViewingProduct(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Product Details</DialogTitle>
+          </DialogHeader>
+          {viewingProduct && (
+            <div className="flex flex-col gap-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div><span className="text-muted-foreground">SKU:</span> <span className="font-mono">{viewingProduct.sku}</span></div>
+                <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{viewingProduct.name}</span></div>
+                <div><span className="text-muted-foreground">Category:</span> {viewingProduct.category ?? "—"}</div>
+                <div><span className="text-muted-foreground">Unit:</span> {viewingProduct.unit}</div>
+                <div><span className="text-muted-foreground">Selling Price:</span> <span className="font-medium tabular-nums">{formatKES(Number(viewingProduct.selling_price))}</span></div>
+                <div><span className="text-muted-foreground">Cost Price:</span> <span className="tabular-nums">{formatKES(Number(viewingProduct.cost_price))}</span></div>
+                <div><span className="text-muted-foreground">Stock:</span> {Number(viewingProduct.stock_quantity)} {viewingProduct.unit}</div>
+                <div><span className="text-muted-foreground">Reorder Level:</span> {Number(viewingProduct.reorder_level)}</div>
+                <div><span className="text-muted-foreground">Type:</span> {viewingProduct.is_service ? "Service" : "Product"}</div>
+                <div><span className="text-muted-foreground">Active:</span> {viewingProduct.is_active ? "Yes" : "No"}</div>
+              </div>
+              {viewingProduct.description && (
+                <div><span className="text-muted-foreground">Description:</span> {viewingProduct.description}</div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">Close</Button>} />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setDeletingProduct(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Product</DialogTitle>
+            <DialogDescription>Are you sure you want to delete {deletingProduct?.name}? This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          {formError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline">Cancel</Button>} />
+            <Button onClick={handleDelete} disabled={deleting} variant="destructive" className="cursor-pointer">
+              {deleting ? <LoadingSpinner className="size-4" /> : "Delete Product"}
             </Button>
           </DialogFooter>
         </DialogContent>
