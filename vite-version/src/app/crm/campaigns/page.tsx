@@ -14,7 +14,8 @@ import { formatKES, formatDate } from "@/lib/format"
 
 type Campaign={id:string;name:string;campaign_type:string;status:string;start_date:string|null;end_date:string|null;budget:number|string;actual_cost:number|string;target_leads:number;notes:string|null;leads_count:number;responses_count:number;segments_count:number}
 type Lead={id:string;contact_name:string;organization_name:string|null}
-type Segment={id:string;name:string;is_dynamic:boolean}\ntype CampaignLead={lead_id:string;response_status:string;contact_name:string;organization_name:string|null;email:string|null;phone:string|null;added_at:string}
+type Segment={id:string;name:string;is_dynamic:boolean}
+type CampaignLead={lead_id:string;response_status:string;contact_name:string;organization_name:string|null;email:string|null;phone:string|null;added_at:string}
 const blank={name:"",campaignType:"other",status:"planned",startDate:"",endDate:"",budget:"0",targetLeads:"0",notes:""}
 const statuses=["planned","active","paused","completed","cancelled"]
 const label=(s:string)=>s.replaceAll("_"," ").replace(/\b\w/g,x=>x.toUpperCase())
@@ -23,7 +24,10 @@ export default function CrmCampaignsPage(){
  const [campaigns,setCampaigns]=React.useState<Campaign[]>([])
  const [leads,setLeads]=React.useState<Lead[]>([])
  const [segments,setSegments]=React.useState<Segment[]>([])
- const [segmentSelection,setSegmentSelection]=React.useState<Record<string,string>>({})\n const [audienceOpen,setAudienceOpen]=React.useState(false)\n const [audienceCampaign,setAudienceCampaign]=React.useState<Campaign|null>(null)\n const [campaignLeads,setCampaignLeads]=React.useState<CampaignLead[]>([])
+ const [segmentSelection,setSegmentSelection]=React.useState<Record<string,string>>({})
+ const [audienceOpen,setAudienceOpen]=React.useState(false)
+ const [audienceCampaign,setAudienceCampaign]=React.useState<Campaign|null>(null)
+ const [campaignLeads,setCampaignLeads]=React.useState<CampaignLead[]>([])
  const [selection,setSelection]=React.useState<Record<string,string>>({})
  const [form,setForm]=React.useState(blank)
  const [open,setOpen]=React.useState(false)
@@ -44,7 +48,9 @@ export default function CrmCampaignsPage(){
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not save campaign.")}
   finally{setSaving(false)}
  }
- async function viewAudience(c:Campaign){setAudienceCampaign(c);setAudienceOpen(true);try{setCampaignLeads(await api.get<CampaignLead[]>("/crm/campaigns/"+c.id+"/leads"))}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not load campaign audience.")}}\n async function updateResponse(lead:CampaignLead,responseStatus:string){if(!audienceCampaign)return;try{await api.patch("/crm/campaigns/"+audienceCampaign.id+"/leads/"+lead.lead_id,{responseStatus});setCampaignLeads(campaignLeads.map(x=>x.lead_id===lead.lead_id?{...x,response_status:responseStatus}:x));await load()}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update campaign response.")}}\n async function addSegment(c:Campaign){const segmentId=segmentSelection[c.id];if(!segmentId){setError("Select a segment to attach to this campaign.");return}try{await api.post("/crm/campaigns/"+c.id+"/segments",{segmentId});setSegmentSelection({...segmentSelection,[c.id]:""});await load()}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not attach segment.")}}
+ async function viewAudience(c:Campaign){setAudienceCampaign(c);setAudienceOpen(true);try{setCampaignLeads(await api.get<CampaignLead[]>("/crm/campaigns/"+c.id+"/leads"))}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not load campaign audience.")}}
+ async function updateResponse(lead:CampaignLead,responseStatus:string){if(!audienceCampaign)return;try{await api.patch("/crm/campaigns/"+audienceCampaign.id+"/leads/"+lead.lead_id,{responseStatus});setCampaignLeads(campaignLeads.map(x=>x.lead_id===lead.lead_id?{...x,response_status:responseStatus}:x));await load()}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update campaign response.")}}
+ async function addSegment(c:Campaign){const segmentId=segmentSelection[c.id];if(!segmentId){setError("Select a segment to attach to this campaign.");return}try{await api.post("/crm/campaigns/"+c.id+"/segments",{segmentId});setSegmentSelection({...segmentSelection,[c.id]:""});await load()}catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not attach segment.")}}
  async function changeStatus(c:Campaign,status:string){
   try{await api.patch("/crm/campaigns/"+c.id,{status});await load()}
   catch(e){setError(e&&typeof e==="object"&&"message" in e?String(e.message):"Could not update campaign.")}
@@ -71,6 +77,8 @@ export default function CrmCampaignsPage(){
   <Field label="Target leads" id="campaign-target"><Input id="campaign-target" type="number" min="0" value={form.targetLeads} onChange={e=>setForm({...form,targetLeads:e.target.value})}/></Field>
   <Field label="Notes" id="campaign-notes" wide><textarea id="campaign-notes" rows={3} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"/></Field>
  </div><DialogFooter><DialogClose render={<Button variant="outline">Cancel</Button>}/><Button onClick={()=>void save()} disabled={saving||!form.name.trim()}>{saving?"Saving…":"Save campaign"}</Button></DialogFooter></DialogContent></Dialog>
+
+ <Dialog open={audienceOpen} onOpenChange={setAudienceOpen}><DialogContent className="sm:max-w-3xl"><DialogHeader><DialogTitle>Campaign audience{audienceCampaign?" — "+audienceCampaign.name:""}</DialogTitle><DialogDescription>Track whether each targeted lead was contacted, responded or converted.</DialogDescription></DialogHeader>{campaignLeads.length===0?<p className="py-8 text-center text-sm text-muted-foreground">No leads have been added to this campaign yet.</p>:<Table><TableHeader><TableRow><TableHead>Lead</TableHead><TableHead>Contact</TableHead><TableHead>Response status</TableHead></TableRow></TableHeader><TableBody>{campaignLeads.map(l=><TableRow key={l.lead_id}><TableCell><div className="font-medium">{l.contact_name}</div><div className="text-xs text-muted-foreground">{l.organization_name||"Independent contact"}</div></TableCell><TableCell><div>{l.email||"—"}</div><div className="text-xs text-muted-foreground">{l.phone||""}</div></TableCell><TableCell><select aria-label={"Response status for "+l.contact_name} value={l.response_status} onChange={e=>void updateResponse(l,e.target.value)} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs">{["targeted","contacted","responded","converted","unresponsive"].map(s=><option key={s} value={s}>{label(s)}</option>)}</select></TableCell></TableRow>)}</TableBody></Table>}<DialogFooter><DialogClose render={<Button variant="outline">Close</Button>}/></DialogFooter></DialogContent></Dialog>
  </BaseLayout>
 }
 function Field({label,id,wide=false,children}:{label:string;id:string;wide?:boolean;children:React.ReactNode}){return <div className={"flex flex-col gap-1.5 "+(wide?"sm:col-span-2":"")}><Label htmlFor={id}>{label}</Label>{children}</div>}
