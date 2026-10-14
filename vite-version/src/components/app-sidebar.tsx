@@ -23,6 +23,9 @@ import {
   Briefcase,
   CalendarDays,
   FileBarChart,
+  Megaphone,
+  UserRound,
+  Headset,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { NavMain } from "@/components/nav-main"
@@ -49,6 +52,9 @@ const navGroups = [
     label: "CRM",
     items: [
       { title: "Leads & Pipeline", url: "/crm", icon: Users },
+      { title: "Campaigns", url: "/crm/campaigns", icon: Megaphone },
+      { title: "Customer Segments", url: "/crm/segments", icon: UserRound },
+      { title: "Support Tickets", url: "/crm/tickets", icon: Headset },
     ],
   },
   {
