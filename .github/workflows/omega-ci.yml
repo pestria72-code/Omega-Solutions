@@ -38,6 +38,68 @@ jobs:
       - run: npm run lint
       - run: npm test
 
+  migration-runner:
+    name: Migration runner integration test (isolated PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: neondb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d neondb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: api
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/neondb
+      MIGRATION_TARGET: development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - name: Apply migrations to a fresh disposable database
+        run: npm run migrate
+      - name: Verify migration runner is idempotent
+        run: npm run migrate
+      - name: Verify schema, checksums, permissions, and empty tenant data
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+          try {
+            const result = await pool.query(`
+              SELECT
+                (SELECT count(*)::int FROM public.omega_schema_migrations) AS migrations,
+                (SELECT count(*)::int FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> 'omega_schema_migrations') AS tables,
+                (SELECT count(*)::int FROM public.permissions) AS permissions,
+                (SELECT count(*)::int FROM public.role_permissions) AS mappings,
+                (SELECT count(*)::int FROM public.companies) AS companies,
+                (SELECT count(*)::int FROM public.users) AS users,
+                (SELECT count(*)::int FROM public.audit_logs) AS audit_logs
+            `);
+            const row = result.rows[0];
+            const expected = { migrations: 5, tables: 7, permissions: 30, mappings: 120, companies: 0, users: 0, audit_logs: 0 };
+            for (const [key, value] of Object.entries(expected)) {
+              if (row[key] !== value) throw new Error(`Expected ${key}=${value}, got ${row[key]}`);
+            }
+            console.log('Migration integration checks passed:', row);
+          } finally {
+            await pool.end();
+          }
+          NODE
+
   frontend:
     name: Frontend type-check and production build
     runs-on: ubuntu-latest
