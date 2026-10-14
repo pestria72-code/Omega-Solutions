@@ -2,7 +2,7 @@ import {
   Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service.js';
-import { CreateInvoiceDto, UpdateInvoiceStatusDto } from './dto/invoice.dto.js';
+import { CreateInvoiceDto, CreateInvoicePaymentDto, UpdateInvoiceStatusDto } from './dto/invoice.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
@@ -33,6 +33,16 @@ export class InvoicesController {
   @RequirePermissions('sales:write')
   create(@Req() req: { user: AuthenticatedUser }, @Body() dto: CreateInvoiceDto) {
     return this.invoices.create(req.user, dto);
+  }
+
+  @Post(':id/payments')
+  @RequirePermissions('payments:write')
+  recordPayment(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Body() dto: CreateInvoicePaymentDto,
+  ) {
+    return this.invoices.recordPayment(req.user, id, dto);
   }
 
   @Patch(':id/status')
