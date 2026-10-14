@@ -265,7 +265,7 @@ export class CrmService {
 
   async listCampaigns(user: AuthenticatedUser, status?: string) {
     const companyId = await this.companyId(user);
-    const result = await this.db.query("SELECT c.*, COUNT(cl.lead_id)::int AS leads_count, COUNT(cl.lead_id) FILTER (WHERE cl.response_status IN ('responded','converted'))::int AS responses_count FROM crm_campaigns c LEFT JOIN crm_campaign_leads cl ON cl.campaign_id=c.id AND cl.company_id=c.company_id WHERE c.company_id=$1 AND ($2::text IS NULL OR c.status=$2) GROUP BY c.id ORDER BY c.created_at DESC LIMIT 200", [companyId, status ?? null]);
+    const result = await this.db.query("SELECT c.*, COUNT(DISTINCT cl.lead_id)::int AS leads_count, COUNT(DISTINCT cl.lead_id) FILTER (WHERE cl.response_status IN ('responded','converted'))::int AS responses_count, COUNT(DISTINCT cs.segment_id)::int AS segments_count FROM crm_campaigns c LEFT JOIN crm_campaign_leads cl ON cl.campaign_id=c.id AND cl.company_id=c.company_id LEFT JOIN crm_campaign_segments cs ON cs.campaign_id=c.id AND cs.company_id=c.company_id WHERE c.company_id=$1 AND ($2::text IS NULL OR c.status=$2) GROUP BY c.id ORDER BY c.created_at DESC LIMIT 200", [companyId, status ?? null]);
     return result.rows;
   }
 
