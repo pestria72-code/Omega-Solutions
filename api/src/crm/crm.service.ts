@@ -4,7 +4,7 @@ import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type {
-  AddCampaignLeadDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto, CreateLeadDto,
+  AddCampaignLeadDto, AddCampaignSegmentDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto, CreateLeadDto,
   CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto, UpdateCampaignDto,
   UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
 } from './dto/crm.dto.js';
@@ -335,6 +335,17 @@ export class CrmService {
     const result = await this.db.query("INSERT INTO crm_campaign_leads(company_id,campaign_id,lead_id,response_status) VALUES($1,$2,$3,$4) ON CONFLICT(campaign_id,lead_id) DO UPDATE SET response_status=EXCLUDED.response_status RETURNING *", [companyId,campaignId,dto.leadId,dto.responseStatus ?? 'targeted']);
     await this.auditChange(user,'crm.campaign.add_lead','crm_campaign',campaignId,{leadId:dto.leadId,responseStatus:dto.responseStatus ?? 'targeted'});
     return result.rows[0];
+  }
+
+  async addCampaignSegment(user: AuthenticatedUser, campaignId: string, dto: AddCampaignSegmentDto) {
+    const companyId = await this.companyId(user);
+    const campaign = await this.db.query('SELECT id FROM crm_campaigns WHERE id=$1 AND company_id=$2',[campaignId,companyId]);
+    if (!campaign.rows.length) throw new NotFoundException('CRM campaign not found.');
+    const segment = await this.db.query('SELECT id FROM crm_segments WHERE id=$1 AND company_id=$2',[dto.segmentId,companyId]);
+    if (!segment.rows.length) throw new NotFoundException('CRM segment not found.');
+    const result = await this.db.query('INSERT INTO crm_campaign_segments(company_id,campaign_id,segment_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING *',[companyId,campaignId,dto.segmentId]);
+    await this.auditChange(user,'crm.campaign.add_segment','crm_campaign',campaignId,{segmentId:dto.segmentId});
+    return result.rows[0] ?? {success:true,alreadyLinked:true};
   }
 
   async listSegments(user: AuthenticatedUser) {
