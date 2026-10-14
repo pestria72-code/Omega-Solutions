@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { StatusBadge } from "@/components/status-badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
@@ -130,7 +129,7 @@ export default function CrmPage() {
                   <TableCell><div className="font-medium">{lead.contact_name}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{lead.organization_name || "Independent contact"}</div></TableCell>
                   <TableCell className="hidden md:table-cell">{lead.organization_name || "—"}</TableCell>
                   <TableCell className="hidden lg:table-cell"><div>{lead.email || "—"}</div><div className="text-xs text-muted-foreground">{lead.phone || ""}</div></TableCell>
-                  <TableCell><StatusBadge status={lead.status.charAt(0).toUpperCase() + lead.status.slice(1)} /></TableCell>
+                  <TableCell><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${lead.status === "qualified" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300" : lead.status === "unqualified" ? "bg-muted text-muted-foreground" : lead.status === "converted" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>{lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}</span></TableCell>
                   <TableCell className="text-right font-medium tabular-nums">{formatKES(Number(lead.estimated_value))}</TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground">{formatDate(lead.created_at)}</TableCell>
                 </TableRow>)}</TableBody>
