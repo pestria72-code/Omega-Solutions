@@ -53,39 +53,103 @@ export class ProductsService {
 
   async create(user: AuthenticatedUser, dto: CreateProductDto): Promise<ProductRow> {
     const membership = await this.memberships.getMembership(user.userId);
+    const initialStock = dto.stockQuantity ?? 0;
+    const isService = dto.isService ?? false;
 
-    const existing = await this.db.query<{ id: string }>(
-      'SELECT id FROM products WHERE company_id = $1 AND sku = $2',
-      [membership.companyId, dto.sku],
-    );
-    if (existing.rows.length > 0) {
-      throw new ConflictException('A product with this SKU already exists.');
+    if (isService && initialStock > 0) {
+      throw new BadRequestException('Service items cannot have an initial stock quantity.');
     }
 
-    const result = await this.db.query<ProductRow>(
-      `INSERT INTO products
-        (company_id, sku, name, description, category, unit,
-         selling_price, cost_price, stock_quantity, reorder_level,
-         is_service, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING ${PRODUCT_COLUMNS}`,
-      [
-        membership.companyId,
-        dto.sku,
-        dto.name,
-        dto.description ?? null,
-        dto.category ?? null,
-        dto.unit ?? 'pcs',
-        dto.sellingPrice,
-        dto.costPrice ?? 0,
-        dto.stockQuantity ?? 0,
-        dto.reorderLevel ?? 0,
-        dto.isService ?? false,
-        dto.isActive ?? true,
-      ],
-    );
+    const product = await this.db.transaction(async (client) => {
+      const existing = await client.query<{ id: string }>(
+        'SELECT id FROM products WHERE company_id = $1 AND sku = $2',
+        [membership.companyId, dto.sku],
+      );
+      if (existing.rows.length > 0) {
+        throw new ConflictException('A product with this SKU already exists.');
+      }
 
-    const product = result.rows[0];
+      const result = await client.query<ProductRow>(
+        `INSERT INTO products
+          (company_id, sku, name, description, category, unit,
+           selling_price, cost_price, stock_quantity, reorder_level,
+           is_service, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING ${PRODUCT_COLUMNS}`,
+        [
+          membership.companyId,
+          dto.sku,
+          dto.name,
+          dto.description ?? null,
+          dto.category ?? null,
+          dto.unit ?? 'pcs',
+          dto.sellingPrice,
+          dto.costPrice ?? 0,
+          isService ? 0 : initialStock,
+          dto.reorderLevel ?? 0,
+          isService,
+          dto.isActive ?? true,
+        ],
+      );
+      const created = result.rows[0];
+
+      if (!isService && initialStock > 0) {
+        let warehouse = await client.query<{ id: string }>(
+          `SELECT id FROM warehouses
+           WHERE company_id = $1 AND is_active = true
+           ORDER BY created_at ASC, id ASC LIMIT 1`,
+          [membership.companyId],
+        );
+
+        if (!warehouse.rows[0]) {
+          warehouse = await client.query<{ id: string }>(
+            `INSERT INTO warehouses(company_id, code, name, capacity, is_active)
+             VALUES($1, 'MAIN', 'Main Warehouse', 0, true)
+             ON CONFLICT(company_id, code) DO UPDATE SET is_active = warehouses.is_active
+             RETURNING id`,
+            [membership.companyId],
+          );
+          if (!warehouse.rows[0]) {
+            warehouse = await client.query<{ id: string }>(
+              `SELECT id FROM warehouses
+               WHERE company_id = $1 AND is_active = true
+               ORDER BY created_at ASC, id ASC LIMIT 1`,
+              [membership.companyId],
+            );
+          }
+        }
+
+        const warehouseId = warehouse.rows[0]?.id;
+        if (!warehouseId) {
+          throw new BadRequestException('Create an active warehouse before setting initial stock.');
+        }
+
+        await client.query(
+          `INSERT INTO inventory_stock_levels(company_id, warehouse_id, product_id, quantity, reorder_level)
+           VALUES($1, $2, $3, $4, $5)
+           ON CONFLICT(warehouse_id, product_id) DO UPDATE
+             SET quantity = EXCLUDED.quantity, reorder_level = EXCLUDED.reorder_level, updated_at = NOW()`,
+          [membership.companyId, warehouseId, created.id, initialStock, dto.reorderLevel ?? 0],
+        );
+
+        await client.query(
+          `INSERT INTO inventory_stock_movements
+             (company_id, product_id, warehouse_id, movement_type, quantity, unit_cost, notes, created_by)
+           VALUES($1, $2, $3, 'opening_balance', $4, $5, $6, $7)`,
+          [
+            membership.companyId,
+            created.id,
+            warehouseId,
+            initialStock,
+            dto.costPrice ?? 0,
+            'Initial stock entered when the product was created.',
+            user.userId,
+          ],
+        );
+      }
+
+      return created;
+    });
 
     await this.audit.log({
       userId: user.userId,
@@ -95,7 +159,7 @@ export class ProductsService {
       entityType: 'product',
       entityId: product.id,
       oldValues: null,
-      newValues: { name: dto.name, sku: dto.sku },
+      newValues: { name: dto.name, sku: dto.sku, initialStock },
       ipAddress: null,
     });
 
