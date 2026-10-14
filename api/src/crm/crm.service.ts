@@ -6,7 +6,7 @@ import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js
 import type {
   AddCampaignLeadDto, AddCampaignSegmentDto, AddSegmentMemberDto, CreateActivityDto, CreateCampaignDto,
   CreateLeadDto, CreateOpportunityDto, CreateSegmentDto, CreateTicketDto, UpdateActivityDto,
-  UpdateCampaignDto, UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
+  UpdateCampaignDto, UpdateCampaignLeadDto, UpdateLeadDto, UpdateOpportunityDto, UpdateTicketDto,
 } from './dto/crm.dto.js';
 
 @Injectable()
