@@ -15,7 +15,7 @@ import { useCustomers } from "@/hooks/use-customers";
 import { useProducts } from "@/hooks/use-products";
 import { api } from "@/lib/api-client";
 import { formatKES, formatDate } from "@/lib/format";
-import type { CustomerRow, InvoiceApiRow, InvoiceItemApiRow, ProductRow } from "@/lib/api-types";
+import type { CustomerRow, InvoiceApiRow, InvoiceItemApiRow, InvoicePaymentApiRow, ProductRow } from "@/lib/api-types";
 import type { InvoiceStatus } from "@/lib/types";
 
 const statuses = [
@@ -58,6 +58,8 @@ export default function InvoicesPage() {
   const [viewingInvoice, setViewingInvoice] = React.useState<InvoiceApiRow | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [detailLoading, setDetailLoading] = React.useState(false);
+  const [paymentOpen, setPaymentOpen] = React.useState(false);
+  const [paymentDraft, setPaymentDraft] = React.useState({ amount: "", method: "mpesa", reference: "", notes: "" });
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
   const { customers, loading: customersLoading, error: customersError } = useCustomers();
   const { products, loading: productsLoading, error: productsError } = useProducts();
@@ -130,6 +132,37 @@ export default function InvoicesPage() {
     } catch (error) { setActionError(errorMessage(error)); }
     finally { setSaving(false); }
   };
+  const openPaymentDialog = () => {
+    if (!viewingInvoice) return;
+    const balance = Math.max(0, Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid));
+    setPaymentDraft({ amount: balance.toFixed(2), method: "mpesa", reference: "", notes: "" });
+    setActionError("");
+    setPaymentOpen(true);
+  };
+  const recordPayment = async () => {
+    if (!viewingInvoice) return;
+    const amount = Number(paymentDraft.amount);
+    const balance = Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > balance) {
+      setActionError("Enter a payment greater than zero and no more than the outstanding balance.");
+      return;
+    }
+    setSaving(true);
+    setActionError("");
+    try {
+      const updated = await api.post<InvoiceApiRow>(`/invoices/${viewingInvoice.id}/payments`, {
+        amount, method: paymentDraft.method,
+        reference: paymentDraft.reference.trim() || undefined,
+        notes: paymentDraft.notes.trim() || undefined,
+      });
+      setViewingInvoice(updated);
+      setInvoices((current) => current.map((invoice) => invoice.id === updated.id ? updated : invoice));
+      setPaymentOpen(false);
+      setPaymentDraft({ amount: "", method: "mpesa", reference: "", notes: "" });
+      await refreshInvoices();
+    } catch (error) { setActionError(errorMessage(error)); }
+    finally { setSaving(false); }
+  };
   const resetCreate = (open: boolean) => { setCreateOpen(open); if (!open) { setFormErrors({}); setActionError(""); } };
   const activeCustomers: CustomerRow[] = customers.filter((customer) => customer.is_active);
   const activeProducts: ProductRow[] = products.filter((product) => product.is_active);
@@ -173,9 +206,24 @@ export default function InvoicesPage() {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Invoice Details</DialogTitle><DialogDescription>{viewingInvoice?.invoice_number}</DialogDescription></DialogHeader>
         {viewingInvoice && <div className="flex flex-col gap-4 text-sm"><div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div><span className="text-muted-foreground">Customer</span><p className="font-medium">{viewingInvoice.customer_name}</p></div><div><span className="text-muted-foreground">Status</span><p><StatusBadge status={uiStatus(viewingInvoice.status)} /></p></div><div><span className="text-muted-foreground">Issue date</span><p>{formatDate(viewingInvoice.issue_date)}</p></div><div><span className="text-muted-foreground">Due date</span><p>{formatDate(viewingInvoice.due_date)}</p></div><div><span className="text-muted-foreground">Amount paid</span><p>{formatKES(Number(viewingInvoice.amount_paid))}</p></div><div><span className="text-muted-foreground">Balance</span><p className="font-medium">{formatKES(Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid))}</p></div></div>
           <div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Unit price</TableHead><TableHead className="text-right">Tax</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{detailLoading ? <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground"><Loader2 className="mr-2 inline size-4 animate-spin" />Loading items…</TableCell></TableRow> : (viewingInvoice.items ?? []).map((item: InvoiceItemApiRow) => <TableRow key={item.id}><TableCell><span className="font-medium">{item.product_name}</span>{item.sku && <span className="block text-xs text-muted-foreground">{item.sku}</span>}</TableCell><TableCell className="text-right">{Number(item.quantity).toLocaleString()}</TableCell><TableCell className="text-right">{formatKES(Number(item.unit_price))}</TableCell><TableCell className="text-right">{formatKES(Number(item.tax_amount))}</TableCell><TableCell className="text-right font-medium">{formatKES(Number(item.line_total))}</TableCell></TableRow>)}</TableBody></Table></div>
-          <div className="ml-auto flex w-full max-w-xs flex-col gap-2 border-t pt-3"><div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatKES(Number(viewingInvoice.subtotal))}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{formatKES(Number(viewingInvoice.tax_amount))}</span></div><div className="flex justify-between text-base font-semibold"><span>Total</span><span>{formatKES(Number(viewingInvoice.total))}</span></div></div>{viewingInvoice.notes && <div><span className="text-muted-foreground">Notes</span><p>{viewingInvoice.notes}</p></div>}</div>}
+          <div className="ml-auto flex w-full max-w-xs flex-col gap-2 border-t pt-3"><div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatKES(Number(viewingInvoice.subtotal))}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span>{formatKES(Number(viewingInvoice.tax_amount))}</span></div><div className="flex justify-between text-base font-semibold"><span>Total</span><span>{formatKES(Number(viewingInvoice.total))}</span></div></div>
+          <div className="flex flex-col gap-2"><h3 className="font-medium">Payment history</h3>{!viewingInvoice.payments?.length ? <p className="text-muted-foreground">No payments recorded.</p> : <div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Method</TableHead><TableHead>Reference</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader><TableBody>{viewingInvoice.payments.map((payment: InvoicePaymentApiRow) => <TableRow key={payment.id}><TableCell>{formatDate(payment.paid_at)}</TableCell><TableCell className="capitalize">{payment.method}</TableCell><TableCell>{payment.reference || "—"}</TableCell><TableCell className="text-right">{formatKES(Number(payment.amount))}</TableCell></TableRow>)}</TableBody></Table></div>}</div>
+          {viewingInvoice.notes && <div><span className="text-muted-foreground">Notes</span><p>{viewingInvoice.notes}</p></div>}</div>}
         {actionError && <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{actionError}</div>}
-        <DialogFooter>{viewingInvoice?.status === "draft" && <Button variant="outline" disabled={saving || detailLoading} onClick={() => void changeStatus("cancelled")}>Cancel invoice</Button>}{viewingInvoice?.status === "draft" && <Button disabled={saving || detailLoading} onClick={() => void changeStatus("sent")}>{saving && <Loader2 className="size-4 animate-spin" />}Mark as sent</Button>}<DialogClose render={<Button variant="outline">Close</Button>} /></DialogFooter>
+        <DialogFooter>{viewingInvoice && ["sent", "overdue", "partially_paid"].includes(viewingInvoice.status) && Number(viewingInvoice.total) > Number(viewingInvoice.amount_paid) && <Button variant="outline" disabled={saving || detailLoading} onClick={openPaymentDialog}>Record payment</Button>}{viewingInvoice?.status === "draft" && <Button variant="outline" disabled={saving || detailLoading} onClick={() => void changeStatus("cancelled")}>Cancel invoice</Button>}{viewingInvoice?.status === "draft" && <Button disabled={saving || detailLoading} onClick={() => void changeStatus("sent")}>{saving && <Loader2 className="size-4 animate-spin" />}Mark as sent</Button>}<DialogClose render={<Button variant="outline">Close</Button>} /></DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={paymentOpen} onOpenChange={(open) => { setPaymentOpen(open); if (!open) setActionError(""); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>Record invoice payment</DialogTitle><DialogDescription>Outstanding balance: {viewingInvoice ? formatKES(Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid)) : formatKES(0)}. Payment records update the invoice and customer balance together.</DialogDescription></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5"><Label htmlFor="payment-amount">Amount (KES) *</Label><Input id="payment-amount" type="number" min="0.01" step="0.01" value={paymentDraft.amount} onChange={(event) => setPaymentDraft((current) => ({ ...current, amount: event.target.value }))} /></div>
+          <div className="flex flex-col gap-1.5"><Label htmlFor="payment-method">Payment method *</Label><Select value={paymentDraft.method} onValueChange={(value) => value && setPaymentDraft((current) => ({ ...current, method: value }))}><SelectTrigger id="payment-method" size="sm"><SelectValue placeholder="Choose method" /></SelectTrigger><SelectContent><SelectItem value="mpesa">M-Pesa</SelectItem><SelectItem value="bank">Bank transfer</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
+          <div className="flex flex-col gap-1.5"><Label htmlFor="payment-reference">Reference (optional)</Label><Input id="payment-reference" maxLength={100} value={paymentDraft.reference} onChange={(event) => setPaymentDraft((current) => ({ ...current, reference: event.target.value }))} placeholder="M-Pesa receipt or bank reference" /></div>
+          <div className="flex flex-col gap-1.5"><Label htmlFor="payment-notes">Notes (optional)</Label><Input id="payment-notes" maxLength={1000} value={paymentDraft.notes} onChange={(event) => setPaymentDraft((current) => ({ ...current, notes: event.target.value }))} /></div>
+        </div>
+        {actionError && <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{actionError}</div>}
+        <DialogFooter><DialogClose render={<Button variant="outline" disabled={saving}>Cancel</Button>} /><Button onClick={() => void recordPayment()} disabled={saving}>{saving && <Loader2 className="size-4 animate-spin" />}Save payment</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </BaseLayout>;
