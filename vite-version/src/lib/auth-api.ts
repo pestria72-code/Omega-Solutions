@@ -15,6 +15,7 @@ export interface LoginResponse {
 
 export interface RegisterResponse {
   userId: string;
+  companyId: string;
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -30,11 +31,11 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return res.json();
 }
 
-export async function register(email: string, password: string, fullName: string, phone?: string): Promise<RegisterResponse> {
+export async function register(email: string, password: string, fullName: string, companyName: string, phone?: string): Promise<RegisterResponse> {
   const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api"}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, fullName, phone }),
+    body: JSON.stringify({ email, password, fullName, companyName, phone }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: "Registration failed" }));
