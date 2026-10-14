@@ -13,12 +13,17 @@ describe('InventoryService tenant isolation', () => {
   let memberships: { getMembership: Mock };
   let audit: { log: Mock };
 
-  const user = { userId: 'user-company-2' } as any;
+  const user = { userId: 'user-company-2', companyId: 'company-2' } as any;
 
   beforeEach(async () => {
     db = { query: vi.fn(), transaction: vi.fn() };
     memberships = {
       getMembership: vi.fn().mockResolvedValue({
+        companyId: 'company-1',
+        branchId: null,
+        role: 'owner',
+      }),
+      getMembershipForCompany: vi.fn().mockResolvedValue({
         companyId: 'company-2',
         branchId: null,
         role: 'owner',
@@ -36,6 +41,16 @@ describe('InventoryService tenant isolation', () => {
     }).compile();
 
     service = module.get(InventoryService);
+  });
+
+  it('uses the explicitly selected company membership rather than another membership', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.listWarehouses(user);
+
+    expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-company-2', 'company-2');
+    expect(memberships.getMembership).not.toHaveBeenCalled();
+    expect(db.query.mock.calls[0][1]).toEqual(['company-2']);
   });
 
   it('scopes warehouse, stock, movement, and summary reads to the resolved company', async () => {
