@@ -57,12 +57,12 @@ export class SalesOrdersService {
       );
       const quote = result.rows[0];
       if (!quote) throw new NotFoundException('Quotation not found.');
-      if (quote.status !== 'accepted') throw new BadRequestException('Only accepted quotations can be converted to a sales order.');
       const existing = await client.query<{ id: string }>(
         'SELECT id FROM sales_orders WHERE source_quotation_id = $1 AND company_id = $2',
         [quotationId, membership.companyId],
       );
       if (existing.rows[0]) return existing.rows[0].id;
+      if (quote.status !== 'accepted') throw new BadRequestException('Only accepted quotations can be converted to a sales order.');
 
       const year = Number(String(quote.issue_date).slice(0, 4));
       const seq = await client.query<{ next_number: number }>(
