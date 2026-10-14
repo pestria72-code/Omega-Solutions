@@ -150,7 +150,7 @@ export default function StockLevelsPage() {
                           <TableCell className="text-right tabular-nums">{formatNumber(Number(product.stock_quantity))} {product.unit}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatNumber(Number(product.reorder_level))}</TableCell>
                           <TableCell className="whitespace-nowrap text-right tabular-nums">{formatKES(Number(product.cost_price))}</TableCell>
-                          <TableCell><StatusBadge status={status.toLowerCase().replaceAll(" ", "_")} /></TableCell>
+                          <TableCell><StatusBadge status={status} /></TableCell>
                         </TableRow>
                       )
                     })}
