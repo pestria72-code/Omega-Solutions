@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsIn, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateLeadDto {
   @IsString() @MinLength(2) @MaxLength(180) contactName!: string;
@@ -52,4 +52,58 @@ export class CreateActivityDto {
 }
 export class UpdateActivityDto {
   @IsOptional() @IsBoolean() completed?: boolean;
+}
+
+export class CreateCampaignDto {
+  @IsString() @MinLength(2) @MaxLength(180) name!: string;
+  @IsOptional() @IsIn(['email','phone','event','social','referral','other']) campaignType?: 'email'|'phone'|'event'|'social'|'referral'|'other';
+  @IsOptional() @IsIn(['planned','active','paused','completed','cancelled']) status?: 'planned'|'active'|'paused'|'completed'|'cancelled';
+  @IsOptional() @IsDateString() startDate?: string;
+  @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsNumber() @Min(0) budget?: number;
+  @IsOptional() @IsNumber() @Min(0) actualCost?: number;
+  @IsOptional() @IsNumber() @Min(0) targetLeads?: number;
+  @IsOptional() @IsString() notes?: string;
+}
+export class UpdateCampaignDto {
+  @IsOptional() @IsString() @MinLength(2) @MaxLength(180) name?: string;
+  @IsOptional() @IsIn(['email','phone','event','social','referral','other']) campaignType?: 'email'|'phone'|'event'|'social'|'referral'|'other';
+  @IsOptional() @IsIn(['planned','active','paused','completed','cancelled']) status?: 'planned'|'active'|'paused'|'completed'|'cancelled';
+  @IsOptional() @IsDateString() startDate?: string;
+  @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsNumber() @Min(0) budget?: number;
+  @IsOptional() @IsNumber() @Min(0) actualCost?: number;
+  @IsOptional() @IsNumber() @Min(0) targetLeads?: number;
+  @IsOptional() @IsString() notes?: string;
+}
+export class CreateSegmentDto {
+  @IsString() @MinLength(2) @MaxLength(180) name!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsObject() criteria?: Record<string, unknown>;
+  @IsOptional() @IsBoolean() isDynamic?: boolean;
+}
+export class AddSegmentMemberDto {
+  @IsOptional() @IsUUID() leadId?: string;
+  @IsOptional() @IsUUID() customerId?: string;
+}
+export class AddCampaignLeadDto {
+  @IsUUID() leadId!: string;
+  @IsOptional() @IsIn(['targeted','contacted','responded','converted','unresponsive']) responseStatus?: 'targeted'|'contacted'|'responded'|'converted'|'unresponsive';
+}
+export class CreateTicketDto {
+  @IsOptional() @IsUUID() customerId?: string;
+  @IsOptional() @IsUUID() leadId?: string;
+  @IsString() @MinLength(2) @MaxLength(180) subject!: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsIn(['open','in_progress','waiting_customer','resolved','closed']) status?: 'open'|'in_progress'|'waiting_customer'|'resolved'|'closed';
+  @IsOptional() @IsIn(['low','normal','high','urgent']) priority?: 'low'|'normal'|'high'|'urgent';
+  @IsOptional() @IsUUID() assignedUserId?: string;
+  @IsOptional() @IsDateString() dueAt?: string;
+}
+export class UpdateTicketDto {
+  @IsOptional() @IsIn(['open','in_progress','waiting_customer','resolved','closed']) status?: 'open'|'in_progress'|'waiting_customer'|'resolved'|'closed';
+  @IsOptional() @IsIn(['low','normal','high','urgent']) priority?: 'low'|'normal'|'high'|'urgent';
+  @IsOptional() @IsUUID() assignedUserId?: string;
+  @IsOptional() @IsDateString() dueAt?: string;
+  @IsOptional() @IsString() description?: string;
 }
