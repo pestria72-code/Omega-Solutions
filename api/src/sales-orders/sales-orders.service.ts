@@ -49,6 +49,7 @@ export class SalesOrdersService {
 
   async createFromQuotation(user: AuthenticatedUser, quotationId: string): Promise<SalesOrderRow> {
     const membership = await this.memberships.getMembership(user.userId);
+    let createdNewOrder = false;
     const orderId = await this.db.transaction(async (client) => {
       const result = await client.query<Record<string, unknown>>(
         `SELECT id, company_id, customer_id, quotation_number, issue_date, status, currency, subtotal, tax_amount, total, notes
@@ -86,13 +87,16 @@ export class SalesOrdersService {
         "UPDATE quotations SET status = 'converted', updated_at = NOW() WHERE id = $1 AND company_id = $2",
         [quotationId, membership.companyId],
       );
+      createdNewOrder = true;
       return inserted.rows[0].id;
     });
-    await this.audit.log({
-      userId: user.userId, companyId: membership.companyId, branchId: null,
-      action: 'sales_order.create_from_quotation', entityType: 'sales_order', entityId: orderId,
-      oldValues: null, newValues: { quotationId }, ipAddress: null,
-    });
+    if (createdNewOrder) {
+      await this.audit.log({
+        userId: user.userId, companyId: membership.companyId, branchId: null,
+        action: 'sales_order.create_from_quotation', entityType: 'sales_order', entityId: orderId,
+        oldValues: null, newValues: { quotationId }, ipAddress: null,
+      });
+    }
     return this.getById(user, orderId);
   }
 
