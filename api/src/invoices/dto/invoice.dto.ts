@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -70,9 +71,8 @@ export class CreateInvoicePaymentDto {
   @Min(0.01)
   amount!: number;
 
-  @IsString()
-  @MaxLength(20)
-  method!: string;
+  @IsIn(['mpesa', 'bank', 'cash', 'card', 'cheque'])
+  method!: 'mpesa' | 'bank' | 'cash' | 'card' | 'cheque';
 
   @IsString()
   @IsOptional()
