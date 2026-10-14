@@ -33,12 +33,7 @@ Migrations create the database tables and reference data. Run them once your `DA
 npm run migrate
 ```
 
-This executes all `.sql` files in `src/migrations/` in order, tracking which have been applied in a `pgmigrations` table.
-
-To create a new migration:
-```bash
-npm run migrate:create -- --name describe_the_change
-```
+The SQL migration runner executes numbered `.sql` files in `src/migrations/` in order and records SHA-256 checksums in `omega_schema_migrations`. Applied migrations are verified on later runs; do not edit an applied migration—add a new numbered file instead. The runner uses the existing `DATABASE_URL` and does not create or switch databases.
 
 ## Starting the Server
 
