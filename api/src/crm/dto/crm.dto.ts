@@ -111,3 +111,7 @@ export class UpdateTicketDto {
 export class AddCampaignSegmentDto {
   @IsUUID() segmentId!: string;
 }
+
+export class UpdateCampaignLeadDto {
+  @IsOptional() @IsIn(['targeted','contacted','responded','converted','unresponsive']) responseStatus?: 'targeted'|'contacted'|'responded'|'converted'|'unresponsive';
+}
