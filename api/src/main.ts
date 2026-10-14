@@ -8,8 +8,16 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  // Support multiple explicit frontend origins for production and Vercel previews.
+  // Keep backwards compatibility with the existing CORS_ORIGIN setting.
+  const configuredOrigins = [
+    ...(process.env.CORS_ORIGINS || '').split(','),
+    ...(process.env.CORS_ORIGIN || '').split(','),
+  ].map((origin) => origin.trim()).filter(Boolean);
+  const corsOrigins = [...new Set(configuredOrigins.length ? configuredOrigins : ['http://localhost:5173'])];
+
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: corsOrigins,
     methods: 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     credentials: true,
   });
