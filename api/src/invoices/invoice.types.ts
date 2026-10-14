@@ -41,6 +41,7 @@ export interface InvoiceRow {
   updated_at: string;
   item_count?: number;
   items?: InvoiceItemRow[];
+  payments?: InvoicePaymentRow[];
 }
 
 export interface InvoicePaymentRow {
