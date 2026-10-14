@@ -5,6 +5,8 @@ export type Permission =
   | 'branches:write'
   | 'users:read'
   | 'users:write'
+  | 'crm:read'
+  | 'crm:write'
   | 'customers:read'
   | 'customers:write'
   | 'suppliers:read'
