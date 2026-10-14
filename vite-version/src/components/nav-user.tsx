@@ -4,12 +4,11 @@ import {
   CreditCard,
   EllipsisVertical,
   LogOut,
-  BellDot,
   CircleUser,
+  Settings,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import { Logo } from "@/components/logo"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,16 +25,23 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
-export function NavUser({
-  user,
-}: {
+interface NavUserProps {
   user: {
     name: string
     email: string
-    avatar: string
+    role: string
+    company: string
   }
-}) {
+}
+
+export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
+
+  const initials = user.name
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
 
   return (
     <SidebarMenu>
@@ -49,13 +55,13 @@ export function NavUser({
               />
             }
           >
-            <div className="flex size-8 items-center justify-center rounded-lg">
-              <Logo size={28} className="size-7!" />
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
+              {initials}
             </div>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{user.name}</span>
               <span className="text-muted-foreground truncate text-xs">
-                {user.email}
+                {user.role} · {user.company}
               </span>
             </div>
             <EllipsisVertical className="ml-auto" />
@@ -69,8 +75,8 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal text-foreground">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <div className="size-8 rounded-lg">
-                    <Logo size={28} />
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
+                    {initials}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{user.name}</span>
@@ -85,32 +91,29 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem
                 className="cursor-pointer"
-                render={<Link to="/settings/account" />}
+                render={<Link to="/settings" />}
+              >
+                <Settings />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                render={<Link to="/users-roles" />}
               >
                 <CircleUser />
-                Account
+                Users & Roles
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"
-                render={<Link to="/settings/billing" />}
+                render={<Link to="/audit-logs" />}
               >
                 <CreditCard />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                render={<Link to="/settings/notifications" />}
-              >
-                <BellDot />
-                Notifications
+                Audit Logs
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                render={<Link to="/sign-in" />}
-              >
+              <DropdownMenuItem className="cursor-pointer text-destructive">
                 <LogOut />
                 Log out
               </DropdownMenuItem>

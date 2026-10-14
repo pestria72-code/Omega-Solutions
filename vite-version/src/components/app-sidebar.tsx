@@ -2,24 +2,29 @@
 
 import * as React from "react"
 import {
-  LayoutPanelLeft,
   LayoutDashboard,
-  Mail,
-  CheckSquare,
-  MessageCircle,
-  Calendar,
-  Shield,
-  AlertTriangle,
-  Settings,
-  HelpCircle,
-  CreditCard,
-  LayoutTemplate,
   Users,
+  FileText,
+  ShoppingCart,
+  Package,
+  Receipt,
+  Wallet,
+  BookOpen,
+  Building2,
+  ScrollText,
+  Settings,
+  UserCog,
+  Boxes,
+  ArrowLeftRight,
+  Banknote,
+  ClipboardList,
+  Building,
+  UserCircle,
+  Briefcase,
+  CalendarDays,
+  FileBarChart,
 } from "lucide-react"
 import { Link } from "react-router-dom"
-import { Logo } from "@/components/logo"
-import { SidebarNotification } from "@/components/sidebar-notification"
-
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -31,185 +36,80 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { DEMO_COMPANY, DEMO_COMPANIES, DEMO_USER } from "@/data/mock-data"
 
-const data = {
-  user: {
-    name: "ShadcnStore",
-    email: "store@example.com",
-    avatar: "",
+const navGroups = [
+  {
+    label: "Overview",
+    items: [
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+    ],
   },
-  navGroups: [
-    {
-      label: "Dashboards",
-      items: [
-        {
-          title: "Dashboard 1",
-          url: "/dashboard",
-          icon: LayoutDashboard,
-        },
-        {
-          title: "Dashboard 2",
-          url: "/dashboard-2",
-          icon: LayoutPanelLeft,
-        },
-      ],
-    },
-    {
-      label: "Apps",
-      items: [
-        {
-          title: "Mail",
-          url: "/mail",
-          icon: Mail,
-        },
-        {
-          title: "Tasks",
-          url: "/tasks",
-          icon: CheckSquare,
-        },
-        {
-          title: "Chat",
-          url: "/chat",
-          icon: MessageCircle,
-        },
-        {
-          title: "Calendar",
-          url: "/calendar",
-          icon: Calendar,
-        },
-        {
-          title: "Users",
-          url: "/users",
-          icon: Users,
-        },
-      ],
-    },
-    {
-      label: "Pages",
-      items: [
-        {
-          title: "Landing",
-          url: "/landing",
-          target: "_blank",
-          icon: LayoutTemplate,
-        },
-        {
-          title: "Auth Pages",
-          url: "#",
-          icon: Shield,
-          items: [
-            {
-              title: "Sign In 1",
-              url: "/auth/sign-in",
-            },
-            {
-              title: "Sign In 2",
-              url: "/auth/sign-in-2",
-            },
-            {
-              title: "Sign In 3",
-              url: "/auth/sign-in-3",
-            },
-            {
-              title: "Sign Up 1",
-              url: "/auth/sign-up",
-            },
-            {
-              title: "Sign Up 2",
-              url: "/auth/sign-up-2",
-            },
-            {
-              title: "Sign Up 3",
-              url: "/auth/sign-up-3",
-            },
-            {
-              title: "Forgot Password 1",
-              url: "/auth/forgot-password",
-            },
-            {
-              title: "Forgot Password 2",
-              url: "/auth/forgot-password-2",
-            },
-            {
-              title: "Forgot Password 3",
-              url: "/auth/forgot-password-3",
-            },
-          ],
-        },
-        {
-          title: "Errors",
-          url: "#",
-          icon: AlertTriangle,
-          items: [
-            {
-              title: "Unauthorized",
-              url: "/errors/unauthorized",
-            },
-            {
-              title: "Forbidden",
-              url: "/errors/forbidden",
-            },
-            {
-              title: "Not Found",
-              url: "/errors/not-found",
-            },
-            {
-              title: "Internal Server Error",
-              url: "/errors/internal-server-error",
-            },
-            {
-              title: "Under Maintenance",
-              url: "/errors/under-maintenance",
-            },
-          ],
-        },
-        {
-          title: "Settings",
-          url: "#",
-          icon: Settings,
-          items: [
-            {
-              title: "User Settings",
-              url: "/settings/user",
-            },
-            {
-              title: "Account Settings",
-              url: "/settings/account",
-            },
-            {
-              title: "Plans & Billing",
-              url: "/settings/billing",
-            },
-            {
-              title: "Appearance",
-              url: "/settings/appearance",
-            },
-            {
-              title: "Notifications",
-              url: "/settings/notifications",
-            },
-            {
-              title: "Connections",
-              url: "/settings/connections",
-            },
-          ],
-        },
-        {
-          title: "FAQs",
-          url: "/faqs",
-          icon: HelpCircle,
-        },
-        {
-          title: "Pricing",
-          url: "/pricing",
-          icon: CreditCard,
-        },
-      ],
-    },
-  ],
-}
+  {
+    label: "Sales",
+    items: [
+      { title: "Customers", url: "/customers", icon: Users },
+      { title: "Quotations", url: "/quotations", icon: FileText },
+      { title: "Sales Orders", url: "/sales-orders", icon: ShoppingCart },
+      { title: "Invoices", url: "/invoices", icon: Receipt },
+      { title: "Payments", url: "/payments", icon: Banknote },
+    ],
+  },
+  {
+    label: "Purchasing",
+    items: [
+      { title: "Suppliers", url: "/suppliers", icon: Briefcase },
+      { title: "Purchase Orders", url: "/purchase-orders", icon: ClipboardList },
+      { title: "Supplier Bills", url: "/supplier-bills", icon: FileText },
+    ],
+  },
+  {
+    label: "Inventory",
+    items: [
+      { title: "Products", url: "/products", icon: Package },
+      { title: "Stock Levels", url: "/stock-levels", icon: Boxes },
+      { title: "Warehouses", url: "/warehouses", icon: Building },
+      { title: "Stock Movements", url: "/stock-movements", icon: ArrowLeftRight },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { title: "Chart of Accounts", url: "/chart-of-accounts", icon: BookOpen },
+      { title: "Expenses", url: "/expenses", icon: Wallet },
+      { title: "Financial Reports", url: "/financial-reports", icon: FileBarChart },
+    ],
+  },
+  {
+    label: "People",
+    items: [
+      { title: "Employees", url: "/employees", icon: UserCircle },
+      { title: "Payroll", url: "/payroll", icon: Banknote },
+      { title: "Leave Management", url: "/leave-management", icon: CalendarDays },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      {
+        title: "Companies & Branches",
+        url: "/companies",
+        icon: Building2,
+      },
+      {
+        title: "Users & Roles",
+        url: "/users-roles",
+        icon: UserCog,
+      },
+      { title: "Audit Logs", url: "/audit-logs", icon: ScrollText },
+      { title: "Settings", url: "/settings", icon: Settings },
+    ],
+  },
+]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [selectedCompanyId, setSelectedCompanyId] = React.useState(DEMO_COMPANY.id)
+
   return (
     <Sidebar {...props}>
       <SidebarHeader>
@@ -217,24 +117,38 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link to="/dashboard" />}>
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Logo size={24} className="text-current" />
+                <span className="text-sm font-bold">Ω</span>
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">ShadcnStore</span>
-                <span className="truncate text-xs">Admin Dashboard</span>
+                <span className="truncate font-semibold">Omega Solutions</span>
+                <span className="truncate text-xs text-muted-foreground">ERP Platform</span>
               </div>
             </SidebarMenuButton>
+          </SidebarMenuItem>
+          {/* Company selector */}
+          <SidebarMenuItem>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+              aria-label="Select company"
+            >
+              {DEMO_COMPANIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {data.navGroups.map((group) => (
+        {navGroups.map((group) => (
           <NavMain key={group.label} label={group.label} items={group.items} />
         ))}
       </SidebarContent>
       <SidebarFooter>
-        <SidebarNotification />
-        <NavUser user={data.user} />
+        <NavUser user={DEMO_USER} />
       </SidebarFooter>
     </Sidebar>
   )
