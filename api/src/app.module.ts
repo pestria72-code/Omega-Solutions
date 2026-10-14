@@ -17,6 +17,7 @@ import { InvoicesModule } from './invoices/invoices.module.js';
 import { QuotationsModule } from './quotations/quotations.module.js';
 import { SalesOrdersModule } from './sales-orders/sales-orders.module.js';
 import { CrmModule } from './crm/crm.module.js';
+import { InventoryModule } from './inventory/inventory.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { CrmModule } from './crm/crm.module.js';
     QuotationsModule,
     SalesOrdersModule,
     CrmModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
