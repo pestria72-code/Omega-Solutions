@@ -37,7 +37,7 @@ import {
   CardContent,
 } from "@/components/ui/card"
 import { useSuppliers, createSupplier, updateSupplier, deleteSupplier } from "@/hooks/use-suppliers"
-import { formatKES, formatDate } from "@/lib/format"
+import { formatKES } from "@/lib/format"
 import type { SupplierRow } from "@/lib/api-types"
 
 export default function SuppliersPage() {
