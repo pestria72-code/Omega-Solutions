@@ -39,5 +39,7 @@ CREATE TABLE IF NOT EXISTS pos_shifts (
 CREATE INDEX IF NOT EXISTS idx_pos_shifts_company_opened ON pos_shifts(company_id, opened_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_pos_one_open_shift_per_register
   ON pos_shifts(register_id) WHERE status='open';
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pos_one_open_shift_per_cashier_company
+  ON pos_shifts(company_id, opened_by) WHERE status='open';
 ALTER TABLE pos_registers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pos_shifts ENABLE ROW LEVEL SECURITY;
