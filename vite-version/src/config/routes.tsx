@@ -1,5 +1,5 @@
 import type { ComponentType } from "react"
-import { Navigate, type RouteObject } from "react-router-dom"
+import { type RouteObject } from "react-router-dom"
 import { ProtectedLayout } from "@/components/router/protected-layout"
 
 function page(load: () => Promise<{ default: ComponentType }>) {
