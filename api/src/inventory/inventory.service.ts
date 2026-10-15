@@ -248,7 +248,7 @@ export class InventoryService {
       checkedAt:new Date().toISOString(),
       stockLedger:{mismatchCount:movementMismatchCount,absoluteQuantityVariance:Number(ledgerRow?.absolute_quantity_variance ?? 0),reconciled:movementMismatchCount===0},
       legacyProductQuantities:{mismatchCount:legacyMismatchCount,absoluteQuantityVariance:Number(legacyRow?.absolute_quantity_variance ?? 0),reconciled:legacyMismatchCount===0},
-      valuation:{stockCostValue,inventoryAccountBalance,variance:valuationVariance,reconciled:Math.abs(valuationVariance)<=0.01},
+      valuation:{basis:'current_product_cost_price',stockCostValue,inventoryAccountBalance,variance:valuationVariance,reconciled:Math.abs(valuationVariance)<=0.01},
     };
   }
 
