@@ -7,6 +7,7 @@ on:
       - development
     paths:
       - .github/workflows/live-purchasing-smoke.yml
+      - api/scripts/live-purchasing-smoke.mjs
 
 permissions:
   contents: read
