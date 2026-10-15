@@ -33,10 +33,8 @@ import { cn } from "@/lib/utils"
 
 const navigationItems = [
   { name: "Home", href: "#hero" },
+  { name: "About", href: "#about" },
   { name: "Features", href: "#features" },
-  { name: "Solutions", href: "#features", hasMegaMenu: true },
-  { name: "Team", href: "#team" },
-  { name: "Pricing", href: "#pricing" },
   { name: "FAQ", href: "#faq" },
   { name: "Contact", href: "#contact" },
 ]
@@ -230,7 +228,7 @@ export function LandingNavbar() {
                       nativeButton={false}
                       render={
                         <a
-                          href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                          href="https://github.com/pestria72-code/Omega-Solutions"
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="GitHub Repository"
