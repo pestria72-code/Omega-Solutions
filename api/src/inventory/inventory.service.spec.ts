@@ -177,4 +177,65 @@ describe('InventoryService', () => {
     })).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
   });
+
+  it('records receipts as a stock-ledger movement and synchronizes the legacy product quantity', async () => {
+    const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
+      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '3', reserved_quantity: '1' }], rowCount: 1 };
+      if (sql.includes('INSERT INTO inventory_stock_movements')) return { rows: [{ id: 'receipt-movement', movement_type: params?.[3], quantity: params?.[4] }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+
+    const result = await service.receive(user, {
+      productId: 'product-1', warehouseId: 'warehouse-1', quantity: 4, unitCost: 15,
+    });
+
+    expect(result.id).toBe('receipt-movement');
+    const calls = client.query.mock.calls as unknown as [string, unknown[]?][];
+    expect(calls.some(([sql, params]) => sql.includes('UPDATE inventory_stock_levels SET quantity=quantity+$1') && params?.[0] === 4)).toBe(true);
+    expect(calls.some(([sql, params]) => sql.includes('INSERT INTO inventory_stock_movements') && params?.[3] === 'receipt' && params?.[4] === 4 && params?.[5] === 15)).toBe(true);
+    expect(calls.some(([sql, params]) => sql.includes('UPDATE products SET stock_quantity') && params?.[0] === 'company-1')).toBe(true);
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'inventory.stock.receipt', entityId: 'receipt-movement' }));
+  });
+
+  it('rejects issuing stock that is reserved and leaves stock and ledger untouched', async () => {
+    const client = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
+      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+
+    await expect(service.issue(user, {
+      productId: 'product-1', warehouseId: 'warehouse-1', quantity: 2,
+    })).rejects.toThrow(BadRequestException);
+
+    const statements = client.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => sql.includes('UPDATE inventory_stock_levels SET quantity=quantity+$1'))).toBe(false);
+    expect(statements.some(sql => sql.includes('INSERT INTO inventory_stock_movements'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('rejects stock adjustments below reserved quantity without changing stock', async () => {
+    const client = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
+      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '8', reserved_quantity: '3' }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+
+    await expect(service.adjust(user, {
+      productId: 'product-1', warehouseId: 'warehouse-1', newQuantity: 2,
+    })).rejects.toThrow(BadRequestException);
+
+    const statements = client.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => sql.includes('UPDATE inventory_stock_levels SET quantity=$1'))).toBe(false);
+    expect(statements.some(sql => sql.includes('INSERT INTO inventory_stock_movements'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
 });
