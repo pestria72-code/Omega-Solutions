@@ -8,8 +8,8 @@ import { Toaster } from "@/components/ui/toast"
 import { inter } from "@/lib/fonts"
 
 export const metadata: Metadata = {
-  title: "Shadcn Dashboard",
-  description: "A dashboard built with Next.js and shadcn/ui",
+  title: "Omega Solutions ERP",
+  description: "Omega Solutions ERP brings finance, inventory, workforce, payroll, sales, and operations together in one secure workspace.",
 }
 
 export default function RootLayout({
