@@ -30,6 +30,8 @@ export type Permission =
   | 'payroll:write'
   | 'settings:read'
   | 'settings:write'
-  | 'audit:read';
+  | 'audit:read'
+  | 'accounting:read'
+  | 'accounting:write';
 
 export type RoleName = 'owner' | 'admin' | 'manager' | 'staff' | 'viewer';
