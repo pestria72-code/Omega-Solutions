@@ -1,5 +1,5 @@
 import * as React from "react";
-import { CalendarDays, RefreshCw } from "lucide-react";
+import { CalendarDays, Loader2, RefreshCw } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -32,7 +32,7 @@ export default function LeaveManagementPage(){
     <div className="grid gap-2"><Label>Start date *</Label><Input type="date" required value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/></div>
     <div className="grid gap-2"><Label>End date *</Label><Input type="date" required min={form.startDate||undefined} value={form.endDate} onChange={e=>setForm({...form,endDate:e.target.value})}/></div>
     <div className="grid gap-2 sm:col-span-2"><Label>Reason</Label><Input maxLength={2000} value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})}/></div>
-    <div className="flex items-end"><Button type="submit" disabled={saving||!form.employeeId}>{saving?<LoadingSpinner size="sm"/>:null}{saving?"Submitting…":"Submit request"}</Button></div>
+    <div className="flex items-end"><Button type="submit" disabled={saving||!form.employeeId}>{saving?<Loader2 className="mr-2 size-4 animate-spin"/>:null}{saving?"Submitting…":"Submit request"}</Button></div>
     {formError&&<p role="alert" className="text-sm text-destructive sm:col-span-2 lg:col-span-3">{formError}</p>}
    </form>}
   </CardContent></Card>
