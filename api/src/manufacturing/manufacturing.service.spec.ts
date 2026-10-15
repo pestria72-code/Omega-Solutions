@@ -88,4 +88,27 @@ describe('ManufacturingService',()=>{
   expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({action:'manufacturing.order.complete'}));
  });
 
+ it('does not post production journals a second time for an already completed order',async()=>{
+  let status='in_progress';
+  let journalNumber=0;
+  const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
+   if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status,warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:0,bom_id:'bom-1',product_id:'finished-1',product_cost:0}],rowCount:1};
+   if(sql.includes('SELECT material_product_id,required_quantity,reserved_quantity,consumed_quantity,unit_cost'))return {rows:[{material_product_id:'material-1',required_quantity:2,reserved_quantity:2,consumed_quantity:0,unit_cost:50}],rowCount:1};
+   if(sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2}],rowCount:1};
+   if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:journalNumber+1}],rowCount:1};
+   if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:`journal-${++journalNumber}`}],rowCount:1};
+   if(sql.includes('SELECT id FROM chart_of_accounts'))return {rows:[{id:params[1]==='inventory'?'account-inventory':'account-wip'}],rowCount:1};
+   if(sql.includes('UPDATE manufacturing_production_orders SET status=\'completed\'')){status='completed';return {rows:[],rowCount:1};}
+   if(sql.includes('SELECT * FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status,produced_quantity:1}],rowCount:1};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  await service.completeOrder(user,'order-1');
+  const entriesAfterFirstCompletion=client.query.mock.calls.filter((call:[string,unknown[]])=>call[0].includes('INSERT INTO journal_entries'));
+  expect(entriesAfterFirstCompletion).toHaveLength(2);
+  await expect(service.completeOrder(user,'order-1')).rejects.toThrow('Only in-progress production orders can be completed.');
+  const entriesAfterRetry=client.query.mock.calls.filter((call:[string,unknown[]])=>call[0].includes('INSERT INTO journal_entries'));
+  expect(entriesAfterRetry).toHaveLength(2);
+ });
+
 });
