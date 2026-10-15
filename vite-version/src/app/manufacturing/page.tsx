@@ -19,7 +19,8 @@ export default function ManufacturingPage(){
  const [products,setProducts]=React.useState<Product[]>([]),[warehouses,setWarehouses]=React.useState<Warehouse[]>([]);
  const [loading,setLoading]=React.useState(true),[saving,setSaving]=React.useState(false),[busyOrderId,setBusyOrderId]=React.useState(""),[error,setError]=React.useState("");
  const [showBom,setShowBom]=React.useState(false),[showOrder,setShowOrder]=React.useState(false);
- const [code,setCode]=React.useState(""),[name,setName]=React.useState(""),[productId,setProductId]=React.useState(""),[outputQuantity,setOutputQuantity]=React.useState("1");\n const [bomLines,setBomLines]=React.useState([{materialProductId:"",quantity:"1",wastePercent:"0"}]);
+ const [code,setCode]=React.useState(""),[name,setName]=React.useState(""),[productId,setProductId]=React.useState(""),[outputQuantity,setOutputQuantity]=React.useState("1");
+ const [bomLines,setBomLines]=React.useState([{materialProductId:"",quantity:"1",wastePercent:"0"}]);
  const [bomId,setBomId]=React.useState(""),[warehouseId,setWarehouseId]=React.useState(""),[plannedQuantity,setPlannedQuantity]=React.useState("1"),[startDate,setStartDate]=React.useState(""),[endDate,setEndDate]=React.useState("");
  const refresh=React.useCallback(async()=>{setLoading(true);setError("");try{const [b,o,p,w]=await Promise.all([api.get<Bom[]>("/manufacturing/boms"),api.get<Order[]>("/manufacturing/orders"),api.get<Product[]>("/products"),api.get<Warehouse[]>("/inventory/warehouses")]);setBoms(b);setOrders(o);setProducts(p.filter(x=>!x.is_service));setWarehouses(w.filter(x=>x.is_active));if(!bomId&&b.length)setBomId(b[0].id);if(!warehouseId&&w.length)setWarehouseId(w.find(x=>x.is_active)?.id??"");}catch(e){setError(message(e))}finally{setLoading(false)}},[bomId,warehouseId]);
  React.useEffect(()=>{void refresh()},[refresh]);
