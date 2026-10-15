@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import type { Response } from 'express';
 import { PosService } from './pos.service.js';
 import { PosCheckoutDto } from './dto/pos-checkout.dto.js';
 
@@ -41,7 +42,12 @@ export class PosController {
 
   @Get('shifts/current')
   @RequirePermissions('sales:read')
-  currentShift(@Req() req: { user: AuthenticatedUser }) { return this.pos.currentShift(req.user); }
+  async currentShift(@Req() req: { user: AuthenticatedUser }, @Res() response: Response) {
+    // Nest treats a null handler result as an empty HTTP body. POS expects JSON null
+    // when no shift is open, so serialize it explicitly instead of returning EOF.
+    const shift = await this.pos.currentShift(req.user);
+    return response.status(200).json(shift);
+  }
 
   @Post('shifts/open')
   @RequirePermissions('sales:write')
