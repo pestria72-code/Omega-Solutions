@@ -24,12 +24,12 @@ export class UpdateLeadDto {
 
 export class CreateOpportunityDto {
   @IsString() @MinLength(2) @MaxLength(180) title!: string;
-  @IsOptional() @IsString() leadId?: string;
-  @IsOptional() @IsString() customerId?: string;
+  @IsOptional() @IsUUID() leadId?: string;
+  @IsOptional() @IsUUID() customerId?: string;
   @IsOptional() @IsNumber() @Min(0) expectedValue?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) probability?: number;
   @IsOptional() @IsIn(['qualification','needs_analysis','proposal','negotiation','won','lost']) stage?: 'qualification'|'needs_analysis'|'proposal'|'negotiation'|'won'|'lost';
-  @IsOptional() @IsString() expectedCloseDate?: string;
+  @IsOptional() @IsDateString() expectedCloseDate?: string;
   @IsOptional() @IsString() lossReason?: string;
 }
 export class UpdateOpportunityDto {
@@ -45,10 +45,10 @@ export class CreateActivityDto {
   @IsString() @MinLength(2) @MaxLength(180) subject!: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() leadId?: string;
-  @IsOptional() @IsString() opportunityId?: string;
+  @IsOptional() @IsUUID() opportunityId?: string;
   @IsOptional() @IsString() customerId?: string;
-  @IsOptional() @IsString() assignedUserId?: string;
-  @IsOptional() @IsString() dueAt?: string;
+  @IsOptional() @IsUUID() assignedUserId?: string;
+  @IsOptional() @IsDateString() dueAt?: string;
 }
 export class UpdateActivityDto {
   @IsOptional() @IsBoolean() completed?: boolean;
