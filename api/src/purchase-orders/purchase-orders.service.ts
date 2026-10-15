@@ -2,12 +2,26 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { AccountingService } from '../accounting/accounting.service.js';
+import type { PoolClient } from 'pg';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { CreatePurchaseOrderDto, ReceivePurchaseOrderDto, UpdatePurchaseOrderStatusDto } from './dto/purchase-order.dto.js';
 
 @Injectable()
 export class PurchaseOrdersService {
-  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService) {}
+  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
+  private async postReceiptJournal(client: PoolClient, input: { companyId: string; userId: string; orderNumber: string; receiptValue: number }) {
+    if (input.receiptValue <= 0) return;
+    const year = new Date().getFullYear();
+    const seq = await client.query<{ next_number: number }>(`INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1) ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1 RETURNING next_number`, [input.companyId, year]);
+    const number = `JE-${year}-${String(seq.rows[0].next_number).padStart(6, '0')}`;
+    const entry = await client.query<{ id: string }>(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by) VALUES($1,$2,CURRENT_DATE,$3,'purchase_order_receipt',$4,'posted',NOW(),$5) RETURNING id`, [input.companyId, number, `Goods received for ${input.orderNumber}`, input.orderNumber, input.userId]);
+    const accounts = await client.query<{ id: string; system_code: string }>(`SELECT id,system_code FROM chart_of_accounts WHERE company_id=$1 AND system_code IN ('inventory','goods_received_not_invoiced') AND is_active=true`, [input.companyId]);
+    const inventory = accounts.rows.find(a => a.system_code === 'inventory');
+    const grni = accounts.rows.find(a => a.system_code === 'goods_received_not_invoiced');
+    if (!inventory || !grni) throw new BadRequestException('Inventory and goods-received-not-invoiced accounts must be active.');
+    await client.query(`INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,'Goods received into inventory',$4,0),($1,$2,$5,'Goods received not yet invoiced',0,$4)`, [input.companyId, entry.rows[0].id, inventory.id, input.receiptValue, grni.id]);
+  }
   private companyFor(user: AuthenticatedUser) {
     return user.companyId ? this.memberships.getMembershipForCompany(user.userId,user.companyId) : this.memberships.getMembership(user.userId);
   }
@@ -65,21 +79,25 @@ export class PurchaseOrdersService {
   }
   async receive(user:AuthenticatedUser,id:string,dto:ReceivePurchaseOrderDto) {
     const m=await this.companyFor(user);
+    await this.accounting.ensureDefaults(m.companyId);
     await this.db.transaction(async client=>{
       const res=await client.query<{id:string;order_number:string;status:string}>('SELECT id,order_number,status FROM purchase_orders WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,m.companyId]);
       const po=res.rows[0];if(!po)throw new NotFoundException('Purchase order not found.');
       if(!['ordered','partially_received'].includes(po.status))throw new BadRequestException('Only ordered purchase orders can receive stock.');
       const wh=await client.query('SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',[dto.warehouseId,m.companyId]);
       if(!wh.rows[0])throw new NotFoundException('Active warehouse not found in this company.');
+      let receiptValue = 0;
       for(const r of dto.items){
         const lineRes=await client.query<{id:string;product_id:string;quantity:string|number;received_quantity:string|number;unit_cost:string|number;product_name:string}>('SELECT id,product_id,quantity,received_quantity,unit_cost,product_name FROM purchase_order_items WHERE id=$1 AND purchase_order_id=$2 AND company_id=$3 FOR UPDATE',[r.itemId,id,m.companyId]);
         const line=lineRes.rows[0];if(!line)throw new NotFoundException('Purchase order line not found.');
         if(r.quantity>Number(line.quantity)-Number(line.received_quantity)+0.0000001)throw new BadRequestException(`Receipt exceeds remaining quantity for "${line.product_name}".`);
+        receiptValue += Math.round(r.quantity * Number(line.unit_cost) * 100) / 100;
         await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) SELECT $1,$2,$3,$4,0,p.reorder_level FROM products p WHERE p.id=$3 AND p.company_id=$1 ON CONFLICT(warehouse_id,product_id) DO UPDATE SET quantity=inventory_stock_levels.quantity+EXCLUDED.quantity,updated_at=NOW()`,[m.companyId,dto.warehouseId,line.product_id,r.quantity]);
         await client.query(`INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by) VALUES($1,$2,$3,'receipt',$4,$5,$6,$7,$8)`,[m.companyId,line.product_id,dto.warehouseId,r.quantity,Number(line.unit_cost),dto.reference??po.order_number,dto.notes??`Received against purchase order ${po.order_number}`,user.userId]);
         await client.query('UPDATE purchase_order_items SET received_quantity=received_quantity+$1 WHERE id=$2 AND company_id=$3',[r.quantity,line.id,m.companyId]);
         await client.query('UPDATE products SET stock_quantity=(SELECT COALESCE(SUM(quantity),0) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),updated_at=NOW() WHERE id=$2 AND company_id=$1',[m.companyId,line.product_id]);
       }
+      await this.postReceiptJournal(client, { companyId: m.companyId, userId: user.userId, orderNumber: po.order_number, receiptValue });
       const sums=await client.query<{ordered:string|number;received:string|number}>('SELECT COALESCE(SUM(quantity),0) ordered,COALESCE(SUM(received_quantity),0) received FROM purchase_order_items WHERE purchase_order_id=$1 AND company_id=$2',[id,m.companyId]);
       const done=Number(sums.rows[0].ordered)>0&&Number(sums.rows[0].received)+0.0000001>=Number(sums.rows[0].ordered);
       await client.query('UPDATE purchase_orders SET status=$1,updated_at=NOW() WHERE id=$2 AND company_id=$3',[done?'received':'partially_received',id,m.companyId]);
