@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS employee_pay_settings (
  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
- CONSTRAINT employee_pay_settings_employee_unique UNIQUE(company_id,employee_id),
+ CONSTRAINT employee_pay_settings_effective_unique UNIQUE(company_id,employee_id,effective_from),
  CONSTRAINT employee_pay_settings_employee_company_fk FOREIGN KEY(employee_id,company_id) REFERENCES employees(id,company_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_employee_pay_settings_company ON employee_pay_settings(company_id,effective_from);

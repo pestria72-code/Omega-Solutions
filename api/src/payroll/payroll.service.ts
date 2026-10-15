@@ -23,7 +23,7 @@ export class PayrollService {
   const {companyId}=await this.membershipFor(user);
   const result=await this.db.query(`SELECT s.id,s.company_id,s.employee_id,s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes,s.effective_from,s.created_at,s.updated_at
    FROM employee_pay_settings s JOIN employees e ON e.id=s.employee_id AND e.company_id=s.company_id
-   WHERE s.employee_id=$1 AND s.company_id=$2`,[employeeId,companyId]);
+   WHERE s.employee_id=$1 AND s.company_id=$2 ORDER BY s.effective_from DESC LIMIT 1`,[employeeId,companyId]);
   if(!result.rows.length)throw new NotFoundException('Pay settings not found for this employee in this company.');
   return result.rows[0];
  }
@@ -42,7 +42,7 @@ export class PayrollService {
   const values=keys.map(key=>dto[key]===undefined?0:dto[key] as number);
   const result=await this.db.query(`INSERT INTO employee_pay_settings(company_id,employee_id,monthly_basic_salary,monthly_taxable_allowances,monthly_taxable_benefits,employee_pension_contribution,post_retirement_medical_contribution,qualifying_mortgage_interest,eligible_insurance_premiums,resident_for_tax_purposes,effective_from,created_by)
    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12)
-   ON CONFLICT(company_id,employee_id) DO UPDATE SET monthly_basic_salary=EXCLUDED.monthly_basic_salary,monthly_taxable_allowances=EXCLUDED.monthly_taxable_allowances,monthly_taxable_benefits=EXCLUDED.monthly_taxable_benefits,employee_pension_contribution=EXCLUDED.employee_pension_contribution,post_retirement_medical_contribution=EXCLUDED.post_retirement_medical_contribution,qualifying_mortgage_interest=EXCLUDED.qualifying_mortgage_interest,eligible_insurance_premiums=EXCLUDED.eligible_insurance_premiums,resident_for_tax_purposes=EXCLUDED.resident_for_tax_purposes,effective_from=EXCLUDED.effective_from,updated_at=NOW()
+   ON CONFLICT(company_id,employee_id,effective_from) DO UPDATE SET monthly_basic_salary=EXCLUDED.monthly_basic_salary,monthly_taxable_allowances=EXCLUDED.monthly_taxable_allowances,monthly_taxable_benefits=EXCLUDED.monthly_taxable_benefits,employee_pension_contribution=EXCLUDED.employee_pension_contribution,post_retirement_medical_contribution=EXCLUDED.post_retirement_medical_contribution,qualifying_mortgage_interest=EXCLUDED.qualifying_mortgage_interest,eligible_insurance_premiums=EXCLUDED.eligible_insurance_premiums,resident_for_tax_purposes=EXCLUDED.resident_for_tax_purposes,effective_from=EXCLUDED.effective_from,updated_at=NOW()
    RETURNING id,company_id,employee_id,monthly_basic_salary,monthly_taxable_allowances,monthly_taxable_benefits,employee_pension_contribution,post_retirement_medical_contribution,qualifying_mortgage_interest,eligible_insurance_premiums,resident_for_tax_purposes,effective_from,created_at,updated_at`,
    [companyId,employeeId,...values,dto.residentForTaxPurposes===false?false:true,effectiveFrom,user.userId]);
   return result.rows[0];
@@ -67,8 +67,8 @@ export class PayrollService {
   const employees=await this.db.query<PayEmployee>(`SELECT e.id,e.employee_number,e.first_name,e.last_name,
     s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,
     s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes
-    FROM employees e JOIN employee_pay_settings s ON s.employee_id=e.id AND s.company_id=e.company_id
-    WHERE e.company_id=$1 AND e.employment_status='active' AND s.effective_from <= $2::date
+    FROM employees e JOIN LATERAL (SELECT s.* FROM employee_pay_settings s WHERE s.employee_id=e.id AND s.company_id=e.company_id AND s.effective_from <= $2::date ORDER BY s.effective_from DESC LIMIT 1) s ON TRUE
+    WHERE e.company_id=$1 AND e.employment_status='active'
     ORDER BY e.employee_number`,[membership.companyId,dto.periodEnd]);
   if(!employees.rows.length)throw new BadRequestException('No active employees have effective pay settings. Configure employee pay before preparing a payroll run.');
   const calculated=employees.rows.map(employee=>{
