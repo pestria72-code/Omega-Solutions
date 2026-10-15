@@ -34,11 +34,12 @@ export class InvoicesService {
 
 
   private async postJournal(client: PoolClient, input: {
-    companyId: string; date: string | null; description: string; sourceType: string;
+    companyId: string; date: string | Date | null; description: string; sourceType: string;
     sourceId: string; userId: string;
     lines: Array<{ systemCode: string; debit: number; credit: number; description: string }>;
   }) {
-    const year = input.date ? Number(input.date.slice(0, 4)) : new Date().getFullYear();
+    const journalDate = input.date instanceof Date ? input.date.toISOString().slice(0, 10) : input.date;
+    const year = journalDate ? Number(journalDate.slice(0, 4)) : new Date().getFullYear();
     const seq = await client.query<{ next_number: number }>(
       `INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
        ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1
@@ -48,7 +49,7 @@ export class InvoicesService {
     const entry = await client.query<{ id: string }>(
       `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
        VALUES($1,$2,COALESCE($3::date,CURRENT_DATE),$4,$5,$6,'posted',NOW(),$7) RETURNING id`,
-      [input.companyId, entryNumber, input.date, input.description, input.sourceType, input.sourceId, input.userId],
+      [input.companyId, entryNumber, journalDate, input.description, input.sourceType, input.sourceId, input.userId],
     );
     let debits = 0;
     let credits = 0;
