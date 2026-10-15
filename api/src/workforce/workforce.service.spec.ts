@@ -36,6 +36,13 @@ describe('WorkforceService validation and attendance', () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects transfers after the current assignment end date', async () => {
+    const client = { query: vi.fn().mockResolvedValueOnce({ rows: [{ start_date: '2026-10-01', end_date: '2026-10-10' }] }) };
+    db.transaction.mockImplementation(async (work: (client: typeof client) => Promise<unknown>) => work(client));
+    await expect(service.transfer(user, 'assignment-a', { effectiveDate: '2026-10-11', siteId: 'site-b', payBasis: 'monthly', payRate: 1000 })).rejects.toThrow(BadRequestException);
+    expect(client.query).toHaveBeenCalledTimes(1);
+  });
+
   it('requires a valid pay basis before opening an assignment transaction', async () => {
     await expect(service.createAssignment(user, { employeeId: 'employee-a', siteId: 'site-a', startDate: '2026-10-15', payBasis: 'weekly', payRate: 1000 })).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
