@@ -76,6 +76,49 @@ try {
   const journal = journals.find(row => row.id === expense.journal_entry_id && row.source_type === "expense");
   ok(!!journal && Number(journal.total_debits) === 123.45 && Number(journal.total_credits) === 123.45, "expense posts a balanced journal entry");
 
+  const lead = (await req("POST", "/crm/leads", {
+    contactName: `E2E CRM Contact ${stamp}`, organizationName: `E2E CRM Org ${stamp}`,
+    email: `crm-contact-${stamp}@example.com`, source: "automated_test", estimatedValue: 50000, currency: "KES",
+  }, token, [201])).data;
+  ok(!!lead.id && lead.company_id === registration.companyId, "create company-scoped CRM lead");
+  const qualifiedLead = (await req("PATCH", `/crm/leads/${lead.id}`, { status: "qualified" }, token, [200])).data;
+  ok(qualifiedLead.status === "qualified", "qualify CRM lead");
+  const opportunity = (await req("POST", "/crm/opportunities", {
+    title: `E2E Opportunity ${stamp}`, leadId: lead.id, expectedValue: 50000, probability: 60, stage: "qualification",
+  }, token, [201])).data;
+  ok(!!opportunity.id && opportunity.lead_id === lead.id, "create lead-linked sales opportunity");
+  const progressedOpportunity = (await req("PATCH", `/crm/opportunities/${opportunity.id}`, { stage: "proposal" }, token, [200])).data;
+  ok(progressedOpportunity.stage === "proposal", "move opportunity through pipeline");
+  const activity = (await req("POST", "/crm/activities", {
+    activityType: "task", subject: `Follow up ${stamp}`, leadId: lead.id, opportunityId: opportunity.id,
+  }, token, [201])).data;
+  ok(!!activity.id, "create linked CRM activity");
+  const completedActivity = (await req("PATCH", `/crm/activities/${activity.id}`, { completed: true }, token, [200])).data;
+  ok(!!completedActivity.completed_at, "complete CRM activity");
+  const ticket = (await req("POST", "/crm/tickets", {
+    leadId: lead.id, subject: `E2E support ticket ${stamp}`, priority: "high", description: "Automated CRM workflow validation",
+  }, token, [201])).data;
+  ok(!!ticket.id && ticket.priority === "high", "create lead-linked support ticket");
+  const updatedTicket = (await req("PATCH", `/crm/tickets/${ticket.id}`, { status: "in_progress" }, token, [200])).data;
+  ok(updatedTicket.status === "in_progress", "update support ticket status");
+  const campaign = (await req("POST", "/crm/campaigns", {
+    name: `E2E Campaign ${stamp}`, campaignType: "email", status: "active", budget: 500, targetLeads: 1,
+  }, token, [201])).data;
+  ok(!!campaign.id, "create CRM campaign");
+  await req("POST", `/crm/campaigns/${campaign.id}/leads`, { leadId: lead.id, responseStatus: "targeted" }, token, [201]);
+  const audience = (await req("GET", `/crm/campaigns/${campaign.id}/leads`, undefined, token)).data;
+  ok(Array.isArray(audience) && audience.some(row => row.lead_id === lead.id), "add lead to campaign audience");
+  const segment = (await req("POST", "/crm/segments", {
+    name: `E2E Segment ${stamp}`, description: "Temporary authenticated integration test segment", isDynamic: false,
+  }, token, [201])).data;
+  ok(!!segment.id, "create CRM audience segment");
+  await req("POST", `/crm/segments/${segment.id}/members`, { leadId: lead.id }, token, [201]);
+  await req("POST", `/crm/campaigns/${campaign.id}/segments`, { segmentId: segment.id }, token, [201]);
+  const pipeline = (await req("GET", "/crm/pipeline", undefined, token)).data;
+  ok(Array.isArray(pipeline.leads) && pipeline.leads.some(row => row.status === "qualified"), "CRM pipeline summary includes qualified leads");
+  const crmLeads = (await req("GET", `/crm/leads?search=${encodeURIComponent(String(stamp))}`, undefined, token)).data;
+  ok(Array.isArray(crmLeads) && crmLeads.some(row => row.id === lead.id), "search CRM leads within current tenant");
+
   const trialBalance = (await req("GET", "/accounting/reports/trial-balance", undefined, token)).data;
   ok(trialBalance.balanced === true && Math.abs(Number(trialBalance.variance)) <= 0.01, "trial balance debit/credit totals reconcile");
   ok(Math.abs(Number(trialBalance.totalDebits) - Number(trialBalance.totalCredits)) <= 0.01, "trial balance total debits equal total credits");
