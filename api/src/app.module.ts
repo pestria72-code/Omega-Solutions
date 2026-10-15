@@ -23,5 +23,6 @@ import { SupplierBillsModule } from './supplier-bills/supplier-bills.module.js';
 import { AccountingModule } from './accounting/accounting.module.js';
 import { ManufacturingModule } from './manufacturing/manufacturing.module.js';
 import { EmployeesModule } from './employees/employees.module.js';
-@Module({imports:[ConfigModule.forRoot({isGlobal:true}),DatabaseModule,CommonModule,AuditModule,AuthModule,RbacModule,MembershipsModule,CompaniesModule,BranchesModule,CustomersModule,SuppliersModule,ProductsModule,InvoicesModule,QuotationsModule,SalesOrdersModule,CrmModule,InventoryModule,PurchaseOrdersModule,SupplierBillsModule,AccountingModule,ManufacturingModule,EmployeesModule],controllers:[AppController],providers:[AppService]})
+import { ExpensesModule } from './expenses/expenses.module.js';
+@Module({imports:[ConfigModule.forRoot({isGlobal:true}),DatabaseModule,CommonModule,AuditModule,AuthModule,RbacModule,MembershipsModule,CompaniesModule,BranchesModule,CustomersModule,SuppliersModule,ProductsModule,InvoicesModule,QuotationsModule,SalesOrdersModule,CrmModule,InventoryModule,PurchaseOrdersModule,SupplierBillsModule,AccountingModule,ManufacturingModule,EmployeesModule,ExpensesModule],controllers:[AppController],providers:[AppService]})
 export class AppModule {}
