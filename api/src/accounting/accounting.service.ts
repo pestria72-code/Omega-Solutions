@@ -34,8 +34,8 @@ export class AccountingService {
   const {companyId}=await this.companyFor(user);await this.ensureDefaults(companyId);
   return (await this.db.query(
    `SELECT a.id,a.company_id,a.code,a.name,a.account_type,a.normal_side,a.system_code,a.is_active,a.created_at,
-    COALESCE(SUM(l.debit),0)::numeric(14,2) AS total_debits,COALESCE(SUM(l.credit),0)::numeric(14,2) AS total_credits,
-    CASE WHEN a.normal_side='debit' THEN COALESCE(SUM(l.debit-l.credit),0) ELSE COALESCE(SUM(l.credit-l.debit),0) END::numeric(14,2) AS balance
+    COALESCE(SUM(l.debit) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS total_debits,COALESCE(SUM(l.credit) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS total_credits,
+    CASE WHEN a.normal_side='debit' THEN COALESCE(SUM(l.debit-l.credit) FILTER (WHERE j.status='posted'),0) ELSE COALESCE(SUM(l.credit-l.debit) FILTER (WHERE j.status='posted'),0) END::numeric(14,2) AS balance
     FROM chart_of_accounts a LEFT JOIN journal_entry_lines l ON l.account_id=a.id AND l.company_id=a.company_id
     LEFT JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id AND j.status='posted'
     WHERE a.company_id=$1 GROUP BY a.id ORDER BY a.code`,[companyId])).rows;
