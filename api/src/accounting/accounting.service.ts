@@ -72,6 +72,28 @@ export class AccountingService {
   const variance=Math.round((controlBalance-billBalance)*100)/100;
   return {companyId,asOf:new Date().toISOString().slice(0,10),controlAccountBalance:controlBalance,supplierBillsBalance:billBalance,variance,reconciled:Math.abs(variance)<=0.01,ageing:{current:Number(aging.rows[0]?.current??0),days1to30:Number(aging.rows[0]?.days_1_to_30??0),days31to60:Number(aging.rows[0]?.days_31_to_60??0),days61plus:Number(aging.rows[0]?.days_61_plus??0)}};
  }
+
+ async receivablesReconciliation(user:AuthenticatedUser){
+  const {companyId}=await this.companyFor(user);await this.ensureDefaults(companyId);
+  const [control,subledger,aging]=await Promise.all([
+   this.db.query(`SELECT COALESCE(SUM(CASE WHEN a.normal_side='debit' THEN l.debit-l.credit ELSE l.credit-l.debit END) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS balance
+    FROM chart_of_accounts a LEFT JOIN journal_entry_lines l ON l.account_id=a.id AND l.company_id=a.company_id
+    LEFT JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id AND j.status='posted'
+    WHERE a.company_id=$1 AND a.system_code='accounts_receivable' GROUP BY a.id`,[companyId]),
+   this.db.query(`SELECT COALESCE(SUM(i.total-i.amount_paid),0)::numeric(14,2) AS balance
+    FROM invoices i WHERE i.company_id=$1 AND i.status NOT IN ('draft','cancelled')`,[companyId]),
+   this.db.query(`SELECT
+    COALESCE(SUM(CASE WHEN i.due_date>=CURRENT_DATE THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS current,
+    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE AND i.due_date>=CURRENT_DATE-30 THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS days_1_to_30,
+    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE-30 AND i.due_date>=CURRENT_DATE-60 THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS days_31_to_60,
+    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE-60 THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS days_61_plus
+    FROM invoices i WHERE i.company_id=$1 AND i.status NOT IN ('draft','cancelled')`,[companyId])
+  ]);
+  const controlBalance=Number(control.rows[0]?.balance??0),invoiceBalance=Number(subledger.rows[0]?.balance??0);
+  const variance=Math.round((controlBalance-invoiceBalance)*100)/100;
+  return {companyId,asOf:new Date().toISOString().slice(0,10),controlAccountBalance:controlBalance,customerInvoicesBalance:invoiceBalance,variance,reconciled:Math.abs(variance)<=0.01,ageing:{current:Number(aging.rows[0]?.current??0),days1to30:Number(aging.rows[0]?.days_1_to_30??0),days31to60:Number(aging.rows[0]?.days_31_to_60??0),days61plus:Number(aging.rows[0]?.days_61_plus??0)}};
+ }
+
  async listJournals(user:AuthenticatedUser){
   const {companyId}=await this.companyFor(user);await this.ensureDefaults(companyId);
   return (await this.db.query(`SELECT j.id,j.company_id,j.entry_number,j.entry_date,j.description,j.source_type,j.source_id,j.status,j.posted_at,j.created_at,
