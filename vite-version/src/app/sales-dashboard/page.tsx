@@ -10,10 +10,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api-client";
+import { useAuth } from "@/contexts/auth-context";
 import { formatDate, formatKES, formatNumber } from "@/lib/format";
 import type { CustomerRow, InvoiceApiRow, ProductRow } from "@/lib/api-types";
 
 type SalesData = { invoices: InvoiceApiRow[]; customers: CustomerRow[]; products: ProductRow[] };
+type TeamMember = { user_id: string; full_name: string; role: string; invoice_count: number; sales_total: number | string; collected_total: number | string; outstanding_total: number | string };
 function message(error: unknown) {
   return error && typeof error === "object" && "message" in error && typeof error.message === "string"
     ? error.message : "Unable to load sales data. Please try again.";
@@ -31,21 +33,26 @@ function Metric({ title, value, detail, icon: Icon, href }: {
 }
 
 export default function SalesDashboardPage() {
+  const { user } = useAuth();
+  const canViewTeam = Boolean(user?.permissions.includes("sales:team-read"));
   const [data, setData] = React.useState<SalesData>({ invoices: [], customers: [], products: [] });
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [team, setTeam] = React.useState<TeamMember[]>([]);
   const load = React.useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [invoices, customers, products] = await Promise.all([
+      const [invoices, customers, products, teamSummary] = await Promise.all([
         api.get<InvoiceApiRow[]>("/invoices"),
         api.get<CustomerRow[]>("/customers"),
         api.get<ProductRow[]>("/products"),
+        canViewTeam ? api.get<TeamMember[]>("/invoices/team-summary") : Promise.resolve([] as TeamMember[]),
       ]);
       setData({ invoices, customers, products });
+      setTeam(teamSummary);
     } catch (err) { setError(message(err)); }
     finally { setLoading(false); }
-  }, []);
+  }, [canViewTeam]);
   React.useEffect(() => { void load(); }, [load]);
 
   const activeCustomers = data.customers.filter((customer) => customer.is_active);
@@ -87,7 +94,11 @@ export default function SalesDashboardPage() {
             <Card><CardHeader><CardTitle className="flex items-center gap-2"><ArrowDownRight className="size-5" />Sales shortcuts</CardTitle><CardDescription>Common tasks</CardDescription></CardHeader><CardContent className="grid gap-2"><Link to="/customers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Users className="mr-2 size-4" />Find a customer</Link><Link to="/invoices" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Receipt className="mr-2 size-4" />Create / view invoices</Link><Link to="/payments" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Banknote className="mr-2 size-4" />Track payment records</Link></CardContent></Card>
           </div>
         </section>
-        <p className="text-xs text-muted-foreground">Figures are based on records currently exposed by the company-scoped API. Collection totals represent amounts recorded in ERP, not independent confirmation from M-Pesa or a bank.</p>
+        {canViewTeam && <Card>
+          <CardHeader><CardTitle>Team sales performance</CardTitle><CardDescription>Company-wide performance grouped by the user who created each invoice. Drafts and cancelled invoices are excluded from sales totals.</CardDescription></CardHeader>
+          <CardContent>{team.length === 0 ? <p className="py-6 text-sm text-muted-foreground">No active team members or invoice activity yet.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Team member</TableHead><TableHead>Role</TableHead><TableHead className="text-right">Invoices</TableHead><TableHead className="text-right">Sales</TableHead><TableHead className="text-right">Collected</TableHead><TableHead className="text-right">Outstanding</TableHead></TableRow></TableHeader><TableBody>{team.map((member) => <TableRow key={member.user_id}><TableCell className="font-medium">{member.full_name}</TableCell><TableCell className="capitalize">{member.role}</TableCell><TableCell className="text-right tabular-nums">{formatNumber(member.invoice_count)}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(member.sales_total))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(member.collected_total))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(member.outstanding_total))}</TableCell></TableRow>)}</TableBody></Table></div>}</CardContent>
+        </Card>}
+        <p className="text-xs text-muted-foreground">Figures are based on company-scoped records. Collection totals represent confirmed ERP receipts; automatic M-Pesa verification and bank reconciliation are separate integrations.</p>
       </>}
     </div>
   </BaseLayout>;
