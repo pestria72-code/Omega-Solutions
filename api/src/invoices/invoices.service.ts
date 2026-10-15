@@ -366,8 +366,10 @@ export class InvoicesService {
        ORDER BY ii.product_id`,
       [input.companyId, input.invoiceId],
     );
+    let costTotal = 0;
     for (const line of lines.rows) {
       if (line.is_service) continue;
+      costTotal += Number(line.quantity) * Number(line.cost_price);
       const warehouse = await client.query<{ id: string }>(
         "SELECT id FROM warehouses WHERE company_id=$1 AND code='MAIN' AND is_active=true FOR SHARE",
         [input.companyId],
@@ -421,6 +423,7 @@ export class InvoicesService {
         [input.companyId, line.product_id],
       );
     }
+    return Math.round(costTotal * 100) / 100;
   }
 
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
@@ -459,7 +462,17 @@ export class InvoicesService {
       if (invoice.status === status) return invoice.status;
 
       if (status === 'sent' && invoice.status === 'draft') {
-        await this.applyInvoiceStock(client, { companyId: membership.companyId, invoiceId, invoiceNumber: invoice.invoice_number, userId: user.userId });
+        const stockCost = await this.applyInvoiceStock(client, { companyId: membership.companyId, invoiceId, invoiceNumber: invoice.invoice_number, userId: user.userId });
+        if (stockCost > 0) {
+          await this.postJournal(client, {
+            companyId: membership.companyId, date: invoice.issue_date, description: `Cost of goods sold for invoice ${invoice.invoice_number}`,
+            sourceType: 'invoice_cogs', sourceId: invoiceId, userId: user.userId,
+            lines: [
+              { systemCode: 'purchases_expense', debit: stockCost, credit: 0, description: 'Cost of goods sold' },
+              { systemCode: 'inventory', debit: 0, credit: stockCost, description: 'Reduce inventory asset' },
+            ],
+          });
+        }
         await this.postJournal(client, {
           companyId: membership.companyId, date: invoice.issue_date, description: `Sales invoice ${invoiceId}`,
           sourceType: 'invoice', sourceId: invoiceId, userId: user.userId,
@@ -480,7 +493,17 @@ export class InvoicesService {
           [membership.companyId, invoiceId],
         );
         if (Number(reported.rows[0].count) > 0) throw new BadRequestException('Invoices with payment reports cannot be cancelled. Resolve the payment reports first.');
-        await this.applyInvoiceStock(client, { companyId: membership.companyId, invoiceId, invoiceNumber: invoice.invoice_number, userId: user.userId, reverse: true });
+        const stockCost = await this.applyInvoiceStock(client, { companyId: membership.companyId, invoiceId, invoiceNumber: invoice.invoice_number, userId: user.userId, reverse: true });
+        if (stockCost > 0) {
+          await this.postJournal(client, {
+            companyId: membership.companyId, date: null, description: `Reverse cost of goods sold for cancelled invoice ${invoice.invoice_number}`,
+            sourceType: 'invoice_cogs_reversal', sourceId: invoiceId, userId: user.userId,
+            lines: [
+              { systemCode: 'inventory', debit: stockCost, credit: 0, description: 'Restore inventory asset' },
+              { systemCode: 'purchases_expense', debit: 0, credit: stockCost, description: 'Reverse cost of goods sold' },
+            ],
+          });
+        }
         await this.postJournal(client, {
           companyId: membership.companyId, date: null, description: `Reversal of cancelled invoice ${invoiceId}`,
           sourceType: 'invoice_cancellation', sourceId: invoiceId, userId: user.userId,
