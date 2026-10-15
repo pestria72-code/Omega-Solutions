@@ -53,12 +53,11 @@ export class AccountingService {
    return a;
   }catch(e){if((e as {code?:string}).code==='23505')throw new ConflictException('An account with this code or system code already exists.');throw e;}
  }
- async trialBalance(user:AuthenticatedUser,fromDate?:string,toDate?:string){
+ async trialBalance(user:AuthenticatedUser,asOfDate?:string){
   const {companyId}=await this.companyFor(user);
   const validDate=(value:string)=>/^\\d{4}-\\d{2}-\\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
-  if(fromDate&&!validDate(fromDate))throw new BadRequestException('fromDate must be a valid YYYY-MM-DD date.');
-  if(toDate&&!validDate(toDate))throw new BadRequestException('toDate must be a valid YYYY-MM-DD date.');
-  if(fromDate&&toDate&&fromDate>toDate)throw new BadRequestException('fromDate must be on or before toDate.');
+  if(asOfDate&&!validDate(asOfDate))throw new BadRequestException('asOfDate must be a valid YYYY-MM-DD date.');
+  await this.ensureDefaults(companyId);
   const result=await this.db.query<{id:string;code:string;name:string;account_type:string;normal_side:string;total_debits:string|number;total_credits:string|number;debit_balance:string|number;credit_balance:string|number}>(`SELECT a.id,a.code,a.name,a.account_type,a.normal_side,
     COALESCE(SUM(l.debit) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS total_debits,
     COALESCE(SUM(l.credit) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS total_credits,
@@ -67,16 +66,15 @@ export class AccountingService {
     FROM chart_of_accounts a
     LEFT JOIN journal_entry_lines l ON l.account_id=a.id AND l.company_id=a.company_id
     LEFT JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id AND j.status='posted'
-      AND ($2::date IS NULL OR j.entry_date >= $2::date)
-      AND ($3::date IS NULL OR j.entry_date <= $3::date)
+      AND ($2::date IS NULL OR j.entry_date <= $2::date)
     WHERE a.company_id=$1
     GROUP BY a.id
-    ORDER BY a.code`,[companyId,fromDate??null,toDate??null]);
+    ORDER BY a.code`,[companyId,asOfDate??null]);
   const accounts=result.rows.map(row=>({...row,total_debits:Number(row.total_debits),total_credits:Number(row.total_credits),debit_balance:Number(row.debit_balance),credit_balance:Number(row.credit_balance)}));
   const totalDebits=Math.round(accounts.reduce((sum,row)=>sum+row.debit_balance,0)*100)/100;
   const totalCredits=Math.round(accounts.reduce((sum,row)=>sum+row.credit_balance,0)*100)/100;
   const variance=Math.round((totalDebits-totalCredits)*100)/100;
-  return {companyId,fromDate:fromDate??null,toDate:toDate??null,accounts,totalDebits,totalCredits,variance,balanced:Math.abs(variance)<=0.01};
+  return {companyId,asOfDate:asOfDate??new Date().toISOString().slice(0,10),accounts,totalDebits,totalCredits,variance,balanced:Math.abs(variance)<=0.01};
  }
  async payablesReconciliation(user:AuthenticatedUser){
   const {companyId}=await this.companyFor(user);await this.ensureDefaults(companyId);
