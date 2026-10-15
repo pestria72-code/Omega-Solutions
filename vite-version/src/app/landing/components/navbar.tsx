@@ -31,7 +31,7 @@ import { ModeToggle } from "@/components/mode-toggle"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "@/lib/utils"
 
-const navigationItems = [
+const navigationItems: { name: string; href: string; hasMegaMenu?: boolean }[] = [
   { name: "Home", href: "#hero" },
   { name: "About", href: "#about" },
   { name: "Features", href: "#features" },
