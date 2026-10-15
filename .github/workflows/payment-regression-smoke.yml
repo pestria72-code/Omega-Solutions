@@ -1,0 +1,26 @@
+name: Payment regression smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - development
+    paths:
+      - "api/scripts/live-payment-regression-smoke.mjs"
+      - ".github/workflows/payment-regression-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  payment-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+      - name: Run authenticated payment regression against development API
+        env:
+          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+        run: node api/scripts/live-payment-regression-smoke.mjs
