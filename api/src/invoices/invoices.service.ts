@@ -391,7 +391,7 @@ export class InvoicesService {
     let costTotal = 0;
     for (const line of lines.rows) {
       if (line.is_service) continue;
-      costTotal += Number(line.quantity) * Number(line.cost_price);
+      if (!input.reverse) costTotal += Number(line.quantity) * Number(line.cost_price);
       const warehouse = await client.query<{ id: string }>(
         "SELECT id FROM warehouses WHERE company_id=$1 AND code='MAIN' AND is_active=true FOR SHARE",
         [input.companyId],
