@@ -1,0 +1,25 @@
+import { ArrayMinSize, IsArray, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class CreateBomLineDto {
+ @IsUUID() materialProductId!: string;
+ @Type(() => Number) @IsNumber({maxDecimalPlaces:4}) @Min(0.0001) quantity!: number;
+ @Type(() => Number) @IsNumber({maxDecimalPlaces:4}) @IsOptional() @Min(0) @Max(100) wastePercent?: number;
+ @IsString() @IsOptional() @MaxLength(500) notes?: string;
+}
+export class CreateBomDto {
+ @IsString() @MaxLength(32) code!: string;
+ @IsString() @MaxLength(180) name!: string;
+ @IsUUID() productId!: string;
+ @Type(() => Number) @IsNumber({maxDecimalPlaces:4}) @Min(0.0001) outputQuantity!: number;
+ @IsArray() @ArrayMinSize(1) @ValidateNested({each:true}) @Type(() => CreateBomLineDto) lines!: CreateBomLineDto[];
+ @IsString() @IsOptional() @MaxLength(2000) notes?: string;
+}
+export class CreateProductionOrderDto {
+ @IsUUID() bomId!: string;
+ @IsUUID() warehouseId!: string;
+ @Type(() => Number) @IsNumber({maxDecimalPlaces:4}) @Min(0.0001) plannedQuantity!: number;
+ @IsDateString() @IsOptional() plannedStartDate?: string;
+ @IsDateString() @IsOptional() plannedEndDate?: string;
+ @IsString() @IsOptional() @MaxLength(2000) notes?: string;
+}
