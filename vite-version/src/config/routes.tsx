@@ -14,6 +14,7 @@ export const routes: RouteObject[] = [
       { path: "/", element: <Navigate to="dashboard" replace /> },
       // Overview
       { path: "/dashboard", lazy: page(() => import("@/app/dashboard/page")) },
+      { path: "/sales-dashboard", lazy: page(() => import("@/app/sales-dashboard/page")) },
       // CRM and sales
       { path: "/crm", lazy: page(() => import("@/app/crm/page")) },
       { path: "/crm/campaigns", lazy: page(() => import("@/app/crm/campaigns/page")) },
@@ -50,6 +51,5 @@ export const routes: RouteObject[] = [
       { path: "/settings", lazy: page(() => import("@/app/settings/page")) },
     ],
   },
-  // Catch-all
   { path: "*", lazy: page(() => import("@/app/errors/not-found/page")) },
 ]
