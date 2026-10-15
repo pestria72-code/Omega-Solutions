@@ -7,6 +7,17 @@ import type { PoolClient } from 'pg';
 import { AccountingService } from '../accounting/accounting.service.js';
 import type { PosCheckoutDto } from './dto/pos-checkout.dto.js';
 
+export function buildCogsJournalLines(costCents: number) {
+  if (!Number.isSafeInteger(costCents) || costCents < 0) {
+    throw new BadRequestException('Cost of goods must be a non-negative whole number of cents.');
+  }
+  const cost = costCents / 100;
+  return costCents === 0 ? [] : [
+    { systemCode: 'purchases_expense', debit: cost, credit: 0, description: 'Cost of goods sold' },
+    { systemCode: 'inventory', debit: 0, credit: cost, description: 'Reduce inventory asset' },
+  ];
+}
+
 type RegisterInput = { code: string; name: string; branchId?: string | null };
 type OpenShiftInput = { registerId: string; openingFloat: number };
 type CloseShiftInput = { countedCash: number; notes?: string };
@@ -247,9 +258,8 @@ export class PosService {
         {systemCode:'sales_revenue',debit:subtotalCents/100,credit:0,description:'POS sales revenue'},
         {systemCode:'output_tax',debit:taxCents/100,credit:0,description:'POS output tax'},
       ].map(l=>l.systemCode==='sales_revenue'?{...l,debit:0,credit:subtotalCents/100}:l.systemCode==='output_tax'?{...l,debit:0,credit:taxCents/100}:l)});
-      if(costCents>0) await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS cost of goods sold ${saleNumber}`,sourceType:'invoice_cogs',sourceId:invoiceId,lines:[
-        {systemCode:'purchases_expense',debit:costCents/100,credit:0,description:'Cost of goods sold'},
-        {systemCode:'inventory',debit:0,credit:costCents/100,description:'Reduce inventory asset'}]});
+      const cogsLines=buildCogsJournalLines(costCents);
+      if(cogsLines.length>0) await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS cost of goods sold ${saleNumber}`,sourceType:'invoice_cogs',sourceId:invoiceId,lines:cogsLines});
       await client.query('UPDATE customers SET outstanding_balance=outstanding_balance+$1,updated_at=NOW() WHERE id=$2 AND company_id=$3',[total,customerId,companyId]);
       for(const p of payments) {
         const isCash=p.method==='cash';
