@@ -312,10 +312,13 @@ export class InvoicesService {
       const existing = await client.query<{
         status: InvoiceStatus;
         customer_id: string;
+        issue_date: string;
+        subtotal: string | number;
+        tax_amount: string | number;
         total: string | number;
         amount_paid: string | number;
       }>(
-        'SELECT status, customer_id, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        'SELECT status, customer_id, issue_date, subtotal, tax_amount, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
         [invoiceId, membership.companyId],
       );
       const invoice = existing.rows[0];
