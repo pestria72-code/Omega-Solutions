@@ -111,4 +111,29 @@ describe('ManufacturingService',()=>{
   expect(entriesAfterRetry).toHaveLength(2);
  });
 
+ it('records labour cost against WIP and posts a balanced journal in one transaction',async()=>{
+  const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
+   if(sql.includes('SELECT id,status FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status:'in_progress'}],rowCount:1};
+   if(sql.includes('SELECT id,account_type FROM chart_of_accounts'))return {rows:[{id:'expense-1',account_type:'expense'}],rowCount:1};
+   if(sql.includes('INSERT INTO manufacturing_order_costs'))return {rows:[{id:'cost-1'}],rowCount:1};
+   if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:1}],rowCount:1};
+   if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:'journal-cost-1'}],rowCount:1};
+   if(sql.includes('SELECT id FROM chart_of_accounts'))return {rows:[{id:params[1]==='work_in_progress'?'wip-account':'expense-1'}],rowCount:1};
+   if(sql.includes('SELECT c.id,c.production_order_id,c.cost_type'))return {rows:[{id:'cost-1',cost_type:'labour',amount:'250',journal_entry_id:'journal-cost-1'}],rowCount:1};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  const result=await service.addOrderCost(user,'order-1',{costType:'labour',description:'Assembly labour',amount:250,sourceAccountId:'expense-1'});
+  expect(result.cost_type).toBe('labour');
+  expect(client.query).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO journal_entry_lines'),expect.arrayContaining(['company-active','journal-cost-1']));
+  expect(client.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE manufacturing_order_costs SET journal_entry_id'),['company-active','cost-1','journal-cost-1']);
+  expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({action:'manufacturing.order.cost.create'}));
+ });
+ it('rejects labour and overhead costs on orders that are not in progress',async()=>{
+  const client={query:vi.fn().mockResolvedValue({rows:[{id:'order-1',status:'planned'}],rowCount:1})};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  await expect(service.addOrderCost(user,'order-1',{costType:'overhead',description:'Factory power',amount:100,sourceAccountId:'expense-1'})).rejects.toThrow('only be recorded against an in-progress');
+  expect(client.query).toHaveBeenCalledTimes(1);
+ });
+
 });
