@@ -38,6 +38,8 @@ try {
  const billJournals=(await req("GET","/accounting/journals",undefined,token)).data;
  const billJournal=billJournals.find(x=>x.source_type==="supplier_bill"&&x.source_id===bill.id);
  ok(!!billJournal&&Number(billJournal.total_debits)===232&&Number(billJournal.total_credits)===232,"supplier bill posts balanced journal entry");
+ const billJournalDetail=(await req("GET",`/accounting/journals/${billJournal.id}`,undefined,token)).data;
+ ok(billJournalDetail.lines.some(x=>x.account_code==="1200"&&Number(x.debit)===200)&&billJournalDetail.lines.some(x=>x.account_code==="1300"&&Number(x.debit)===32),"received goods post to inventory asset and input VAT");
  await req("POST","/supplier-bills",{supplierId:supplier.id,purchaseOrderId:po.id,items:[{purchaseOrderItemId:line.id,description:line.product_name,quantity:1,unitCost:100,taxRate:16}]},token,[400]);ok(true,"duplicate billing quantity rejected");
  const p1=(await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:100,method:"mpesa",reference:`E2E-PAY-${stamp}`},token,[201])).data;
  ok(p1.status==="partially_paid"&&Number(p1.balance)===132,"partial payment balance");
