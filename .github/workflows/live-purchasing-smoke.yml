@@ -12,6 +12,8 @@ on:
 permissions:
   contents: read
 
+# Keep the authenticated end-to-end check available after development API deployments.
+
 jobs:
   live-purchasing-smoke:
     runs-on: ubuntu-latest
