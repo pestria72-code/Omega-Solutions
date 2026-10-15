@@ -9,7 +9,7 @@ export type Permission =
   | 'inventory:read' | 'inventory:write'
   | 'sales:read' | 'sales:write'
   | 'purchases:read' | 'purchases:write'
-  | 'payments:read' | 'payments:write'
+  | 'payments:read' | 'payments:write' | 'payments:verify' | 'payments:reconcile'
   | 'expenses:read' | 'expenses:write'
   | 'reports:read'
   | 'employees:read' | 'employees:write'
