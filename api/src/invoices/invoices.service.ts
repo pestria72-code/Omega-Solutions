@@ -359,7 +359,6 @@ export class InvoicesService {
             { systemCode: 'accounts_receivable', debit: 0, credit: Number(invoice.total), description: 'Reverse customer receivable' },
           ],
         });
-        await client.query("UPDATE journal_entries SET status='reversed' WHERE company_id=$1 AND source_type='invoice' AND source_id=$2 AND status='posted'", [membership.companyId, invoiceId]);
         const remaining = Math.max(0, Number(invoice.total) - Number(invoice.amount_paid));
         await client.query(
           'UPDATE customers SET outstanding_balance = GREATEST(0, outstanding_balance - $1), updated_at = NOW() WHERE id = $2 AND company_id = $3',
