@@ -3,6 +3,9 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import type { PoolClient } from 'pg';
+import { AccountingService } from '../accounting/accounting.service.js';
+import type { PosCheckoutDto } from './dto/pos-checkout.dto.js';
 
 type RegisterInput = { code: string; name: string; branchId?: string | null };
 type OpenShiftInput = { registerId: string; openingFloat: number };
@@ -14,6 +17,7 @@ export class PosService {
     private readonly db: DatabaseService,
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
+    private readonly accounting: AccountingService,
   ) {}
 
   private async company(user: AuthenticatedUser) {
@@ -80,6 +84,205 @@ export class PosService {
     return result.rows[0] ?? null;
   }
 
+
+  private async postJournal(client: PoolClient, input: {
+    companyId:string; userId:string; date:string; description:string; sourceType:string; sourceId:string;
+    lines:Array<{systemCode:string;debit:number;credit:number;description:string}>;
+  }) {
+    const year=Number(input.date.slice(0,4));
+    const seq=await client.query<{next_number:number}>(
+      `INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
+       ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1
+       RETURNING next_number`,[input.companyId,year]);
+    const entryNumber=`JE-${year}-${String(seq.rows[0].next_number).padStart(6,'0')}`;
+    const entry=await client.query<{id:string}>(
+      `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+       VALUES($1,$2,$3,$4,$5,$6,'posted',NOW(),$7) RETURNING id`,
+      [input.companyId,entryNumber,input.date,input.description,input.sourceType,input.sourceId,input.userId]);
+    let debits=0,credits=0;
+    for(const line of input.lines) {
+      if(line.debit<=0&&line.credit<=0) continue;
+      const account=await client.query<{id:string}>(
+        'SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true',
+        [input.companyId,line.systemCode]);
+      if(!account.rows[0]) throw new BadRequestException(`Required accounting account "${line.systemCode}" is missing or inactive.`);
+      await client.query(
+        'INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)',
+        [input.companyId,entry.rows[0].id,account.rows[0].id,line.description,line.debit,line.credit]);
+      debits+=line.debit; credits+=line.credit;
+    }
+    if(Math.abs(debits-credits)>0.005||debits<=0) throw new BadRequestException('POS accounting journal is not balanced.');
+  }
+
+  async searchProducts(user:AuthenticatedUser, search?:string, warehouseId?:string) {
+    const {companyId}=await this.company(user);
+    const term=search?.trim();
+    const result=await this.db.query(
+      `SELECT p.id,p.sku,p.name,p.unit,p.selling_price,p.cost_price,p.is_service,
+        COALESCE(SUM(s.quantity-s.reserved_quantity),0)::numeric(16,3) AS available_quantity
+       FROM products p
+       LEFT JOIN inventory_stock_levels s ON s.product_id=p.id AND s.company_id=p.company_id
+         AND ($2::uuid IS NULL OR s.warehouse_id=$2::uuid)
+       WHERE p.company_id=$1 AND p.is_active=true
+         AND ($3::text IS NULL OR p.name ILIKE $3 OR p.sku ILIKE $3)
+       GROUP BY p.id ORDER BY p.name LIMIT 100`,
+      [companyId,warehouseId??null,term?`%${term}%`:null]);
+    return result.rows;
+  }
+
+  async checkout(user:AuthenticatedUser,dto:PosCheckoutDto) {
+    const {companyId}=await this.company(user);
+    await this.accounting.ensureDefaults(companyId);
+    const today=new Date().toISOString().slice(0,10);
+    const totals=await this.db.transaction(async client=>{
+      const shiftResult=await client.query<{id:string;register_id:string;opened_by:string;status:string}>(
+        'SELECT id,register_id,opened_by,status FROM pos_shifts WHERE id=$1 AND company_id=$2 FOR UPDATE',
+        [dto.shiftId,companyId]);
+      const shift=shiftResult.rows[0];
+      if(!shift||shift.status!=='open'||shift.opened_by!==user.userId) throw new BadRequestException('An open cashier shift belonging to you is required to check out.');
+      const register=await client.query<{id:string}>(
+        'SELECT id FROM pos_registers WHERE id=$1 AND company_id=$2 AND is_active=true',
+        [shift.register_id,companyId]);
+      if(!register.rows[0]) throw new BadRequestException('The shift register is no longer active.');
+      const warehouse=await client.query<{id:string}>(
+        'SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',
+        [dto.warehouseId,companyId]);
+      if(!warehouse.rows[0]) throw new BadRequestException('Choose an active warehouse belonging to this company.');
+
+      let customerId=dto.customerId;
+      if(customerId) {
+        const customer=await client.query<{id:string}>(
+          "SELECT id FROM customers WHERE id=$1 AND company_id=$2 AND is_active=true AND status='active' FOR SHARE",
+          [customerId,companyId]);
+        if(!customer.rows[0]) throw new BadRequestException('Choose an active customer from your company.');
+      } else {
+        const walkIn=await client.query<{id:string}>(
+          "SELECT id FROM customers WHERE company_id=$1 AND is_active=true AND name='Walk-in Customer' ORDER BY created_at LIMIT 1",
+          [companyId]);
+        customerId=walkIn.rows[0]?.id;
+        if(!customerId) {
+          const inserted=await client.query<{id:string}>(
+            "INSERT INTO customers(company_id,name,status,is_active) VALUES($1,'Walk-in Customer','active',true) RETURNING id",
+            [companyId]);
+          customerId=inserted.rows[0].id;
+        }
+      }
+
+      const resolved:Array<{productId:string;name:string;sku:string;quantity:number;unitPrice:number;taxRate:number;subtotal:number;tax:number;total:number;cost:number;isService:boolean}>=[];
+      let subtotalCents=0,taxCents=0;
+      for(const item of dto.items) {
+        const productResult=await client.query<{id:string;name:string;sku:string;selling_price:string|number;cost_price:string|number;is_active:boolean;is_service:boolean}>(
+          'SELECT id,name,sku,selling_price,cost_price,is_active,is_service FROM products WHERE id=$1 AND company_id=$2 FOR SHARE',
+          [item.productId,companyId]);
+        const p=productResult.rows[0];
+        if(!p||!p.is_active) throw new BadRequestException('Every checkout item must be an active product from this company.');
+        if(!Number.isFinite(item.quantity)||item.quantity<=0||Math.round(item.quantity*1000)!==item.quantity*1000) throw new BadRequestException('Product quantities must be positive with at most three decimal places.');
+        const unitPriceCents=Math.round(Number(item.unitPrice??p.selling_price)*100);
+        const qtyMilli=Math.round(item.quantity*1000);
+        const lineSubtotal=Math.round(unitPriceCents*qtyMilli/1000);
+        const taxRate=item.taxRate??0;
+        const lineTax=Math.round(lineSubtotal*taxRate/100);
+        subtotalCents+=lineSubtotal; taxCents+=lineTax;
+        resolved.push({productId:p.id,name:p.name,sku:p.sku,quantity:qtyMilli/1000,unitPrice:unitPriceCents/100,taxRate,subtotal:lineSubtotal/100,tax:lineTax/100,total:(lineSubtotal+lineTax)/100,cost:Number(p.cost_price),isService:p.is_service});
+      }
+      const totalCents=subtotalCents+taxCents;
+      const total=totalCents/100;
+      const payments=dto.payments.map(p=>({...p,cents:Math.round(Number(p.amount)*100)}));
+      if(payments.some(p=>!Number.isFinite(p.cents)||p.cents<=0||Math.round(Number(p.amount)*100)!==Number(p.amount)*100)) throw new BadRequestException('Payment amounts must be positive and limited to two decimal places.');
+      if(payments.reduce((sum,p)=>sum+p.cents,0)!==totalCents) throw new BadRequestException('Payment split must equal the exact checkout total.');
+      if(payments.some(p=>p.method==='mpesa'&&!p.reference?.trim())) throw new BadRequestException('An M-Pesa transaction reference is required; the payment remains pending verification.');
+      const confirmedCents=payments.filter(p=>p.method==='cash').reduce((sum,p)=>sum+p.cents,0);
+      const pendingCents=totalCents-confirmedCents;
+      const invoiceSequence=await client.query<{next_number:number}>(
+        `INSERT INTO invoice_sequences(company_id,invoice_year,next_number) VALUES($1,$2,1)
+         ON CONFLICT(company_id,invoice_year) DO UPDATE SET next_number=invoice_sequences.next_number+1 RETURNING next_number`,
+        [companyId,Number(today.slice(0,4))]);
+      const saleNumber=`POS-${today.slice(0,4)}-${String(invoiceSequence.rows[0].next_number).padStart(5,'0')}`;
+      const invoiceStatus=confirmedCents>=totalCents?'paid':confirmedCents>0?'partially_paid':'sent';
+      const invoiceResult=await client.query<{id:string;invoice_number:string}>(
+        `INSERT INTO invoices(company_id,customer_id,invoice_number,issue_date,due_date,status,currency,subtotal,tax_amount,total,amount_paid,notes,created_by)
+         VALUES($1,$2,$3,$4,$4,$5,'KES',$6,$7,$8,$9,$10,$11) RETURNING id,invoice_number`,
+        [companyId,customerId,saleNumber,today,invoiceStatus,subtotalCents/100,taxCents/100,total,confirmedCents/100,dto.notes?.trim()||'POS sale',user.userId]);
+      const invoiceId=invoiceResult.rows[0].id;
+      let costCents=0;
+      for(const line of resolved) {
+        await client.query(
+          `INSERT INTO invoice_items(company_id,invoice_id,product_id,product_name,sku,quantity,unit_price,tax_rate,line_subtotal,tax_amount,line_total)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [companyId,invoiceId,line.productId,line.name,line.sku,line.quantity,line.unitPrice,line.taxRate,line.subtotal,line.tax,line.total]);
+        if(line.isService) continue;
+        const stockResult=await client.query<{quantity:string|number;reserved_quantity:string|number}>(
+          'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+          [companyId,dto.warehouseId,line.productId]);
+        const stock=stockResult.rows[0];
+        if(!stock||Number(stock.quantity)-Number(stock.reserved_quantity)<line.quantity) {
+          throw new BadRequestException(`Insufficient available stock for ${line.name}. Available: ${stock?Number(stock.quantity)-Number(stock.reserved_quantity):0}; required: ${line.quantity}.`);
+        }
+        await client.query('UPDATE inventory_stock_levels SET quantity=quantity-$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[line.quantity,companyId,dto.warehouseId,line.productId]);
+        await client.query(
+          `INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by)
+           VALUES($1,$2,$3,'issue',$4,$5,$6,'POS checkout stock issue',$7)`,
+          [companyId,line.productId,dto.warehouseId,-line.quantity,line.cost,saleNumber,user.userId]);
+        await client.query(
+          `UPDATE products SET stock_quantity=COALESCE((SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0),updated_at=NOW()
+           WHERE company_id=$1 AND id=$2`,[companyId,line.productId]);
+        costCents+=Math.round(line.quantity*line.cost*100);
+      }
+      const sale=await client.query<{id:string}>(
+        `INSERT INTO pos_sales(company_id,shift_id,register_id,warehouse_id,invoice_id,sale_number,subtotal,tax_amount,total,amount_confirmed,status,notes,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+        [companyId,dto.shiftId,shift.register_id,dto.warehouseId,invoiceId,saleNumber,subtotalCents/100,taxCents/100,total,confirmedCents/100,pendingCents?'awaiting_payment_confirmation':'completed',dto.notes?.trim()||null,user.userId]);
+      await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS sale ${saleNumber}`,sourceType:'invoice',sourceId:invoiceId,lines:[
+        {systemCode:'accounts_receivable',debit:total,credit:0,description:'POS customer receivable'},
+        {systemCode:'sales_revenue',debit:subtotalCents/100,credit:0,description:'POS sales revenue'},
+        {systemCode:'output_tax',debit:taxCents/100,credit:0,description:'POS output tax'},
+      ].map(l=>l.systemCode==='sales_revenue'?{...l,debit:0,credit:subtotalCents/100}:l.systemCode==='output_tax'?{...l,debit:0,credit:taxCents/100}:l)});
+      if(costCents>0) await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS cost of goods sold ${saleNumber}`,sourceType:'invoice_cogs',sourceId:invoiceId,lines:[
+        {systemCode:'purchases_expense',debit:costCents/100,credit:0,description:'Cost of goods sold'},
+        {systemCode:'inventory',debit:0,credit:costCents/100,description:'Reduce inventory asset'}]});
+      await client.query('UPDATE customers SET outstanding_balance=outstanding_balance+$1,updated_at=NOW() WHERE id=$2 AND company_id=$3',[total,customerId,companyId]);
+      for(const p of payments) {
+        const isCash=p.method==='cash';
+        const inserted=await client.query<{id:string}>(
+          `INSERT INTO invoice_payments(company_id,invoice_id,amount,method,reference,notes,created_by,status,verified_at,verified_by,pos_shift_id)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8='confirmed' THEN NOW() ELSE NULL END,CASE WHEN $8='confirmed' THEN $7 ELSE NULL END,$9) RETURNING id`,
+          [companyId,invoiceId,p.cents/100,p.method,p.reference?.trim()||null,`POS shift ${dto.shiftId}`,user.userId,isCash?'confirmed':'pending',dto.shiftId]);
+        if(isCash) {
+          // The invoice-level receipt journal is posted once below using the actual payment ID.
+          const paymentId=inserted.rows[0].id;
+          await client.query(
+            `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+             VALUES($1,$2,$3,$4,'invoice_payment',$5,'posted',NOW(),$6)`,
+            [companyId,`JE-${today.slice(0,4)}-POS-${paymentId.slice(0,8)}`,today,`POS cash receipt ${saleNumber}`,paymentId,user.userId]);
+          const je=await client.query<{id:string}>("SELECT id FROM journal_entries WHERE company_id=$1 AND source_type='invoice_payment' AND source_id=$2",[companyId,paymentId]);
+          for(const line of [
+            {code:'cash',debit:p.cents/100,credit:0,description:'POS cash received'},
+            {code:'accounts_receivable',debit:0,credit:p.cents/100,description:'Reduce customer receivable'}]) {
+            const account=await client.query<{id:string}>('SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true',[companyId,line.code]);
+            if(!account.rows[0]) throw new BadRequestException(`Required accounting account "${line.code}" is missing or inactive.`);
+            await client.query('INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)',[companyId,je.rows[0].id,account.rows[0].id,line.description,line.debit,line.credit]);
+          }
+        }
+      }
+      await client.query('UPDATE customers SET outstanding_balance=GREATEST(0,outstanding_balance-$1),updated_at=NOW() WHERE id=$2 AND company_id=$3',[confirmedCents/100,customerId,companyId]);
+      return {saleId:sale.rows[0].id,invoiceId, saleNumber,total,subtotal:subtotalCents/100,taxAmount:taxCents/100,amountConfirmed:confirmedCents/100,pendingPayment:pendingCents/100,status:pendingCents?'awaiting_payment_confirmation':'completed'};
+    });
+    await this.audit.log({userId:user.userId,companyId,branchId:null,action:'pos.sale.checkout',entityType:'pos_sale',entityId:totals.saleId,oldValues:null,newValues:totals,ipAddress:null});
+    return totals;
+  }
+
+  async listSales(user:AuthenticatedUser,limit?:string) {
+    const {companyId}=await this.company(user);
+    const parsed=Number.parseInt(limit??'50',10);
+    const safeLimit=Number.isFinite(parsed)?Math.max(1,Math.min(parsed,100)):50;
+    return (await this.db.query(
+      `SELECT s.id,s.sale_number,s.shift_id,s.register_id,s.warehouse_id,s.invoice_id,s.subtotal,s.tax_amount,s.total,s.amount_confirmed,s.status,s.created_at,
+        i.invoice_number,i.status AS invoice_status,c.name AS customer_name
+       FROM pos_sales s JOIN invoices i ON i.id=s.invoice_id AND i.company_id=s.company_id
+       JOIN customers c ON c.id=i.customer_id AND c.company_id=i.company_id
+       WHERE s.company_id=$1 ORDER BY s.created_at DESC LIMIT $2`,[companyId,safeLimit])).rows;
+  }
+
   async openShift(user: AuthenticatedUser, input: OpenShiftInput) {
     const { companyId } = await this.company(user);
     const openingFloat = Number(input.openingFloat);
@@ -133,8 +336,12 @@ export class PosService {
       if (!existing) throw new NotFoundException('POS shift not found.');
       if (existing.status !== 'open') throw new ConflictException('This shift is already closed.');
       if (existing.opened_by !== user.userId) throw new ConflictException('Only the cashier who opened this shift may close it.');
-      // Checkout does not yet persist shift-linked payments. Do not count unrelated invoice receipts.
-      const expectedCash = Math.round(Number(existing.opening_float) * 100) / 100;
+      const cash = await client.query<{total:string|number}>(
+        `SELECT COALESCE(SUM(amount),0) AS total FROM invoice_payments
+         WHERE company_id=$1 AND pos_shift_id=$2 AND status IN ('confirmed','reconciled') AND method='cash'`,
+        [companyId,shiftId],
+      );
+      const expectedCash = Math.round((Number(existing.opening_float)+Number(cash.rows[0]?.total ?? 0))*100)/100;
       const difference = Math.round((countedCash-expectedCash)*100)/100;
       const updated = await client.query(
         `UPDATE pos_shifts SET status='closed',closed_by=$3,closed_at=NOW(),
