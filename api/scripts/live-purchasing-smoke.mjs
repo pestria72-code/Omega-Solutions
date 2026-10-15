@@ -54,6 +54,8 @@ try {
  await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:133,method:"bank_transfer"},token,[400]);ok(true,"overpayment rejected");
  const p2=(await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:132,method:"bank_transfer",reference:`E2E-FINAL-${stamp}`},token,[201])).data;
  ok(p2.status==="paid"&&Number(p2.balance)===0,"bill fully paid");
+ const billDetailAfterFull=(await req("GET","/supplier-bills/"+bill.id,undefined,token)).data;
+ ok(billDetailAfterFull.payments?.length===2&&Number(billDetailAfterFull.payments[0].amount)+Number(billDetailAfterFull.payments[1].amount)===232&&Number(billDetailAfterFull.balance)===0,"bill detail shows complete payment history and zero balance");
  const accounts=(await req("GET","/accounting/accounts",undefined,token)).data;
  const apAccount=accounts.find(x=>x.system_code==="accounts_payable");
  ok(!!apAccount&&Number(apAccount.balance)===0,"accounts payable ledger clears after full payment");
