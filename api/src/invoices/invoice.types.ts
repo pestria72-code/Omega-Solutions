@@ -54,4 +54,7 @@ export interface InvoicePaymentRow {
   paid_at: string;
   notes: string | null;
   created_at: string;
+  status: 'pending' | 'confirmed' | 'rejected' | 'reconciled';
+  verified_at: string | null;
+  reconciled_at: string | null;
 }
