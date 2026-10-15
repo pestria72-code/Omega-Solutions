@@ -42,7 +42,7 @@ export class TransferStockDto {
   @IsUUID() sourceWarehouseId!: string;
   @IsUUID() destinationWarehouseId!: string;
   @Type(() => Number) @IsNumber({ maxDecimalPlaces: 3 }) @Min(0.000001) quantity!: number;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) unitCost?: number;
+  @IsOptional() @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) unitCost?: number;
   @IsOptional() @IsString() @MaxLength(120) reference?: string;
   @IsOptional() @IsString() @MaxLength(2000) notes?: string;
 }
