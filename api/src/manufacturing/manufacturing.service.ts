@@ -135,4 +135,27 @@ export class ManufacturingService {
   await this.audit.log({userId:user.userId,companyId,branchId,action:'manufacturing.order.complete',entityType:'manufacturing_production_order',entityId:id,oldValues:{status:'in_progress'},newValues:{status:'completed',producedQuantity:result.produced_quantity},ipAddress:null});
   return result;
  }
+
+ async cancelOrder(user:AuthenticatedUser,id:string){
+  const {companyId,branchId}=await this.companyFor(user);
+  const result=await this.db.transaction(async client=>{
+   const order=await client.query<{id:string;status:string;warehouse_id:string}>(`SELECT id,status,warehouse_id FROM manufacturing_production_orders WHERE company_id=$1 AND id=$2 FOR UPDATE`,[companyId,id]);
+   if(!order.rows[0])throw new NotFoundException('Production order not found.');
+   if(order.rows[0].status!=='planned'&&order.rows[0].status!=='in_progress')throw new ConflictException('Only planned or in-progress orders can be cancelled.');
+   const materials=await client.query<{material_product_id:string;reserved_quantity:string|number}>(`SELECT material_product_id,reserved_quantity FROM manufacturing_order_materials WHERE company_id=$1 AND production_order_id=$2 ORDER BY material_product_id FOR UPDATE`,[companyId,id]);
+   if(order.rows[0].status==='in_progress'){
+    for(const material of materials.rows){
+     const reserved=Number(material.reserved_quantity);
+     if(reserved<=0)continue;
+     const stock=await client.query<{id:string}>(`UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity-$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4 AND reserved_quantity >= $1 RETURNING id`,[reserved,companyId,order.rows[0].warehouse_id,material.material_product_id]);
+     if(!stock.rows[0])throw new ConflictException('Material reservation could not be released safely; cancellation was rolled back.');
+     await client.query(`UPDATE manufacturing_order_materials SET reserved_quantity=0 WHERE company_id=$1 AND production_order_id=$2 AND material_product_id=$3`,[companyId,id,material.material_product_id]);
+    }
+   }
+   await client.query(`UPDATE manufacturing_production_orders SET status='cancelled',updated_at=NOW() WHERE company_id=$1 AND id=$2`,[companyId,id]);
+   return (await client.query(`SELECT * FROM manufacturing_production_orders WHERE company_id=$1 AND id=$2`,[companyId,id])).rows[0];
+  });
+  await this.audit.log({userId:user.userId,companyId,branchId,action:'manufacturing.order.cancel',entityType:'manufacturing_production_order',entityId:id,oldValues:{status:result.status==='cancelled'?'planned':'in_progress'},newValues:{status:'cancelled'},ipAddress:null});
+  return result;
+ }
 }
