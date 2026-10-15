@@ -19,6 +19,12 @@ export class InventoryController {
     return this.inventory.summary(req.user);
   }
 
+  @Get('reconciliation')
+  @RequirePermissions('inventory:read')
+  reconciliation(@Req() req: { user: AuthenticatedUser }) {
+    return this.inventory.reconciliation(req.user);
+  }
+
   @Get('warehouses')
   @RequirePermissions('inventory:read')
   warehouses(@Req() req: { user: AuthenticatedUser }) {
