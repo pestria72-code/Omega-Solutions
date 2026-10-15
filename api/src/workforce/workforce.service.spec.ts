@@ -21,7 +21,12 @@ describe('WorkforceService validation and attendance', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  it('rejects impossible calendar dates before querying attendance', async () => {\n    await expect(service.attendance(user, '2026-02-30')).rejects.toThrow(BadRequestException);\n    expect(db.query).not.toHaveBeenCalled();\n  });\n\n  it('rejects invalid punch type before opening a transaction', async () => {
+  it('rejects impossible calendar dates before querying attendance', async () => {
+    await expect(service.attendance(user, '2026-02-30')).rejects.toThrow(BadRequestException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid punch type before opening a transaction', async () => {
     await expect(service.punch(user, { employeeId: 'employee-a', punchType: 'break' })).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
   });
