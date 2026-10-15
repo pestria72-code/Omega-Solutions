@@ -18,50 +18,50 @@ import { Image3D } from "@/components/image-3d"
 const mainFeatures = [
   {
     icon: Package,
-    title: "Curated Component Library",
+    title: "Finance & Accounting",
     description:
-      "Hand-picked blocks and templates for quality and reliability.",
+      "Manage accounts, journals, payments, and financial reporting in one place.",
   },
   {
     icon: Crown,
-    title: "Free & Premium Options",
+    title: "Inventory & Warehousing",
     description:
-      "Start free, upgrade to premium collections when you need more.",
+      "Track stock movements, receipts, issues, reservations, and adjustments.",
   },
   {
     icon: Layout,
-    title: "Ready-to-Use Templates",
-    description: "Copy-paste components that just work out of the box.",
+    title: "People & Payroll",
+    description: "Support workforce processes and payroll workflows with controlled access.",
   },
   {
     icon: Zap,
-    title: "Regular Updates",
-    description: "New blocks and templates added weekly to keep you current.",
+    title: "Sales & Customer Operations",
+    description: "Keep customer-facing processes and operational records connected.",
   },
 ]
 
 const secondaryFeatures = [
   {
     icon: BarChart3,
-    title: "Multiple Frameworks",
+    title: "Role-Based Access",
     description:
-      "React, Next.js, and Vite compatibility for flexible development.",
+      "Give users access appropriate to their roles and responsibilities.",
   },
   {
     icon: Palette,
-    title: "Modern Tech Stack",
-    description: "Built with shadcn/ui, Tailwind CSS, and TypeScript.",
+    title: "Auditability",
+    description: "Keep important operational changes traceable.",
   },
   {
     icon: Users,
-    title: "Responsive Design",
-    description: "Mobile-first components for all screen sizes and devices.",
+    title: "Connected Workflows",
+    description: "Reduce duplicated work by connecting processes across modules.",
   },
   {
     icon: Database,
-    title: "Developer-Friendly",
+    title: "Tenant-Aware Workspace",
     description:
-      "Clean code, well-documented, easy integration and customization.",
+      "Keep each organization’s records separated through tenant-aware access controls.",
   },
 ]
 
@@ -72,15 +72,13 @@ export function FeaturesSection() {
         {/* Section Header */}
         <div className="mx-auto max-w-2xl text-center mb-16">
           <Badge variant="outline" className="mb-4">
-            Marketplace Features
+            ERP Capabilities
           </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">
-            Everything you need to build amazing web applications
+            Everything your business needs in one connected system
           </h2>
           <p className="text-lg text-muted-foreground">
-            Our marketplace provides curated blocks, templates, landing pages,
-            and admin dashboards to help you build professional applications
-            faster than ever.
+            Connect core business operations with shared data, clear permissions, and practical reporting across your organization.
           </p>
         </div>
 
@@ -97,12 +95,10 @@ export function FeaturesSection() {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4">
               <h3 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-                Components that accelerate development
+                Bring daily operations into one workspace
               </h3>
               <p className="text-muted-foreground text-base text-pretty">
-                Our curated marketplace offers premium blocks and templates
-                designed to save time and ensure consistency across your admin
-                projects.
+                Use connected workflows to reduce manual handoffs and improve visibility across finance, inventory, people, and operations.
               </p>
             </div>
 
@@ -133,15 +129,15 @@ export function FeaturesSection() {
             <div className="flex flex-col sm:flex-row gap-4 pe-4 pt-2">
               <Button size="lg" className="cursor-pointer">
                 <a
-                  href="https://shadcnstore.com/templates"
+                  href="#about"
                   className="flex items-center"
                 >
-                  Browse Templates
+                  Explore the ERP
                   <ArrowRight className="ms-2 size-4" aria-hidden="true" />
                 </a>
               </Button>
               <Button size="lg" variant="outline" className="cursor-pointer">
-                <a href="https://shadcnstore.com/blocks">View Components</a>
+                <a href="/sign-in">Sign in to continue</a>
               </Button>
             </div>
           </div>
@@ -153,12 +149,10 @@ export function FeaturesSection() {
           <div className="flex flex-col gap-6 order-2 lg:order-1">
             <div className="flex flex-col gap-4">
               <h3 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-                Built for modern development workflows
+                Designed for controlled business operations
               </h3>
               <p className="text-muted-foreground text-base text-pretty">
-                Every component follows best practices with TypeScript,
-                responsive design, and clean code architecture that integrates
-                seamlessly into your projects.
+                Omega Solutions is designed to bring teams into a shared operational workflow while maintaining access controls and tenant separation.
               </p>
             </div>
 
@@ -188,18 +182,18 @@ export function FeaturesSection() {
 
             <div className="flex flex-col sm:flex-row gap-4 pe-4 pt-2">
               <Button size="lg" className="cursor-pointer">
-                <a href="#" className="flex items-center">
-                  View Documentation
+                <a href="/sign-in" className="flex items-center">
+                  Open your workspace
                   <ArrowRight className="ms-2 size-4" aria-hidden="true" />
                 </a>
               </Button>
               <Button size="lg" variant="outline" className="cursor-pointer">
                 <a
-                  href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                  href="https://github.com/pestria72-code/Omega-Solutions"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  GitHub Repository
+                  Project repository
                 </a>
               </Button>
             </div>
