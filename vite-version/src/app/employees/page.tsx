@@ -1,5 +1,5 @@
 import * as React from "react";
-import { RefreshCw, UserPlus, Users } from "lucide-react";
+import { Loader2, RefreshCw, UserPlus, Users } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -35,7 +35,7 @@ export default function EmployeesPage(){
    <div className="grid gap-2"><Label>Job title</Label><Input value={form.jobTitle} onChange={e=>setForm({...form,jobTitle:e.target.value})}/></div>
    <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></div>
    <div className="grid gap-2"><Label>Hire date</Label><Input type="date" value={form.hireDate} onChange={e=>setForm({...form,hireDate:e.target.value})}/></div>
-   <div className="flex items-end"><Button type="submit" disabled={saving}>{saving?<LoadingSpinner size="sm"/>:<UserPlus className="mr-2 size-4"/>}{saving?"Saving…":"Add employee"}</Button></div>
+   <div className="flex items-end"><Button type="submit" disabled={saving}>{saving?<Loader2 className="mr-2 size-4 animate-spin"/>:<UserPlus className="mr-2 size-4"/>}{saving?"Saving…":"Add employee"}</Button></div>
    {formError&&<p role="alert" className="text-sm text-destructive sm:col-span-2 lg:col-span-3">{formError}</p>}
   </form></CardContent></Card>
   <Card><CardContent className="p-0">
