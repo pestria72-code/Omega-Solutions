@@ -55,7 +55,7 @@ export class AccountingService {
  }
  async trialBalance(user:AuthenticatedUser,asOfDate?:string){
   const {companyId}=await this.companyFor(user);
-  const validDate=(value:string)=>/^\\d{4}-\\d{2}-\\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
+  const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
   if(asOfDate&&!validDate(asOfDate))throw new BadRequestException('asOfDate must be a valid YYYY-MM-DD date.');
   await this.ensureDefaults(companyId);
   const result=await this.db.query<{id:string;code:string;name:string;account_type:string;normal_side:string;total_debits:string|number;total_credits:string|number;debit_balance:string|number;credit_balance:string|number}>(`SELECT a.id,a.code,a.name,a.account_type,a.normal_side,
