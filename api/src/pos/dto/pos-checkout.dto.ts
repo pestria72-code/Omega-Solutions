@@ -15,6 +15,7 @@ export class PosCheckoutPaymentDto {
 }
 
 export class PosCheckoutDto {
+  @IsUUID() requestId!: string;
   @IsUUID() shiftId!: string;
   @IsUUID() warehouseId!: string;
   @IsOptional() @IsUUID() customerId?: string;
