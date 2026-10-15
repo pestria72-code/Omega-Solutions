@@ -11,6 +11,7 @@ const DEFAULT_ACCOUNTS = [
  {code:'1020',name:'M-Pesa Clearing',type:'asset',side:'debit',system:'mpesa'},
  {code:'1100',name:'Accounts Receivable',type:'asset',side:'debit',system:'accounts_receivable'},
  {code:'1200',name:'Inventory',type:'asset',side:'debit',system:'inventory'},
+ {code:'1250',name:'Work in Progress',type:'asset',side:'debit',system:'work_in_progress'},
  {code:'1300',name:'Input VAT Recoverable',type:'asset',side:'debit',system:'input_tax'},
  {code:'2000',name:'Accounts Payable',type:'liability',side:'credit',system:'accounts_payable'},
  {code:'2100',name:'Output VAT Payable',type:'liability',side:'credit',system:'output_tax'},
