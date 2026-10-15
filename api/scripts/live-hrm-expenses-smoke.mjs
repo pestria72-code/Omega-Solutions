@@ -3,6 +3,7 @@ const stamp = Date.now();
 const email = `omega-hrm-e2e-${stamp}@example.com`;
 const password = `E2e-${crypto.randomUUID()}-9!`;
 const companyName = `Omega HRM E2E ${stamp}`;
+// Authenticated live regression for HRM, expenses, accounting, and CRM.
 const checks = [];
 async function req(method, path, body, token, expected = [200, 201]) {
   const response = await fetch(base + path, {
