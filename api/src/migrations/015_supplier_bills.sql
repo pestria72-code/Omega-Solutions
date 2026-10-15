@@ -1,4 +1,5 @@
 -- Supplier bills and accounts payable, company-scoped and linked optionally to purchase orders.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_order_items_id_company_unique ON purchase_order_items(id, company_id);
 CREATE TABLE IF NOT EXISTS supplier_bills (
  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
