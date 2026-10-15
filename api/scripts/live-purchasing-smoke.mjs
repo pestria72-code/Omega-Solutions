@@ -12,7 +12,10 @@ async function req(method,path,body,token,expected=[200,201]) {
 }
 function ok(v,m){if(!v)throw Error(m);checks.push(m)}
 try {
- const h=await req("GET","/health");ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
+ let h=null,lastHealthError=null;
+ for(let attempt=0;attempt<12;attempt++){try{h=await req("GET","/health");if(h.data?.status==="ok"&&h.data?.database==="connected")break;h=null}catch(e){lastHealthError=e}await new Promise(resolve=>setTimeout(resolve,5000))}
+ if(!h)throw Error(`API health/database did not recover: ${String(lastHealthError||"unexpected health response")}`);
+ ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
  const reg=(await req("POST","/auth/register",{email,password,fullName:"Omega E2E Runner",phone:"+254700000000",companyName},null,[201])).data;
  ok(!!reg.userId&&!!reg.companyId,"register temporary tenant");
  const login=(await req("POST","/auth/login",{email,password})).data;const token=login.accessToken;
@@ -32,12 +35,24 @@ try {
  ok(stockRows.some(x=>(x.product_id||x.productId)===product.id&&Number(x.quantity)===2),"stock ledger quantity after receipt");
  const bill=(await req("POST","/supplier-bills",{supplierId:supplier.id,purchaseOrderId:po.id,supplierInvoiceNumber:`SUP-${stamp}`,billDate:new Date().toISOString().slice(0,10),items:[{purchaseOrderItemId:line.id,description:line.product_name,quantity:2,unitCost:100,taxRate:16}]},token,[201])).data;
  ok(!!bill.id&&Number(bill.total)===232&&Number(bill.balance)===232,"supplier bill total/tax/balance");
+ const billJournals=(await req("GET","/accounting/journals",undefined,token)).data;
+ const billJournal=billJournals.find(x=>x.source_type==="supplier_bill"&&x.source_id===bill.id);
+ ok(!!billJournal&&Number(billJournal.total_debits)===232&&Number(billJournal.total_credits)===232,"supplier bill posts balanced journal entry");
  await req("POST","/supplier-bills",{supplierId:supplier.id,purchaseOrderId:po.id,items:[{purchaseOrderItemId:line.id,description:line.product_name,quantity:1,unitCost:100,taxRate:16}]},token,[400]);ok(true,"duplicate billing quantity rejected");
  const p1=(await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:100,method:"mpesa",reference:`E2E-PAY-${stamp}`},token,[201])).data;
  ok(p1.status==="partially_paid"&&Number(p1.balance)===132,"partial payment balance");
+ const paymentOneId=p1.payments?.[0]?.id;
+ const journalsAfterPayment=(await req("GET","/accounting/journals",undefined,token)).data;
+ const paymentJournal=journalsAfterPayment.find(x=>x.source_type==="supplier_bill_payment"&&x.source_id===paymentOneId);
+ ok(!!paymentJournal&&Number(paymentJournal.total_debits)===100&&Number(paymentJournal.total_credits)===100,"partial payment posts balanced journal entry");
  await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:133,method:"bank_transfer"},token,[400]);ok(true,"overpayment rejected");
  const p2=(await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:132,method:"bank_transfer",reference:`E2E-FINAL-${stamp}`},token,[201])).data;
  ok(p2.status==="paid"&&Number(p2.balance)===0,"bill fully paid");
+ const accounts=(await req("GET","/accounting/accounts",undefined,token)).data;
+ const apAccount=accounts.find(x=>x.system_code==="accounts_payable");
+ ok(!!apAccount&&Number(apAccount.balance)===0,"accounts payable ledger clears after full payment");
+ const finalJournals=(await req("GET","/accounting/journals",undefined,token)).data;
+ ok(finalJournals.filter(x=>["supplier_bill","supplier_bill_payment"].includes(x.source_type)).every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005),"all supplier bill/payment journal entries balance");
  const received=(await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:3}],reference:`E2E-FINAL-${stamp}`},token,[201])).data;
  ok(received.status==="received"&&Number(received.items?.[0]?.received_quantity)===5,"second receipt completes order");
  console.log(JSON.stringify({ok:true,email,userId:reg.userId,companyId:reg.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,checks},null,2));
