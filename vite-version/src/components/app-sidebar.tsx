@@ -26,6 +26,7 @@ import {
   Megaphone,
   UserRound,
   Headset,
+  Factory,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { NavMain } from "@/components/nav-main"
@@ -82,6 +83,7 @@ const navGroups = [
       { title: "Stock Levels", url: "/stock-levels", icon: Boxes },
       { title: "Warehouses", url: "/warehouses", icon: Building },
       { title: "Stock Movements", url: "/stock-movements", icon: ArrowLeftRight },
+      { title: "Manufacturing", url: "/manufacturing", icon: Factory },
     ],
   },
   {
