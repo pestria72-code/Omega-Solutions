@@ -10,12 +10,12 @@ import type { CreatePurchaseOrderDto, ReceivePurchaseOrderDto, UpdatePurchaseOrd
 @Injectable()
 export class PurchaseOrdersService {
   constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
-  private async postReceiptJournal(client: PoolClient, input: { companyId: string; userId: string; orderNumber: string; receiptValue: number }) {
+  private async postReceiptJournal(client: PoolClient, input: { companyId: string; userId: string; orderNumber: string; orderId: string; receiptValue: number }) {
     if (input.receiptValue <= 0) return;
     const year = new Date().getFullYear();
     const seq = await client.query<{ next_number: number }>(`INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1) ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1 RETURNING next_number`, [input.companyId, year]);
     const number = `JE-${year}-${String(seq.rows[0].next_number).padStart(6, '0')}`;
-    const entry = await client.query<{ id: string }>(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by) VALUES($1,$2,CURRENT_DATE,$3,'purchase_order_receipt',$4,'posted',NOW(),$5) RETURNING id`, [input.companyId, number, `Goods received for ${input.orderNumber}`, input.orderNumber, input.userId]);
+    const entry = await client.query<{ id: string }>(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by) VALUES($1,$2,CURRENT_DATE,$3,'purchase_order_receipt',$4,'posted',NOW(),$5) RETURNING id`, [input.companyId, number, `Goods received for ${input.orderNumber}`, input.orderId, input.userId]);
     const accounts = await client.query<{ id: string; system_code: string }>(`SELECT id,system_code FROM chart_of_accounts WHERE company_id=$1 AND system_code IN ('inventory','goods_received_not_invoiced') AND is_active=true`, [input.companyId]);
     const inventory = accounts.rows.find(a => a.system_code === 'inventory');
     const grni = accounts.rows.find(a => a.system_code === 'goods_received_not_invoiced');
@@ -97,7 +97,7 @@ export class PurchaseOrdersService {
         await client.query('UPDATE purchase_order_items SET received_quantity=received_quantity+$1 WHERE id=$2 AND company_id=$3',[r.quantity,line.id,m.companyId]);
         await client.query('UPDATE products SET stock_quantity=(SELECT COALESCE(SUM(quantity),0) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),updated_at=NOW() WHERE id=$2 AND company_id=$1',[m.companyId,line.product_id]);
       }
-      await this.postReceiptJournal(client, { companyId: m.companyId, userId: user.userId, orderNumber: po.order_number, receiptValue });
+      await this.postReceiptJournal(client, { companyId: m.companyId, userId: user.userId, orderNumber: po.order_number, orderId: po.id, receiptValue });
       const sums=await client.query<{ordered:string|number;received:string|number}>('SELECT COALESCE(SUM(quantity),0) ordered,COALESCE(SUM(received_quantity),0) received FROM purchase_order_items WHERE purchase_order_id=$1 AND company_id=$2',[id,m.companyId]);
       const done=Number(sums.rows[0].ordered)>0&&Number(sums.rows[0].received)+0.0000001>=Number(sums.rows[0].ordered);
       await client.query('UPDATE purchase_orders SET status=$1,updated_at=NOW() WHERE id=$2 AND company_id=$3',[done?'received':'partially_received',id,m.companyId]);
