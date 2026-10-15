@@ -2,7 +2,7 @@ import {
   Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service.js';
-import { CreateInvoiceDto, CreateInvoicePaymentDto, UpdateInvoiceStatusDto } from './dto/invoice.dto.js';
+import { CreateInvoiceDto, CreateInvoicePaymentDto, ReconcileInvoicePaymentDto, UpdateInvoiceStatusDto } from './dto/invoice.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
@@ -59,6 +59,17 @@ export class InvoicesController {
     @Param('paymentId') paymentId: string,
   ) {
     return this.invoices.confirmPayment(req.user, id, paymentId);
+  }
+
+  @Post(':id/payments/:paymentId/reconcile')
+  @RequirePermissions('payments:reconcile')
+  reconcilePayment(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @Body() dto: ReconcileInvoicePaymentDto,
+  ) {
+    return this.invoices.reconcilePayment(req.user, id, paymentId, dto.statementReference);
   }
 
   @Patch(':id/status')
