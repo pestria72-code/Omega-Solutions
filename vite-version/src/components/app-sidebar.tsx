@@ -98,6 +98,7 @@ const navGroups = [
     label: "People",
     items: [
       { title: "Employees", url: "/employees", icon: UserCircle },
+      { title: "Workforce", url: "/workforce", icon: ClipboardList },
       { title: "Payroll", url: "/payroll", icon: Banknote },
       { title: "Leave Management", url: "/leave-management", icon: CalendarDays },
     ],
