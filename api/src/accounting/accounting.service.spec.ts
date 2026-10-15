@@ -140,3 +140,32 @@ describe('AccountingService payables reconciliation', () => {
     expect(result.reconciled).toBe(false);
   });
 });
+
+
+describe('AccountingService trial balance',()=>{
+ const user:AuthenticatedUser={userId:'user-1',email:'owner@example.test',fullName:'Owner',companyId:'company-active',branchId:null,role:'owner',permissions:['accounting:read']};
+ let db:{query:ReturnType<typeof vi.fn>;transaction:ReturnType<typeof vi.fn>};
+ let memberships:{getMembership:ReturnType<typeof vi.fn>;getMembershipForCompany:ReturnType<typeof vi.fn>};
+ let service:AccountingService;
+ beforeEach(()=>{
+  db={query:vi.fn().mockResolvedValue({rows:[
+   {id:'cash',code:'1000',name:'Cash',account_type:'asset',normal_side:'debit',total_debits:'100',total_credits:'20',debit_balance:'80',credit_balance:'0'},
+   {id:'sales',code:'4000',name:'Sales',account_type:'income',normal_side:'credit',total_debits:'0',total_credits:'80',debit_balance:'0',credit_balance:'80'},
+  ],rowCount:2}),transaction:vi.fn()};
+  memberships={getMembership:vi.fn(),getMembershipForCompany:vi.fn().mockResolvedValue({companyId:'company-active',branchId:null,role:'owner'})};
+  service=new AccountingService(db as unknown as DatabaseService,memberships as unknown as MembershipsService,{log:vi.fn()} as unknown as AuditService);
+ });
+ it('returns a balanced trial balance for the active company and selected date range',async()=>{
+  const result=await service.trialBalance(user,'2026-01-01','2026-10-15');
+  expect(result.balanced).toBe(true);
+  expect(result.totalDebits).toBe(80);
+  expect(result.totalCredits).toBe(80);
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining("j.status='posted'"),['company-active','2026-01-01','2026-10-15']);
+  expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-1','company-active');
+ });
+ it('rejects invalid date ranges before querying the ledger',async()=>{
+  await expect(service.trialBalance(user,'2026-10-20','2026-10-15')).rejects.toThrow('fromDate must be on or before toDate.');
+  await expect(service.trialBalance(user,'2026-02-30')).rejects.toThrow('fromDate must be a valid YYYY-MM-DD date.');
+  expect(db.query).not.toHaveBeenCalled();
+ });
+});
