@@ -16,6 +16,35 @@ describe('WorkforceService validation and attendance', () => {
     service = new WorkforceService(db as never, memberships as never, audit as never);
   });
 
+  it('scopes client site reads to the authenticated company', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await service.sites(user);
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE company_id=$1'),
+      ['company-a'],
+    );
+  });
+
+  it('scopes assignment reads and employee joins to the authenticated company', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await service.assignments(user);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('WHERE a.company_id=$1');
+    expect(sql).toContain('e.company_id=a.company_id');
+    expect(sql).toContain('s.company_id=a.company_id');
+    expect(params).toEqual(['company-a']);
+  });
+
+  it('scopes attendance reads to the authenticated company and uses an inclusive end date', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await service.attendance(user, '2026-10-01', '2026-10-15');
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('WHERE a.company_id=$1');
+    expect(sql).toContain('a.punched_at >= $2::date');
+    expect(sql).toContain("a.punched_at < ($3::date + INTERVAL \\'1 day\\')");
+    expect(params).toEqual(['company-a', '2026-10-01', '2026-10-15']);
+  });
+
   it('rejects invalid date filters before querying attendance', async () => {
     await expect(service.attendance(user, 'not-a-date')).rejects.toThrow(BadRequestException);
     expect(db.query).not.toHaveBeenCalled();
