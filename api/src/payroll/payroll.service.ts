@@ -113,4 +113,78 @@ export class PayrollService {
    return updated.rows[0];
   });
  }
+ async postRun(user:AuthenticatedUser,id:string){
+  const membership=await this.membershipFor(user);
+  return this.db.transaction(async client=>{
+   const runResult=await client.query('SELECT * FROM payroll_runs WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,membership.companyId]);
+   if(!runResult.rows.length)throw new NotFoundException('Payroll run not found in this company.');
+   const run=runResult.rows[0];
+   if(run.status!=='approved')throw new ConflictException('Only approved payroll runs can be posted. A posted or draft run cannot be posted again.');
+   const itemsResult=await client.query('SELECT * FROM payroll_items WHERE payroll_run_id=$1 AND company_id=$2 ORDER BY employee_number FOR UPDATE',[id,membership.companyId]);
+   const items=itemsResult.rows;
+   if(!items.length)throw new BadRequestException('Payroll run has no employee items.');
+   const totals=items.reduce((t,x)=>({
+    gross:t.gross+Number(x.gross_cash_pay),
+    employerNssf:t.employerNssf+Number(x.nssf_employer),
+    employerHousing:t.employerHousing+Number(x.housing_levy_employer),
+    net:t.net+Number(x.net_pay),
+    paye:t.paye+Number(x.paye),
+    shif:t.shif+Number(x.shif_employee),
+    nssf:t.nssf+Number(x.nssf_employee)+Number(x.nssf_employer),
+    housing:t.housing+Number(x.housing_levy_employee)+Number(x.housing_levy_employer),
+    pension:t.pension+Number(x.pension_employee),
+    prmf:t.prmf+Number(x.prmf_employee),
+   }),{gross:0,employerNssf:0,employerHousing:0,net:0,paye:0,shif:0,nssf:0,housing:0,pension:0,prmf:0});
+   const money2=(n:number)=>Math.round((n+Number.EPSILON)*100)/100;
+   const accounts=[
+    ['5200','Salaries and Wages','expense','debit','payroll_wages'],
+    ['5210','Employer Payroll Contributions','expense','debit','payroll_employer_contributions'],
+    ['2200','Net Payroll Payable','liability','credit','payroll_net_payable'],
+    ['2210','PAYE Payable','liability','credit','payroll_paye_payable'],
+    ['2220','SHIF Payable','liability','credit','payroll_shif_payable'],
+    ['2230','NSSF Payable','liability','credit','payroll_nssf_payable'],
+    ['2240','Housing Levy Payable','liability','credit','payroll_housing_levy_payable'],
+    ['2250','Employee Pension Payable','liability','credit','payroll_pension_payable'],
+    ['2260','Post-Retirement Medical Payable','liability','credit','payroll_prmf_payable'],
+   ] as const;
+   for(const a of accounts)await client.query(`INSERT INTO chart_of_accounts(company_id,code,name,account_type,normal_side,system_code) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(company_id,code) DO NOTHING`,[membership.companyId,...a]);
+   const accountRows=await client.query('SELECT id,system_code FROM chart_of_accounts WHERE company_id=$1 AND system_code=ANY($2::text[]) AND is_active=true',[membership.companyId,accounts.map(a=>a[4])]);
+   const accountMap=new Map(accountRows.rows.map(a=>[a.system_code,a.id]));
+   for(const a of accounts)if(!accountMap.has(a[4]))throw new BadRequestException(`Payroll account ${a[4]} is missing or inactive.`);
+   const periodEnd=String(run.period_end).slice(0,10);
+   const year=Number(periodEnd.slice(0,4));
+   const seq=await client.query(`INSERT INTO payroll_journal_sequences(company_id,entry_year,next_number) VALUES($1,$2,2)
+    ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=payroll_journal_sequences.next_number+1
+    RETURNING next_number-1 AS allocated_number`,[membership.companyId,year]);
+   const entryNumber=`PAY-${year}-${String(seq.rows[0].allocated_number).padStart(6,'0')}`;
+   const debitWages=money2(totals.gross);
+   const debitEmployer=money2(totals.employerNssf+totals.employerHousing);
+   const lines=[
+    {system:'payroll_wages',description:'Gross cash earnings',debit:debitWages,credit:0},
+    {system:'payroll_employer_contributions',description:'Employer NSSF and housing levy',debit:debitEmployer,credit:0},
+    {system:'payroll_net_payable',description:'Net employee pay',debit:0,credit:money2(totals.net)},
+    {system:'payroll_paye_payable',description:'PAYE withheld',debit:0,credit:money2(totals.paye)},
+    {system:'payroll_shif_payable',description:'SHIF withheld',debit:0,credit:money2(totals.shif)},
+    {system:'payroll_nssf_payable',description:'Employee and employer NSSF',debit:0,credit:money2(totals.nssf)},
+    {system:'payroll_housing_levy_payable',description:'Employee and employer housing levy',debit:0,credit:money2(totals.housing)},
+    {system:'payroll_pension_payable',description:'Employee pension contributions',debit:0,credit:money2(totals.pension)},
+    {system:'payroll_prmf_payable',description:'Post-retirement medical contributions',debit:0,credit:money2(totals.prmf)},
+   ].filter(line=>line.debit>0||line.credit>0);
+   const totalDebits=money2(lines.reduce((s,l)=>s+l.debit,0));
+   const totalCredits=money2(lines.reduce((s,l)=>s+l.credit,0));
+   if(Math.abs(totalDebits-totalCredits)>0.01)throw new BadRequestException(`Payroll journal is not balanced (debits ${totalDebits}, credits ${totalCredits}).`);
+   const journal=await client.query(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+    VALUES($1,$2,$3::date,$4,'payroll',$5,'posted',NOW(),$6) RETURNING id,entry_number,entry_date,status,posted_at`,
+    [membership.companyId,entryNumber,periodEnd,`Payroll for ${String(run.period_start).slice(0,10)} to ${periodEnd}`,id,user.userId]);
+   for(const line of lines)await client.query(`INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit)
+    VALUES($1,$2,$3,$4,$5,$6)`,[membership.companyId,journal.rows[0].id,accountMap.get(line.system),line.description,line.debit,line.credit]);
+   const updated=await client.query(`UPDATE payroll_runs SET status='posted',journal_entry_id=$3,posted_by=$4,posted_at=NOW(),updated_at=NOW()
+    WHERE id=$1 AND company_id=$2 AND status='approved'
+    RETURNING id,company_id,period_start,period_end,status,employee_count,gross_total,employee_deductions_total,net_pay_total,employer_cost_total,journal_entry_id,posted_at`,
+    [id,membership.companyId,journal.rows[0].id,user.userId]);
+   if(!updated.rows.length)throw new ConflictException('Payroll run changed state before posting.');
+   return {...updated.rows[0],journal:journal.rows[0],debits:totalDebits,credits:totalCredits,balanced:true};
+  });
+ }
+
 }

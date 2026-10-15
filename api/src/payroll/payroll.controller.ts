@@ -19,6 +19,8 @@ export class PayrollController {
  getEmployeePaySettings(@Req() req:{user:AuthenticatedUser},@Param('employeeId',ParseUUIDPipe) employeeId:string){return this.payroll.getEmployeePaySettings(req.user,employeeId);}
  @Post('runs') @RequirePermissions('payroll:write')
  createRun(@Req() req:{user:AuthenticatedUser},@Body() dto:{periodStart:string;periodEnd:string}){return this.payroll.createRun(req.user,dto);}
+ @Post('runs/:id/post') @RequirePermissions('payroll:approve')
+ postRun(@Req() req:{user:AuthenticatedUser},@Param('id',ParseUUIDPipe) id:string){return this.payroll.postRun(req.user,id);}
  @Patch('runs/:id/approve') @RequirePermissions('payroll:approve')
  approveRun(@Req() req:{user:AuthenticatedUser},@Param('id',ParseUUIDPipe) id:string){return this.payroll.approveRun(req.user,id);}
 }
