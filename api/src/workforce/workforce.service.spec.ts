@@ -60,6 +60,27 @@ describe('WorkforceService validation and attendance', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
+  it('rejects monthly import totals that do not reconcile before matching employees', async () => {
+    await expect(service.previewMonthlyAttendance(user, {
+      period: '2026-09',
+      rows: [{ nationalId: '12345678', scheduledDays: 22, presentDays: 20, absentDays: 1, leaveDays: 0, unresolvedDays: 0, restDays: 8 }],
+    })).rejects.toThrow(BadRequestException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('matches monthly attendance by national ID only inside the authenticated company and masks it in preview', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 'employee-a', first_name: 'Ada', last_name: 'Worker', employee_number: 'E-1' }] });
+    const result = await service.previewMonthlyAttendance(user, {
+      period: '2026-09', sourceType: 'csv',
+      rows: [{ nationalId: '12 345-678', scheduledDays: 22, presentDays: 20, absentDays: 1, leaveDays: 1, unresolvedDays: 0, restDays: 8 }],
+    });
+    expect(db.query.mock.calls[0][0]).toContain('WHERE company_id=$1');
+    expect(db.query.mock.calls[0][1]).toEqual(['company-a', '12345678']);
+    expect(result.readyToImport).toBe(true);
+    expect(result.rows[0].nationalIdMasked).toBe('••••5678');
+    expect(JSON.stringify(result)).not.toContain('12345678');
+  });
+
   it('rejects invalid punch type before opening a transaction', async () => {
     await expect(service.punch(user, { employeeId: 'employee-a', punchType: 'break' })).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();

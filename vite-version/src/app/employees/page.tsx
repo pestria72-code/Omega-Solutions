@@ -11,7 +11,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { api } from "@/lib/api-client";
 
 type Employee={id:string;employee_number:string;first_name:string;last_name:string;work_email:string|null;phone:string|null;job_title:string|null;department:string|null;employment_status:string;hire_date:string|null;branch_name?:string|null};
-const blank={employeeNumber:"",firstName:"",lastName:"",workEmail:"",phone:"",jobTitle:"",department:"",hireDate:""};
+const blank={employeeNumber:"",nationalId:"",firstName:"",lastName:"",workEmail:"",phone:"",jobTitle:"",department:"",hireDate:""};
 const message=(e:unknown)=>e&&typeof e==="object"&&"message" in e?String((e as {message:unknown}).message):"The request failed. Please try again.";
 
 export default function EmployeesPage(){
@@ -23,11 +23,12 @@ export default function EmployeesPage(){
  const [form,setForm]=React.useState(blank);
  const load=React.useCallback(async()=>{setLoading(true);setError(null);try{setRows(await api.get<Employee[]>("/employees"));}catch(e){setError(message(e));}finally{setLoading(false);}},[]);
  React.useEffect(()=>{void load();},[load]);
- async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setSaving(true);setFormError(null);try{await api.post("/employees",{...form,workEmail:form.workEmail.trim()||undefined,phone:form.phone.trim()||undefined,jobTitle:form.jobTitle.trim()||undefined,department:form.department.trim()||undefined,hireDate:form.hireDate||undefined});setForm(blank);await load();}catch(e){setFormError(message(e));}finally{setSaving(false);}}
+ async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setSaving(true);setFormError(null);try{await api.post("/employees",{...form,nationalId:form.nationalId.trim()||undefined,workEmail:form.workEmail.trim()||undefined,phone:form.phone.trim()||undefined,jobTitle:form.jobTitle.trim()||undefined,department:form.department.trim()||undefined,hireDate:form.hireDate||undefined});setForm(blank);await load();}catch(e){setFormError(message(e));}finally{setSaving(false);}}
  return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
   <PageHeader title="Employees" description="Manage employee records for the active company." />
   <Card><CardHeader><CardTitle className="text-base">Add employee</CardTitle></CardHeader><CardContent><form onSubmit={submit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
    <div className="grid gap-2"><Label>Employee number *</Label><Input required maxLength={50} value={form.employeeNumber} onChange={e=>setForm({...form,employeeNumber:e.target.value})}/></div>
+   <div className="grid gap-2"><Label>National ID number</Label><Input inputMode="numeric" maxLength={32} value={form.nationalId} onChange={e=>setForm({...form,nationalId:e.target.value})} placeholder="Used to match attendance checklists"/></div>
    <div className="grid gap-2"><Label>First name *</Label><Input required value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})}/></div>
    <div className="grid gap-2"><Label>Last name *</Label><Input required value={form.lastName} onChange={e=>setForm({...form,lastName:e.target.value})}/></div>
    <div className="grid gap-2"><Label>Work email</Label><Input type="email" value={form.workEmail} onChange={e=>setForm({...form,workEmail:e.target.value})}/></div>

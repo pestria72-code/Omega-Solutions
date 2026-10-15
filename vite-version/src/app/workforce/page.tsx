@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Loader2, RefreshCw, MapPin, ClipboardList, Clock3 } from "lucide-react";
+import { Loader2, RefreshCw, MapPin, ClipboardList, Clock3, Upload, FileCheck2 } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ type Employee = { id: string; employee_number: string; first_name: string; last_
 type Site = { id: string; site_code: string; site_name: string; client_name: string; address: string | null; is_active: boolean };
 type Assignment = { id: string; employee_id: string; employee_number: string; first_name: string; last_name: string; site_name: string; client_name: string; assignment_title: string | null; pay_basis: string; pay_rate: string | number; currency: string; start_date: string; end_date: string | null; status: string };
 type Attendance = { id: string; employee_id: string; employee_number: string; first_name: string; last_name: string; punch_type: "in" | "out"; punched_at: string; site_name: string | null; client_name: string | null };
+type MonthlyPreview = { period: string; totalRows: number; matchedRows: number; issueRows: number; readyToImport: boolean; rows: { rowNumber: number; employeeName: string | null; nationalIdMasked: string; presentDays: number; absentDays: number; leaveDays: number; unresolvedDays: number; issue: string | null }[] };
+type MonthlyImport = { id: string; period_start: string; status: "draft" | "approved"; item_count: number; present_days_total: number; absent_days_total: number; leave_days_total: number; unresolved_days_total: number; created_at: string };
 const errorMessage = (e: unknown) => e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "The request failed. Please try again.";
 const fieldClass = "h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -35,6 +37,14 @@ export default function WorkforcePage() {
   const [savingTransfer, setSavingTransfer] = React.useState(false);
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
+  const [importPeriod, setImportPeriod] = React.useState(new Date().toISOString().slice(0, 7));
+  const [importCsv, setImportCsv] = React.useState("");
+  const [importFileName, setImportFileName] = React.useState("");
+  const [importPreview, setImportPreview] = React.useState<MonthlyPreview | null>(null);
+  const [monthlyImports, setMonthlyImports] = React.useState<MonthlyImport[]>([]);
+  const [importBusy, setImportBusy] = React.useState(false);
+  const [importError, setImportError] = React.useState<string | null>(null);
+  const [importNotice, setImportNotice] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -59,6 +69,78 @@ export default function WorkforcePage() {
   }, [from, to]);
 
   React.useEffect(() => { void load(); }, [load]);
+
+  const loadMonthlyImports = React.useCallback(async () => {
+    try { setMonthlyImports(await api.get<MonthlyImport[]>(`/attendance/monthly-imports?period=${encodeURIComponent(importPeriod)}`)); }
+    catch (e) { setImportError(errorMessage(e)); }
+  }, [importPeriod]);
+  React.useEffect(() => { void loadMonthlyImports(); }, [loadMonthlyImports]);
+
+  function parseChecklistCsv(text: string) {
+    const records: string[][] = [];
+    let row: string[] = [], cell = "", quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"' && quoted && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (ch === '"') quoted = !quoted;
+      else if (ch === "," && !quoted) { row.push(cell.trim()); cell = ""; }
+      else if ((ch === "\\n" || ch === "\\r") && !quoted) {
+        if (ch === "\\r" && text[i + 1] === "\\n") i++;
+        row.push(cell.trim()); if (row.some(value => value !== "")) records.push(row);
+        row = []; cell = "";
+      } else cell += ch;
+    }
+    row.push(cell.trim()); if (row.some(value => value !== "")) records.push(row);
+    if (records.length < 2) throw new Error("The checklist needs a header row and at least one worker row.");
+    const normalizeHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const headers = records[0].map(normalizeHeader);
+    const column = (...names: string[]) => headers.findIndex(h => names.includes(h));
+    const idCol = column("nationalid", "idno", "idnumber", "nationalidnumber");
+    const scheduledCol = column("scheduleddays", "scheduled", "workdays");
+    const presentCol = column("presentdays", "present");
+    const absentCol = column("absentdays", "absent");
+    const leaveCol = column("leavedays", "leave");
+    const restCol = column("restdays", "restday", "rest");
+    const unresolvedCol = column("unresolveddays", "unresolved", "pendingdays");
+    const siteCol = column("sitecode", "site");
+    const notesCol = column("notes", "remarks", "comment");
+    if ([idCol, scheduledCol, presentCol, absentCol, leaveCol].some(i => i < 0)) throw new Error("Required columns: nationalId, scheduledDays, presentDays, absentDays and leaveDays. Optional: siteCode, restDays, unresolvedDays, notes.");
+    return records.slice(1).map(cells => ({
+      nationalId: cells[idCol] ?? "", scheduledDays: Number(cells[scheduledCol] || 0),
+      presentDays: Number(cells[presentCol] || 0), absentDays: Number(cells[absentCol] || 0),
+      leaveDays: Number(cells[leaveCol] || 0), restDays: restCol >= 0 ? Number(cells[restCol] || 0) : 0,
+      unresolvedDays: unresolvedCol >= 0 ? Number(cells[unresolvedCol] || 0) : 0,
+      siteCode: siteCol >= 0 ? cells[siteCol] || undefined : undefined,
+      notes: notesCol >= 0 ? cells[notesCol] || undefined : undefined,
+    }));
+  }
+
+  async function previewMonthlyImport() {
+    setImportBusy(true); setImportError(null); setImportNotice(null); setImportPreview(null);
+    try {
+      const rows = parseChecklistCsv(importCsv);
+      setImportPreview(await api.post<MonthlyPreview>("/attendance/monthly-imports/preview", { period: importPeriod, sourceType: "csv", sourceFilename: importFileName || undefined, rows }));
+    } catch (e) { setImportError(errorMessage(e)); } finally { setImportBusy(false); }
+  }
+
+  async function saveMonthlyImport() {
+    if (!importPreview?.readyToImport) return;
+    setImportBusy(true); setImportError(null); setImportNotice(null);
+    try {
+      const rows = parseChecklistCsv(importCsv);
+      await api.post("/attendance/monthly-imports", { period: importPeriod, sourceType: "csv", sourceFilename: importFileName || undefined, rows });
+      setImportNotice("Monthly checklist imported as a draft. Review and approve it below.");
+      setImportCsv(""); setImportFileName(""); setImportPreview(null); await loadMonthlyImports();
+    } catch (e) { setImportError(errorMessage(e)); } finally { setImportBusy(false); }
+  }
+
+  async function approveMonthlyImport(id: string) {
+    setImportBusy(true); setImportError(null); setImportNotice(null);
+    try {
+      await api.post(`/attendance/monthly-imports/${id}/approve`);
+      setImportNotice("Monthly attendance register approved."); await loadMonthlyImports();
+    } catch (e) { setImportError(errorMessage(e)); } finally { setImportBusy(false); }
+  }
 
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setSavingSite(true); setFormError(null);
@@ -152,6 +234,23 @@ export default function WorkforcePage() {
           </div>
         </CardContent></Card>
       </div>
+      <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileCheck2 className="size-4" />Monthly attendance checklist</CardTitle></CardHeader><CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">HR imports the monthly checklist using workers' national ID numbers. Export Excel to CSV first. For paper checklists, transcribe the monthly totals into this same template. Automated scan/OCR extraction is a follow-up step.</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-1.5"><Label>Attendance month</Label><Input type="month" value={importPeriod} onChange={e => { setImportPeriod(e.target.value); setImportPreview(null); }} /></div>
+          <div className="grid gap-1.5 sm:col-span-2"><Label>CSV checklist file</Label><Input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={async e => { const file=e.target.files?.[0]; if(!file) return; setImportFileName(file.name); setImportCsv(await file.text()); setImportPreview(null); setImportError(null); }} /></div>
+        </div>
+        <div className="grid gap-1.5"><Label>Checklist CSV data</Label><textarea className="min-h-36 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" value={importCsv} onChange={e => { setImportCsv(e.target.value); setImportPreview(null); }} placeholder={"nationalId,siteCode,scheduledDays,presentDays,absentDays,leaveDays,restDays,unresolvedDays,notes\n12345678,SITE-01,22,20,1,1,8,0,"} /></div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { const blob=new Blob(["nationalId,siteCode,scheduledDays,presentDays,absentDays,leaveDays,restDays,unresolvedDays,notes\\n"],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="omega-monthly-attendance-template.csv"; a.click(); URL.revokeObjectURL(url); }}>Download CSV template</Button><Button onClick={() => void previewMonthlyImport()} disabled={importBusy || !importCsv.trim()}>{importBusy && <Loader2 className="mr-2 size-4 animate-spin" />}<Upload className="mr-2 size-4" />Preview checklist</Button></div>
+        {importError && <p role="alert" className="text-sm text-destructive">{importError}</p>}
+        {importNotice && <p role="status" className="text-sm text-emerald-700">{importNotice}</p>}
+        {importPreview && <div className="space-y-3 rounded-lg border p-3">
+          <div className="flex flex-wrap items-center gap-3 text-sm"><span>Rows: <strong>{importPreview.totalRows}</strong></span><span>Matched: <strong>{importPreview.matchedRows}</strong></span><span>Issues: <strong>{importPreview.issueRows}</strong></span><span className={importPreview.readyToImport?"text-emerald-700":"text-destructive"}>{importPreview.readyToImport?"Ready to import":"Resolve issues before importing"}</span></div>
+          <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/40 text-left"><th className="p-2">Row</th><th className="p-2">Matched worker</th><th className="p-2">ID</th><th className="p-2">Present</th><th className="p-2">Absent</th><th className="p-2">Issue</th></tr></thead><tbody>{importPreview.rows.map(row=><tr key={row.rowNumber} className="border-b"><td className="p-2">{row.rowNumber}</td><td className="p-2">{row.employeeName||"Unmatched"}</td><td className="p-2">{row.nationalIdMasked}</td><td className="p-2">{row.presentDays}</td><td className="p-2">{row.absentDays}</td><td className="p-2 text-destructive">{row.issue||"—"}</td></tr>)}</tbody></table></div>
+          <Button onClick={() => void saveMonthlyImport()} disabled={importBusy || !importPreview.readyToImport}>{importBusy && <Loader2 className="mr-2 size-4 animate-spin" />}Import as draft</Button>
+        </div>}
+        <div className="space-y-2"><h3 className="text-sm font-semibold">Imported monthly registers</h3>{monthlyImports.length===0?<p className="text-sm text-muted-foreground">No imported attendance registers for this month.</p>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/40 text-left"><th className="p-2">Month</th><th className="p-2">Workers</th><th className="p-2">Present</th><th className="p-2">Absent</th><th className="p-2">Unresolved</th><th className="p-2">Status</th><th className="p-2">Action</th></tr></thead><tbody>{monthlyImports.map(item=><tr key={item.id} className="border-b"><td className="p-2">{String(item.period_start).slice(0,7)}</td><td className="p-2">{item.item_count}</td><td className="p-2">{item.present_days_total}</td><td className="p-2">{item.absent_days_total}</td><td className="p-2">{item.unresolved_days_total}</td><td className="p-2 capitalize">{item.status}</td><td className="p-2">{item.status==="draft"?<Button size="sm" variant="outline" onClick={()=>void approveMonthlyImport(item.id)} disabled={importBusy}>Approve</Button>:"Approved"}</td></tr>)}</tbody></table></div>}</div>
+      </CardContent></Card>
       <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock3 className="size-4" />Attendance</CardTitle></CardHeader><CardContent>
         <form onSubmit={recordPunch} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="grid gap-1.5"><Label>Employee *</Label><select required className={fieldClass} value={punchForm.employeeId} onChange={e => setPunchForm({ ...punchForm, employeeId: e.target.value })}><option value="">Select employee</option>{activeEmployees.map(e => <option key={e.id} value={e.id}>{e.employee_number} · {e.first_name} {e.last_name}</option>)}</select></div>

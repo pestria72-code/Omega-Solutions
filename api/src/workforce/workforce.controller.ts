@@ -30,6 +30,22 @@ export class WorkforceController {
   @RequirePermissions('assignments:write')
   transfer(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseUUIDPipe) id: string, @Body() dto: Record<string, unknown>) { return this.workforce.transfer(req.user, id, dto); }
 
+  @Post('attendance/monthly-imports/preview')
+  @RequirePermissions('attendance:write')
+  previewMonthlyImport(@Req() req: { user: AuthenticatedUser }, @Body() dto: Record<string, unknown>) { return this.workforce.previewMonthlyAttendance(req.user, dto); }
+
+  @Post('attendance/monthly-imports')
+  @RequirePermissions('attendance:write')
+  createMonthlyImport(@Req() req: { user: AuthenticatedUser }, @Body() dto: Record<string, unknown>) { return this.workforce.createMonthlyAttendanceImport(req.user, dto); }
+
+  @Get('attendance/monthly-imports')
+  @RequirePermissions('attendance:read')
+  listMonthlyImports(@Req() req: { user: AuthenticatedUser }, @Query('period') period?: string) { return this.workforce.monthlyAttendanceImports(req.user, period); }
+
+  @Post('attendance/monthly-imports/:id/approve')
+  @RequirePermissions('attendance:write')
+  approveMonthlyImport(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseUUIDPipe) id: string) { return this.workforce.approveMonthlyAttendanceImport(req.user, id); }
+
   @Get('attendance')
   @RequirePermissions('attendance:read')
   listAttendance(@Req() req: { user: AuthenticatedUser }, @Query('from') from?: string, @Query('to') to?: string, @Query('employeeId') employeeId?: string) { return this.workforce.attendance(req.user, from, to, employeeId); }

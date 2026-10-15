@@ -23,6 +23,8 @@ export class EmployeesService {
       const branch=await this.db.query('SELECT id FROM branches WHERE id=$1 AND company_id=$2 AND is_active=true',[dto.branchId,membership.companyId]);
       if(!branch.rows.length) throw new BadRequestException('The branch must be active and belong to this company.');
     }
+    const nationalId=dto.nationalId?.trim().replace(/[^0-9]/g,'')||null;
+    if(nationalId && !/^\\d{5,12}$/.test(nationalId)) throw new BadRequestException('National ID must contain 5 to 12 digits.');
     try {
       const result=await this.db.query(`INSERT INTO employees(company_id,branch_id,employee_number,first_name,last_name,work_email,phone,job_title,department,hire_date,created_by)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11)

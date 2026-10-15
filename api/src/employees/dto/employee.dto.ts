@@ -2,6 +2,7 @@ import { IsDateString, IsEmail, IsIn, IsOptional, IsString, IsUUID, MaxLength, M
 
 export class CreateEmployeeDto {
   @IsString() @MinLength(1) @MaxLength(50) employeeNumber!: string;
+  @IsOptional() @IsString() @MaxLength(32) nationalId?: string;
   @IsString() @MinLength(1) @MaxLength(100) firstName!: string;
   @IsString() @MinLength(1) @MaxLength(100) lastName!: string;
   @IsOptional() @IsEmail() @MaxLength(320) workEmail?: string;
