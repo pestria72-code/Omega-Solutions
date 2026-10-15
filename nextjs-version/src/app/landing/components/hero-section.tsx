@@ -25,26 +25,24 @@ export function HeroSection() {
           <div className="mb-8 flex justify-center">
             <Badge variant="outline" className="px-4 py-2 border-foreground">
               <Star className="fill-current" />
-              New: Premium Template Collection
+              One connected platform for your business
               <ArrowRight />
             </Badge>
           </div>
 
           {/* Main Headline */}
           <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-            Build Better
+            Run Your Business
             <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               {" "}
-              Web Applications{" "}
+              with Confidence{" "}
             </span>
-            with Ready-Made Components
+            
           </h1>
 
           {/* Subheading */}
           <p className="mx-auto mb-10 max-w-2xl text-lg text-muted-foreground sm:text-xl">
-            Accelerate your development with our curated collection of blocks,
-            templates, landing pages, and admin dashboards. From free components
-            to complete solutions, built with shadcn/ui.
+            Bring finance, inventory, sales, payroll, workforce, and operations together in one ERP. Give your team clearer visibility, stronger controls, and a single place to work.
           </p>
 
           {/* CTA Buttons */}
@@ -53,9 +51,9 @@ export function HeroSection() {
               size="lg"
               className="text-base cursor-pointer"
               nativeButton={false}
-              render={<Link href="/auth/sign-up" />}
+              render={<Link href="/auth/sign-in" />}
             >
-              Get Started Free
+              Open Your Workspace
               <ArrowRight data-icon="inline-end" />
             </Button>
             <Button
@@ -63,10 +61,10 @@ export function HeroSection() {
               size="lg"
               className="text-base cursor-pointer"
               nativeButton={false}
-              render={<a href="#" />}
+              render={<a href="#features" />}
             >
               <Play data-icon="inline-start" />
-              Watch Demo
+              Explore Features
             </Button>
           </div>
         </div>
@@ -81,7 +79,7 @@ export function HeroSection() {
               {/* Light mode dashboard image */}
               <Image
                 src="/dashboard-light.png"
-                alt="Dashboard Preview - Light Mode"
+                alt="Omega Solutions ERP workspace preview"
                 width={1200}
                 height={800}
                 className="w-full rounded-xl object-cover block dark:hidden"
@@ -91,7 +89,7 @@ export function HeroSection() {
               {/* Dark mode dashboard image */}
               <Image
                 src="/dashboard-dark.png"
-                alt="Dashboard Preview - Dark Mode"
+                alt="Omega Solutions ERP workspace preview in dark mode"
                 width={1200}
                 height={800}
                 className="w-full rounded-xl object-cover hidden dark:block"
@@ -107,7 +105,7 @@ export function HeroSection() {
                   size="lg"
                   className="rounded-full size-16 p-0 cursor-pointer hover:scale-105 transition-transform"
                   nativeButton={false}
-                  render={<a href="#" aria-label="Watch demo video" />}
+                  render={<a href="#features" aria-label="Explore ERP features" />}
                 >
                   <Play className="size-6 fill-current" />
                 </Button>
