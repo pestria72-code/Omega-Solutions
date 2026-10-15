@@ -1,0 +1,27 @@
+name: Authenticated purchasing live smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - development
+    paths:
+      - .github/workflows/live-purchasing-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  live-purchasing-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout development
+        uses: actions/checkout@v4
+        with:
+          ref: development
+
+      - name: Verify live authenticated purchasing workflow
+        env:
+          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+        run: node api/scripts/live-purchasing-smoke.mjs
