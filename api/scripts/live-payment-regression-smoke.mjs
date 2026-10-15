@@ -70,6 +70,16 @@ async function main() {
   assert(receivables.reconciled === true && Math.abs(Number(receivables.customerInvoicesBalance) - 600) < 0.005, "receivables control account reconciles to outstanding invoices");
   const trialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(trialBalance.balanced === true && Math.abs(Number(trialBalance.variance)) <= 0.01, "trial balance is balanced");
+  const supplier = await request("POST", "/suppliers", { name: `Payment Regression Supplier ${stamp}`, email: `supplier-${stamp}@example.com`, county: "Nakuru" }, a.token, [201]);
+  assert(!!supplier.id, "created test supplier");
+  const bill = await request("POST", "/supplier-bills", { supplierId: supplier.id, supplierInvoiceNumber: `SUP-${stamp}`, billDate: new Date().toISOString().slice(0, 10), dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10), items: [{ description: "Regression operating expense", quantity: 1, unitCost: 1000, taxRate: 0 }] }, a.token, [201]);
+  assert(!!bill.id && Number(bill.total) === 1000 && Number(bill.balance) === 1000, "supplier bill creates correct payable");
+  const billPayment = await request("POST", `/supplier-bills/${bill.id}/payments`, { amount: 400, paymentDate: new Date().toISOString().slice(0, 10), method: "bank_transfer", reference: `BILL-PAY-${stamp}` }, a.token, [201]);
+  assert(Number(billPayment.paid_amount) === 400 && Number(billPayment.balance) === 600 && billPayment.status === "partially_paid", "supplier payment updates payable balance");
+  const payables = await request("GET", "/accounting/reconciliation/payables", undefined, a.token);
+  assert(payables.reconciled === true && Math.abs(Number(payables.supplierBillsBalance) - 600) < 0.005, "payables control account reconciles to supplier bills");
+  const finalTrialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
+  assert(finalTrialBalance.balanced === true && Math.abs(Number(finalTrialBalance.variance)) <= 0.01, "trial balance remains balanced after supplier payment");
   await request("GET", `/invoices/${invoice.id}`, undefined, b.token, [404]);
   await request("POST", `/invoices/${invoice.id}/payments/${paymentId}/confirm`, undefined, b.token, [403, 404]);
   assert(true, "cross-tenant invoice/payment access blocked");
