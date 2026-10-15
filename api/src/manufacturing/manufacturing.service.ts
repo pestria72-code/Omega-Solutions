@@ -30,7 +30,7 @@ export class ManufacturingService {
    const account=await client.query<{id:string}>(`SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true`,[input.companyId,line.system]);
    if(!account.rows[0])throw new BadRequestException(`Required accounting account "${line.system}" is missing or inactive.`);
    await client.query(`INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)`,
-    [input.companyId,entry.rows[0].id,line.accountId??account.rows[0].id,input.description,line.debit,line.credit]);
+    [input.companyId,entry.rows[0].id,account.rows[0].id,input.description,line.debit,line.credit]);
   }
   return entry.rows[0].id;
  }
