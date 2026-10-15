@@ -7,6 +7,7 @@ import {
   Users,
   FileText,
   ShoppingCart,
+  Store,
   Package,
   Receipt,
   Wallet,
@@ -64,6 +65,7 @@ const navGroups = [
     label: "Sales",
     items: [
       { title: "Customers", url: "/customers", icon: Users },
+      { title: "Point of Sale", url: "/pos", icon: Store },
       { title: "Quotations", url: "/quotations", icon: FileText },
       { title: "Sales Orders", url: "/sales-orders", icon: ShoppingCart },
       { title: "Invoices", url: "/invoices", icon: Receipt },
