@@ -9,6 +9,31 @@ import type { CreateBomDto, CreateProductionOrderDto } from './dto/manufacturing
 export class ManufacturingService {
  constructor(private readonly db:DatabaseService,private readonly memberships:MembershipsService,private readonly audit:AuditService){}
  private companyFor(user:AuthenticatedUser){return user.companyId?this.memberships.getMembershipForCompany(user.userId,user.companyId):this.memberships.getMembership(user.userId);}
+ private async postJournal(client: import('pg').PoolClient,input:{companyId:string;description:string;sourceType:string;sourceId:string;userId:string;amount:number;debitSystem:string;creditSystem:string}) {
+  const amount=Math.round(input.amount*100)/100;
+  if(amount<=0)return null;
+  await client.query(`INSERT INTO chart_of_accounts(company_id,code,name,account_type,normal_side,system_code)
+   VALUES($1,'1200','Inventory','asset','debit','inventory') ON CONFLICT(company_id,code) DO NOTHING`,[input.companyId]);
+  await client.query(`INSERT INTO chart_of_accounts(company_id,code,name,account_type,normal_side,system_code)
+   VALUES($1,'1250','Work in Progress','asset','debit','work_in_progress') ON CONFLICT(company_id,code) DO NOTHING`,[input.companyId]);
+  const year=new Date().getFullYear();
+  const seq=await client.query<{next_number:number}>(`INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
+   ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1 RETURNING next_number`,[input.companyId,year]);
+  const number=`JE-${year}-${String(seq.rows[0].next_number).padStart(6,'0')}`;
+  const entry=await client.query<{id:string}>(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+   VALUES($1,$2,CURRENT_DATE,$3,$4,$5,'posted',NOW(),$6) RETURNING id`,
+   [input.companyId,number,input.description,input.sourceType,input.sourceId,input.userId]);
+  for(const line of [
+   {system:input.debitSystem,debit:amount,credit:0},
+   {system:input.creditSystem,debit:0,credit:amount},
+  ]){
+   const account=await client.query<{id:string}>(`SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true`,[input.companyId,line.system]);
+   if(!account.rows[0])throw new BadRequestException(`Required accounting account "${line.system}" is missing or inactive.`);
+   await client.query(`INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)`,
+    [input.companyId,entry.rows[0].id,line.accountId??account.rows[0].id,input.description,line.debit,line.credit]);
+  }
+  return entry.rows[0].id;
+ }
  async listBoms(user:AuthenticatedUser){
   const {companyId}=await this.companyFor(user);
   return (await this.db.query(`SELECT b.id,b.company_id,b.code,b.name,b.product_id,p.name AS product_name,b.output_quantity,b.version,b.status,b.notes,b.created_at,b.updated_at,COUNT(bl.id)::int AS line_count
@@ -129,6 +154,10 @@ export class ManufacturingService {
    const unitCost=finishedQuantity>0?totalMaterialCost/finishedQuantity:Number(order.rows[0].product_cost);
    await client.query(`INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by) VALUES($1,$2,$3,'receipt',$4,$5,$6,$7,$8)`,[companyId,order.rows[0].product_id,order.rows[0].warehouse_id,finishedQuantity,unitCost,'MO-'+id,'Finished goods received from production order',user.userId]);
    await client.query(`UPDATE products SET stock_quantity=COALESCE((SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0),cost_price=$3 WHERE company_id=$1 AND id=$2`,[companyId,order.rows[0].product_id,unitCost]);
+   if(totalMaterialCost>0){
+    await this.postJournal(client,{companyId,description:`Materials consumed for production order ${id}`,sourceType:'manufacturing_material_consumption',sourceId:id,userId:user.userId,amount:totalMaterialCost,debitSystem:'work_in_progress',creditSystem:'inventory'});
+    await this.postJournal(client,{companyId,description:`Finished goods received from production order ${id}`,sourceType:'manufacturing_finished_goods',sourceId:id,userId:user.userId,amount:totalMaterialCost,debitSystem:'inventory',creditSystem:'work_in_progress'});
+   }
    await client.query(`UPDATE manufacturing_production_orders SET status='completed',produced_quantity=$3,completed_at=NOW(),materials_consumed_at=NOW(),updated_at=NOW() WHERE company_id=$1 AND id=$2`,[companyId,id,finishedQuantity]);
    return (await client.query(`SELECT * FROM manufacturing_production_orders WHERE company_id=$1 AND id=$2`,[companyId,id])).rows[0];
   });
