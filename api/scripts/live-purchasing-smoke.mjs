@@ -29,6 +29,12 @@ try {
  const ordered=(await req("PATCH",`/purchase-orders/${po.id}/status`,{status:"ordered"},token)).data;ok(ordered.status==="ordered","draft to ordered");
  const partial=(await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:2}],reference:`E2E-${stamp}`},token,[201])).data;
  ok(partial.status==="partially_received"&&Number(partial.items?.[0]?.received_quantity)===2,"partial receipt state");
+ const partialJournals=(await req("GET","/accounting/journals",undefined,token)).data;
+ const partialReceiptJournal=partialJournals.find(x=>x.source_type==="purchase_order_receipt"&&x.source_id===po.id);
+ ok(!!partialReceiptJournal&&Math.abs(Number(partialReceiptJournal.total_debits)-200)<0.005&&Math.abs(Number(partialReceiptJournal.total_credits)-200)<0.005,"partial receipt posts balanced KES 200 inventory/GRNI journal");
+ const partialReceiptDetail=(await req("GET",`/accounting/journals/${partialReceiptJournal.id}`,undefined,token)).data;
+ ok(partialReceiptDetail.lines.some(x=>x.account_code==="1200"&&Math.abs(Number(x.debit)-200)<0.005),"receipt journal debits inventory");
+ ok(partialReceiptDetail.lines.some(x=>/goods received/i.test(x.description||"")&&Math.abs(Number(x.credit)-200)<0.005),"receipt journal credits GRNI");
  await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:4}]},token,[400]);ok(true,"over-receipt rejected");
  const stock=(await req("GET",`/inventory/stock?warehouseId=${warehouse.id}`,undefined,token)).data;
  const stockRows=Array.isArray(stock)?stock:(stock.items||stock.data||[]);
@@ -41,7 +47,7 @@ try {
  const billJournal=billJournals.find(x=>x.source_type==="supplier_bill"&&x.source_id===bill.id);
  ok(!!billJournal&&Number(billJournal.total_debits)===232&&Number(billJournal.total_credits)===232,"supplier bill posts balanced journal entry");
  const billJournalDetail=(await req("GET",`/accounting/journals/${billJournal.id}`,undefined,token)).data;
- ok(billJournalDetail.lines.some(x=>x.account_code==="1200"&&Number(x.debit)===200)&&billJournalDetail.lines.some(x=>x.account_code==="1300"&&Number(x.debit)===32),"received goods post to inventory asset and input VAT");
+ ok(billJournalDetail.lines.some(x=>/clear goods received not yet invoiced/i.test(x.description||"")&&Math.abs(Number(x.debit)-200)<0.005)&&billJournalDetail.lines.some(x=>x.account_code==="1300"&&Math.abs(Number(x.debit)-32)<0.005)&&!billJournalDetail.lines.some(x=>x.account_code==="1200"&&Number(x.debit)>0),"supplier bill clears GRNI, posts input VAT, and does not debit inventory twice");
  await req("POST","/supplier-bills",{supplierId:supplier.id,purchaseOrderId:po.id,items:[{purchaseOrderItemId:line.id,description:line.product_name,quantity:1,unitCost:100,taxRate:16}]},token,[400]);ok(true,"duplicate billing quantity rejected");
  const p1=(await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:100,method:"mpesa",reference:`E2E-PAY-${stamp}`},token,[201])).data;
  ok(p1.status==="partially_paid"&&Number(p1.balance)===132,"partial payment balance");
@@ -65,5 +71,7 @@ try {
  ok(finalJournals.filter(x=>["supplier_bill","supplier_bill_payment"].includes(x.source_type)).every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005),"all supplier bill/payment journal entries balance");
  const received=(await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:3}],reference:`E2E-FINAL-${stamp}`},token,[201])).data;
  ok(received.status==="received"&&Number(received.items?.[0]?.received_quantity)===5,"second receipt completes order");
+ const finalReceiptJournals=(await req("GET","/accounting/journals",undefined,token)).data.filter(x=>x.source_type==="purchase_order_receipt"&&x.source_id===po.id);
+ ok(finalReceiptJournals.length===2&&finalReceiptJournals.every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005)&&Math.abs(finalReceiptJournals.reduce((sum,x)=>sum+Number(x.total_debits),0)-500)<0.005,"both receipt journals balance and capitalize KES 500 total inventory");
  console.log(JSON.stringify({ok:true,email,userId:reg.userId,companyId:reg.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,checks},null,2));
 } catch(e) { console.error(JSON.stringify({ok:false,email,error:String(e),checks},null,2));process.exitCode=1; }
