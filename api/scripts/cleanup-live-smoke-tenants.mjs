@@ -12,7 +12,6 @@ if (process.env.OMEGA_CLEANUP_TEST_TENANTS_CONFIRM !== "YES") {
   throw new Error("Refusing cleanup without OMEGA_CLEANUP_TEST_TENANTS_CONFIRM=YES.");
 }
 
-const { rows: identityRows } = { rows: [] };
 const pool = new Pool({
   connectionString: databaseUrl,
   ssl: /neon\.tech/i.test(databaseUrl) ? { rejectUnauthorized: false } : undefined,
