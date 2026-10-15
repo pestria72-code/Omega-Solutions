@@ -7,11 +7,11 @@ function page(load: () => Promise<{ default: ComponentType }>) {
 }
 
 export const routes: RouteObject[] = [
+  { path: "/", lazy: page(() => import("@/app/landing/page")) },
   { path: "/login", lazy: page(() => import("@/app/login/page")) },
   {
     element: <ProtectedLayout />,
     children: [
-      { path: "/", element: <Navigate to="dashboard" replace /> },
       // Overview
       { path: "/dashboard", lazy: page(() => import("@/app/dashboard/page")) },
       { path: "/sales-dashboard", lazy: page(() => import("@/app/sales-dashboard/page")) },
