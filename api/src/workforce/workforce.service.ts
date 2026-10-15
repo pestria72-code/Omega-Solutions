@@ -72,12 +72,12 @@ export class WorkforceService {
   private normalizedNationalId(value: unknown) {
     if (typeof value !== 'string') throw new BadRequestException('Every checklist row must include a national ID number.');
     const normalized = value.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    if (!/^\\d{5,12}$/.test(normalized)) throw new BadRequestException('National ID numbers must contain 5 to 12 digits.');
+    if (!/^\d{5,12}$/.test(normalized)) throw new BadRequestException('National ID numbers must contain 5 to 12 digits.');
     return normalized;
   }
 
   private monthPeriod(value: unknown) {
-    if (typeof value !== 'string' || !/^\\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new BadRequestException('period must be in YYYY-MM format.');
+    if (typeof value !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) throw new BadRequestException('period must be in YYYY-MM format.');
     const [year, month] = value.split('-').map(Number);
     return { period: value, start: `${value}-01`, end: new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) };
   }
