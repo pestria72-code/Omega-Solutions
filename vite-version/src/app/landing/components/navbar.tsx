@@ -84,8 +84,6 @@ export function LandingNavbar() {
           <a
             href="/"
             className="flex items-center gap-2 cursor-pointer"
-            target="_blank"
-            rel="noopener noreferrer"
           >
             <Logo size={32} />
             <span className="font-bold">Omega Solutions</span>
@@ -158,7 +156,7 @@ export function LandingNavbar() {
             }
           >
             <LayoutDashboard data-icon="inline-start" />
-            Dashboard
+            Open ERP
           </Button>
           <Button
             variant="ghost"
