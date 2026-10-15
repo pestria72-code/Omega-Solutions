@@ -155,17 +155,16 @@ describe('AccountingService trial balance',()=>{
   memberships={getMembership:vi.fn(),getMembershipForCompany:vi.fn().mockResolvedValue({companyId:'company-active',branchId:null,role:'owner'})};
   service=new AccountingService(db as unknown as DatabaseService,memberships as unknown as MembershipsService,{log:vi.fn()} as unknown as AuditService);
  });
- it('returns a balanced trial balance for the active company and selected date range',async()=>{
-  const result=await service.trialBalance(user,'2026-01-01','2026-10-15');
+ it('returns a balanced cumulative trial balance for the active company as of a date',async()=>{
+  const result=await service.trialBalance(user,'2026-10-15');
   expect(result.balanced).toBe(true);
   expect(result.totalDebits).toBe(80);
   expect(result.totalCredits).toBe(80);
-  expect(db.query).toHaveBeenCalledWith(expect.stringContaining("j.status='posted'"),['company-active','2026-01-01','2026-10-15']);
+  expect(db.query).toHaveBeenCalledWith(expect.stringContaining("j.status='posted'"),['company-active','2026-10-15']);
   expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-1','company-active');
  });
  it('rejects invalid date ranges before querying the ledger',async()=>{
-  await expect(service.trialBalance(user,'2026-10-20','2026-10-15')).rejects.toThrow('fromDate must be on or before toDate.');
-  await expect(service.trialBalance(user,'2026-02-30')).rejects.toThrow('fromDate must be a valid YYYY-MM-DD date.');
+  await expect(service.trialBalance(user,'2026-02-30')).rejects.toThrow('asOfDate must be a valid YYYY-MM-DD date.');
   expect(db.query).not.toHaveBeenCalled();
  });
 });
