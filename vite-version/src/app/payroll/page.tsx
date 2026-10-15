@@ -1,9 +1,53 @@
-import { Banknote } from "lucide-react";
+import * as React from "react";
+import { Banknote, CheckCircle2, Loader2, Plus, RefreshCw, Settings2 } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { api } from "@/lib/api-client";
 
+type PayrollRun={id:string;period_start:string;period_end:string;status:string;employee_count:number;gross_total:string|number;employee_deductions_total:string|number;net_pay_total:string|number;employer_cost_total:string|number;approved_at?:string|null};
+type Employee={id:string;employee_number:string;first_name:string;last_name:string};
+const message=(e:unknown)=>e&&typeof e==="object"&&"message" in e?String((e as {message:unknown}).message):"The request failed. Please try again.";
+const kes=(v:string|number)=>new Intl.NumberFormat("en-KE",{style:"currency",currency:"KES",maximumFractionDigits:2}).format(Number(v||0));
+const today=new Date();const firstDay=new Date(today.getFullYear(),today.getMonth(),1).toISOString().slice(0,10);const lastDay=new Date(today.getFullYear(),today.getMonth()+1,0).toISOString().slice(0,10);
 export default function PayrollPage(){
- return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6"><PageHeader title="Payroll" description="Payroll processing is not enabled yet. No sample salaries or deductions are shown."/><Card><CardContent><EmptyState icon={Banknote} title="Payroll is not configured" description="Employee records and leave management are being connected first. Payroll calculations and statutory deductions will be added only with verified Kenyan payroll rules and audit controls."/></CardContent></Card></div></BaseLayout>;
+ const [runs,setRuns]=React.useState<PayrollRun[]>([]);const [employees,setEmployees]=React.useState<Employee[]>([]);
+ const [loading,setLoading]=React.useState(true);const [error,setError]=React.useState<string|null>(null);const [actionError,setActionError]=React.useState<string|null>(null);
+ const [periodStart,setPeriodStart]=React.useState(firstDay);const [periodEnd,setPeriodEnd]=React.useState(lastDay);const [creating,setCreating]=React.useState(false);const [busyId,setBusyId]=React.useState<string|null>(null);
+ const [employeeId,setEmployeeId]=React.useState("");const [salary,setSalary]=React.useState("");const [allowances,setAllowances]=React.useState("0");const [settingBusy,setSettingBusy]=React.useState(false);const [settingsMessage,setSettingsMessage]=React.useState<string|null>(null);
+ const load=React.useCallback(async()=>{setLoading(true);setError(null);try{const [r,e]=await Promise.all([api.get<PayrollRun[]>("/payroll/runs"),api.get<Employee[]>("/employees")]);setRuns(r);setEmployees(e);if(!employeeId&&e.length)setEmployeeId(e[0].id);}catch(e){setError(message(e));}finally{setLoading(false);}},[employeeId]);
+ React.useEffect(()=>{void load();},[load]);
+ async function createRun(){setCreating(true);setActionError(null);try{await api.post("/payroll/runs",{periodStart,periodEnd});await load();}catch(e){setActionError(message(e));}finally{setCreating(false);}}
+ async function approve(id:string){setBusyId(id);setActionError(null);try{await api.patch(`/payroll/runs/${id}/approve`);await load();}catch(e){setActionError(message(e));}finally{setBusyId(null);}}
+ async function saveSettings(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setSettingBusy(true);setSettingsMessage(null);setActionError(null);try{await api.post(`/payroll/employees/${employeeId}/settings`,{monthlyBasicSalary:Number(salary),monthlyTaxableAllowances:Number(allowances||0)});setSettingsMessage("Pay settings saved. They will be used when a new draft payroll run is prepared.");}catch(e){setActionError(message(e));}finally{setSettingBusy(false);}}
+ return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
+  <PageHeader title="Payroll" description="Configure employee pay, prepare monthly payroll, review statutory deductions, and approve payroll runs. Amounts are in Kenyan shillings (KES)."/>
+  {actionError&&<div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{actionError}</div>}
+  <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Settings2 className="size-4"/>Employee pay settings</CardTitle></CardHeader><CardContent>
+   {employees.length===0&&!loading?<EmptyState icon={Banknote} title="No employees available" description="Create employee records in HRM before configuring payroll."/>:
+   <form onSubmit={saveSettings} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-2 sm:col-span-2"><Label>Employee</Label><select className="h-10 rounded-md border bg-background px-3 text-sm" required value={employeeId} onChange={e=>setEmployeeId(e.target.value)}>{employees.map(e=><option key={e.id} value={e.id}>{e.employee_number} — {e.first_name} {e.last_name}</option>)}</select></div>
+    <div className="grid gap-2"><Label>Monthly basic salary (KES)</Label><Input required type="number" min="0" step="0.01" value={salary} onChange={e=>setSalary(e.target.value)} placeholder="e.g. 75000"/></div>
+    <div className="grid gap-2"><Label>Taxable cash allowances (KES)</Label><Input type="number" min="0" step="0.01" value={allowances} onChange={e=>setAllowances(e.target.value)}/></div>
+    <div className="flex items-end"><Button type="submit" disabled={settingBusy||!employeeId||salary===""}>{settingBusy?<Loader2 className="mr-2 size-4 animate-spin"/>:<Settings2 className="mr-2 size-4"/>}Save pay settings</Button></div>
+    {settingsMessage&&<p className="text-sm text-muted-foreground sm:col-span-3" role="status">{settingsMessage}</p>}
+   </form>}
+   <p className="mt-3 text-xs text-muted-foreground">This initial form configures basic salary and taxable cash allowances. Pension, medical fund, insurance relief, mortgage interest, and tax residency can be maintained through the payroll API; review evidence and eligibility before claiming them.</p>
+  </CardContent></Card>
+  <Card><CardHeader><CardTitle className="text-base">Prepare payroll run</CardTitle></CardHeader><CardContent><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+   <div className="grid gap-2"><Label>Period start</Label><Input type="date" value={periodStart} onChange={e=>setPeriodStart(e.target.value)} required/></div>
+   <div className="grid gap-2"><Label>Period end</Label><Input type="date" value={periodEnd} onChange={e=>setPeriodEnd(e.target.value)} required min={periodStart}/></div>
+   <div className="flex items-end"><Button onClick={()=>void createRun()} disabled={creating||periodEnd<periodStart}>{creating?<Loader2 className="mr-2 size-4 animate-spin"/>:<Plus className="mr-2 size-4"/>}Calculate draft payroll</Button></div>
+  </div><p className="mt-3 text-xs text-muted-foreground">Creating a run stores a calculation snapshot and does not pay employees or remit statutory deductions. Approved runs are not yet posted to the general ledger.</p></CardContent></Card>
+  <Card><CardContent className="p-0">
+   <div className="flex items-center justify-between gap-3 p-4"><h2 className="font-semibold">Payroll runs <span className="font-normal text-muted-foreground">({runs.length})</span></h2><Button size="sm" variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button></div>
+   {loading?<div className="flex justify-center p-12"><LoadingSpinner/></div>:error?<div role="alert" className="p-6 text-sm text-destructive">{error}<Button className="ml-3" size="sm" variant="outline" onClick={()=>void load()}>Retry</Button></div>:runs.length===0?<EmptyState icon={Banknote} title="No payroll runs yet" description="Save pay settings for active employees, then calculate a draft run. No sample payroll data is loaded."/>:
+   <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/40 text-left"><th className="p-3">Period</th><th className="p-3">Employees</th><th className="p-3">Gross</th><th className="p-3">Deductions</th><th className="p-3">Net pay</th><th className="p-3">Employer cost</th><th className="p-3">Status / action</th></tr></thead><tbody>{runs.map(run=><tr key={run.id} className="border-b last:border-0"><td className="p-3">{String(run.period_start).slice(0,10)} – {String(run.period_end).slice(0,10)}</td><td className="p-3">{run.employee_count}</td><td className="p-3 whitespace-nowrap">{kes(run.gross_total)}</td><td className="p-3 whitespace-nowrap">{kes(run.employee_deductions_total)}</td><td className="p-3 whitespace-nowrap font-medium">{kes(run.net_pay_total)}</td><td className="p-3 whitespace-nowrap">{kes(run.employer_cost_total)}</td><td className="p-3"><div className="flex items-center gap-2"><span className="capitalize">{run.status}</span>{run.status==="draft"&&<Button size="sm" variant="outline" disabled={busyId===run.id} onClick={()=>void approve(run.id)}>{busyId===run.id?<Loader2 className="size-4 animate-spin"/>:<CheckCircle2 className="size-4"/>} Approve</Button>}</div></td></tr>)}</tbody></table></div>}
+  </CardContent></Card>
+ </div></BaseLayout>;
 }
