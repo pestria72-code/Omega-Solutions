@@ -2,6 +2,12 @@ name: Authenticated purchasing live smoke test
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - development
+    paths:
+      - "api/scripts/live-purchasing-smoke.mjs"
+      - ".github/workflows/live-purchasing-smoke.yml"
 
 permissions:
   contents: read
