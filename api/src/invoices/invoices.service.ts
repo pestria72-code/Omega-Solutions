@@ -351,6 +351,78 @@ export class InvoicesService {
     return this.getById(user, invoiceId);
   }
 
+  private async applyInvoiceStock(
+    client: PoolClient,
+    input: { companyId: string; invoiceId: string; invoiceNumber: string; userId: string; reverse?: boolean },
+  ) {
+    const lines = await client.query<{
+      product_id: string; quantity: string | number; is_service: boolean; cost_price: string | number;
+    }>(
+      `SELECT ii.product_id, SUM(ii.quantity)::numeric AS quantity, p.is_service, p.cost_price
+       FROM invoice_items ii
+       JOIN products p ON p.id=ii.product_id AND p.company_id=ii.company_id
+       WHERE ii.company_id=$1 AND ii.invoice_id=$2 AND ii.product_id IS NOT NULL
+       GROUP BY ii.product_id,p.is_service,p.cost_price
+       ORDER BY ii.product_id`,
+      [input.companyId, input.invoiceId],
+    );
+    for (const line of lines.rows) {
+      if (line.is_service) continue;
+      const warehouse = await client.query<{ id: string }>(
+        "SELECT id FROM warehouses WHERE company_id=$1 AND code='MAIN' AND is_active=true FOR SHARE",
+        [input.companyId],
+      );
+      if (!warehouse.rows[0]) {
+        throw new BadRequestException('An active MAIN warehouse is required before dispatching physical products.');
+      }
+      const warehouseId = warehouse.rows[0].id;
+      await client.query(
+        `INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level)
+         SELECT $1,$2,p.id,0,0,p.reorder_level FROM products p WHERE p.id=$3 AND p.company_id=$1 AND p.is_service=false
+         ON CONFLICT(warehouse_id,product_id) DO NOTHING`,
+        [input.companyId, warehouseId, line.product_id],
+      );
+      const stock = await client.query<{ quantity: string | number; reserved_quantity: string | number }>(
+        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+        [input.companyId, warehouseId, line.product_id],
+      );
+      if (!stock.rows[0]) throw new BadRequestException('Stock record could not be initialized for an invoice item.');
+      const quantity = Number(line.quantity);
+      const available = Number(stock.rows[0].quantity) - Number(stock.rows[0].reserved_quantity);
+      if (!input.reverse && available < quantity) {
+        throw new BadRequestException(`Insufficient available stock for invoice item. Available: ${available}; required: ${quantity}.`);
+      }
+      if (input.reverse) {
+        await client.query(
+          'UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',
+          [quantity, input.companyId, warehouseId, line.product_id],
+        );
+      } else {
+        await client.query(
+          'UPDATE inventory_stock_levels SET quantity=quantity-$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',
+          [quantity, input.companyId, warehouseId, line.product_id],
+        );
+      }
+      await client.query(
+        `INSERT INTO inventory_stock_movements
+          (company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          input.companyId, line.product_id, warehouseId, input.reverse ? 'receipt' : 'issue',
+          input.reverse ? quantity : -quantity, Number(line.cost_price) || 0, input.invoiceNumber,
+          input.reverse ? 'Stock reversal for cancelled invoice' : 'Stock issue for sent invoice',
+          input.userId,
+        ],
+      );
+      await client.query(
+        `UPDATE products SET stock_quantity=COALESCE(
+          (SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0
+         ),updated_at=NOW() WHERE company_id=$1 AND id=$2`,
+        [input.companyId, line.product_id],
+      );
+    }
+  }
+
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
     await this.accounting.ensureDefaults(membership.companyId);
@@ -363,13 +435,14 @@ export class InvoicesService {
       const existing = await client.query<{
         status: InvoiceStatus;
         customer_id: string;
+        invoice_number: string;
         issue_date: string;
         subtotal: string | number;
         tax_amount: string | number;
         total: string | number;
         amount_paid: string | number;
       }>(
-        'SELECT status, customer_id, issue_date, subtotal, tax_amount, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        'SELECT status, customer_id, invoice_number, issue_date, subtotal, tax_amount, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
         [invoiceId, membership.companyId],
       );
       const invoice = existing.rows[0];
@@ -386,6 +459,7 @@ export class InvoicesService {
       if (invoice.status === status) return invoice.status;
 
       if (status === 'sent' && invoice.status === 'draft') {
+        await this.applyInvoiceStock(client, { companyId: membership.companyId, invoiceId, invoiceNumber: invoice.invoice_number, userId: user.userId });
         await this.postJournal(client, {
           companyId: membership.companyId, date: invoice.issue_date, description: `Sales invoice ${invoiceId}`,
           sourceType: 'invoice', sourceId: invoiceId, userId: user.userId,
@@ -401,6 +475,12 @@ export class InvoicesService {
         );
       }
       if (status === 'cancelled' && (invoice.status === 'sent' || invoice.status === 'overdue')) {
+        const reported = await client.query<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2',
+          [membership.companyId, invoiceId],
+        );
+        if (Number(reported.rows[0].count) > 0) throw new BadRequestException('Invoices with payment reports cannot be cancelled. Resolve the payment reports first.');
+        await this.applyInvoiceStock(client, { companyId: membership.companyId, invoiceId, invoiceNumber: invoice.invoice_number, userId: user.userId, reverse: true });
         await this.postJournal(client, {
           companyId: membership.companyId, date: null, description: `Reversal of cancelled invoice ${invoiceId}`,
           sourceType: 'invoice_cancellation', sourceId: invoiceId, userId: user.userId,
