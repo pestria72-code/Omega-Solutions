@@ -3,13 +3,35 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import type { PoolClient } from 'pg';
+import { AccountingService } from '../accounting/accounting.service.js';
 import type { CreateSupplierBillDto, RecordSupplierBillPaymentDto } from './dto/supplier-bill.dto.js';
 
 @Injectable()
 export class SupplierBillsService {
-  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService) {}
+  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
   private companyFor(user: AuthenticatedUser) {
     return user.companyId ? this.memberships.getMembershipForCompany(user.userId,user.companyId) : this.memberships.getMembership(user.userId);
+  }
+  private async postJournal(client:PoolClient,input:{companyId:string;date:string|null;description:string;sourceType:string;sourceId:string;userId:string;lines:Array<{systemCode:string;debit:number;credit:number;description:string}>}) {
+    const year=input.date?Number(input.date.slice(0,4)):new Date().getFullYear();
+    const seq=await client.query<{next_number:number}>(`INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
+      ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1 RETURNING next_number`,[input.companyId,year]);
+    const number=`JE-${year}-${String(seq.rows[0].next_number).padStart(6,'0')}`;
+    const entry=await client.query<{id:string}>(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+      VALUES($1,$2,COALESCE($3::date,CURRENT_DATE),$4,$5,$6,'posted',NOW(),$7) RETURNING id`,
+      [input.companyId,number,input.date,input.description,input.sourceType,input.sourceId,input.userId]);
+    let debits=0,credits=0;
+    for(const line of input.lines){
+      if(line.debit<=0&&line.credit<=0)continue;
+      const account=await client.query<{id:string}>('SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true',[input.companyId,line.systemCode]);
+      if(!account.rows[0])throw new BadRequestException(`Required accounting account "${line.systemCode}" is missing or inactive.`);
+      await client.query(`INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)`,
+       [input.companyId,entry.rows[0].id,account.rows[0].id,line.description,line.debit,line.credit]);
+      debits+=line.debit;credits+=line.credit;
+    }
+    if(Math.abs(debits-credits)>0.005||debits<=0)throw new BadRequestException('Journal entry is not balanced.');
+    return entry.rows[0].id;
   }
   async list(user: AuthenticatedUser) {
     const {companyId}=await this.companyFor(user);
@@ -31,6 +53,7 @@ export class SupplierBillsService {
   }
   async create(user:AuthenticatedUser,dto:CreateSupplierBillDto) {
     const membership=await this.companyFor(user);const companyId=membership.companyId;
+    await this.accounting.ensureDefaults(companyId);
     const id=await this.db.transaction(async client=>{
       const supplier=await client.query<{id:string}>("SELECT id FROM suppliers WHERE id=$1 AND company_id=$2 AND is_active=true AND status='active'",[dto.supplierId,companyId]);
       if(!supplier.rows[0])throw new NotFoundException('Active supplier not found in this company.');
@@ -60,26 +83,39 @@ export class SupplierBillsService {
         subtotal+=sub;taxAmount+=tax;
         lines.push({description:item.description.trim(),qty:item.quantity,cost:item.unitCost,rate:item.taxRate??0,sub,tax,total:sub+tax,poItemId:item.purchaseOrderItemId??null});
       }
+      if(subtotal+taxAmount<=0)throw new BadRequestException('Supplier bill total must be greater than zero to post to the ledger.');
       const inserted=await client.query<{id:string}>(`INSERT INTO supplier_bills(company_id,supplier_id,purchase_order_id,bill_number,supplier_invoice_number,bill_date,due_date,status,subtotal,tax_amount,total,notes,created_by)
         VALUES($1,$2,$3,$4,$5,COALESCE($6::date,CURRENT_DATE),$7::date,'open',$8,$9,$10,$11,$12) RETURNING id`,
         [companyId,dto.supplierId,dto.purchaseOrderId??null,number,dto.supplierInvoiceNumber??null,dto.billDate??null,dto.dueDate??null,subtotal,taxAmount,subtotal+taxAmount,dto.notes??null,user.userId]);
       for(const line of lines)await client.query(`INSERT INTO supplier_bill_items(company_id,supplier_bill_id,purchase_order_item_id,description,quantity,unit_cost,tax_rate,line_subtotal,tax_amount,line_total)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[companyId,inserted.rows[0].id,line.poItemId,line.description,line.qty,line.cost,line.rate,line.sub,line.tax,line.total]);
-      return inserted.rows[0].id;
+      const billId=inserted.rows[0].id;
+      const journalLines:Array<{systemCode:string;debit:number;credit:number;description:string}>=[];
+      if(subtotal>0)journalLines.push({systemCode:'purchases_expense',debit:subtotal,credit:0,description:'Supplier bill subtotal'});
+      if(taxAmount>0)journalLines.push({systemCode:'input_tax',debit:taxAmount,credit:0,description:'Recoverable input tax'});
+      journalLines.push({systemCode:'accounts_payable',debit:0,credit:subtotal+taxAmount,description:'Supplier payable'});
+      await this.postJournal(client,{companyId,date:dto.billDate??null,description:`Supplier bill ${number}`,sourceType:'supplier_bill',sourceId:billId,userId:user.userId,lines:journalLines});
+      return billId;
     });
     await this.audit.log({userId:user.userId,companyId,branchId:null,action:'supplier_bill.create',entityType:'supplier_bill',entityId:id,oldValues:null,newValues:{supplierId:dto.supplierId,purchaseOrderId:dto.purchaseOrderId??null},ipAddress:null});
     return this.getById(user,id);
   }
   async recordPayment(user:AuthenticatedUser,id:string,dto:RecordSupplierBillPaymentDto) {
     const m=await this.companyFor(user);
+    await this.accounting.ensureDefaults(m.companyId);
     await this.db.transaction(async client=>{
       const res=await client.query<{total:string|number;paid_amount:string|number;status:string}>('SELECT total,paid_amount,status FROM supplier_bills WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,m.companyId]);
       const bill=res.rows[0];if(!bill)throw new NotFoundException('Supplier bill not found.');
       if(bill.status==='void')throw new BadRequestException('A void bill cannot receive payments.');
       const balance=Number(bill.total)-Number(bill.paid_amount);
       if(dto.amount>balance+0.000001)throw new BadRequestException('Payment exceeds the outstanding bill balance.');
-      await client.query(`INSERT INTO supplier_bill_payments(company_id,supplier_bill_id,amount,payment_date,method,reference,notes,created_by)
-       VALUES($1,$2,$3,COALESCE($4::date,CURRENT_DATE),$5,$6,$7,$8)`,[m.companyId,id,dto.amount,dto.paymentDate??null,dto.method,dto.reference??null,dto.notes??null,user.userId]);
+      const payment=await client.query<{id:string}>(`INSERT INTO supplier_bill_payments(company_id,supplier_bill_id,amount,payment_date,method,reference,notes,created_by)
+       VALUES($1,$2,$3,COALESCE($4::date,CURRENT_DATE),$5,$6,$7,$8) RETURNING id`,[m.companyId,id,dto.amount,dto.paymentDate??null,dto.method,dto.reference??null,dto.notes??null,user.userId]);
+      const cashAccount=dto.method==='cash'?'cash':dto.method==='mpesa'?'mpesa':'bank';
+      await this.postJournal(client,{companyId:m.companyId,date:dto.paymentDate??null,description:`Payment against supplier bill ${id}`,sourceType:'supplier_bill_payment',sourceId:payment.rows[0].id,userId:user.userId,lines:[
+       {systemCode:'accounts_payable',debit:dto.amount,credit:0,description:'Reduce supplier payable'},
+       {systemCode:cashAccount,debit:0,credit:dto.amount,description:`Payment by ${dto.method}`}
+      ]});
       const paid=Number(bill.paid_amount)+dto.amount;
       const status=paid+0.000001>=Number(bill.total)?'paid':'partially_paid';
       await client.query('UPDATE supplier_bills SET paid_amount=$1,status=$2,updated_at=NOW() WHERE id=$3 AND company_id=$4',[paid,status,id,m.companyId]);
