@@ -78,14 +78,14 @@ export function HeroSection() {
               {/* Light mode dashboard image */}
               <img
                 src={assetUrl("dashboard-light.png")}
-                alt="Omega Solutions ERP workspace preview"
+                alt="Illustrative ERP dashboard preview"
                 className="w-full rounded-xl object-cover block dark:hidden"
               />
 
               {/* Dark mode dashboard image */}
               <img
                 src={assetUrl("dashboard-dark.png")}
-                alt="Omega Solutions ERP workspace preview in dark mode"
+                alt="Illustrative ERP dashboard preview in dark mode"
                 className="w-full rounded-xl object-cover hidden dark:block"
               />
 
