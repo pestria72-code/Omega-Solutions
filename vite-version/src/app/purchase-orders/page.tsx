@@ -1,20 +1,115 @@
-import { ClipboardList } from "lucide-react"
-import { ModulePlaceholder } from "@/components/module-placeholder"
+import * as React from "react";
+import { AlertCircle, ClipboardList, Loader2, Plus, RefreshCw, Truck } from "lucide-react";
+import { BaseLayout } from "@/components/layouts/base-layout";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { api } from "@/lib/api-client";
+import { formatKES, formatDate } from "@/lib/format";
 
-export default function PurchaseOrdersPage() {
-  return (
-    <ModulePlaceholder
-      title="Purchase Orders"
-      description="Manage purchase orders sent to suppliers"
-      icon={ClipboardList}
-      tableHeaders={["PO #", "Supplier", "Date", "Status", "Total"]}
-      tableRows={[
-        ["PO-2024-028", "Nairobi Electronics Ltd", "03 Oct 2024", "Received", "KSh 280,000"],
-        ["PO-2024-027", "Stationery World Ltd", "01 Oct 2024", "Pending", "KSh 95,000"],
-        ["PO-2024-026", "CleanPro Distributors", "28 Sep 2024", "Received", "KSh 42,000"],
-        ["PO-2024-025", "Nairobi Electronics Ltd", "25 Sep 2024", "Cancelled", "KSh 155,000"],
-        ["PO-2024-024", "Furniture Masters", "22 Sep 2024", "Pending", "KSh 320,000"],
-      ]}
-    />
-  )
+type Supplier={id:string;name:string;is_active:boolean;status:string};
+type Product={id:string;name:string;sku:string;cost_price:number|string;is_service:boolean;is_active:boolean;unit:string};
+type Warehouse={id:string;name:string;code:string;is_active:boolean};
+type Line={productId:string;quantity:string;unitCost:string;taxRate:string};
+type Item={id:string;product_id:string;product_name:string;sku:string|null;quantity:string|number;received_quantity:string|number;unit_cost:string|number;line_total:string|number};
+type PurchaseOrder={id:string;order_number:string;supplier_name:string;order_date:string;expected_date:string|null;status:"draft"|"ordered"|"partially_received"|"received"|"cancelled";total:string|number;item_count:number;items?:Item[]};
+const statusLabel:Record<PurchaseOrder["status"],string>={draft:"Draft",ordered:"Ordered",partially_received:"Partially received",received:"Received",cancelled:"Cancelled"};
+function messageOf(e:unknown){return e&&typeof e==="object"&&"message" in e?String((e as {message:unknown}).message):"Request failed. Please try again."}
+function statusStyle(s:PurchaseOrder["status"]){return s==="received"?"bg-emerald-500/10 text-emerald-700":s==="cancelled"?"bg-destructive/10 text-destructive":s==="partially_received"?"bg-amber-500/10 text-amber-700":s==="ordered"?"bg-blue-500/10 text-blue-700":"bg-muted text-muted-foreground"}
+export default function PurchaseOrdersPage(){
+ const [orders,setOrders]=React.useState<PurchaseOrder[]>([]);
+ const [suppliers,setSuppliers]=React.useState<Supplier[]>([]);
+ const [products,setProducts]=React.useState<Product[]>([]);
+ const [warehouses,setWarehouses]=React.useState<Warehouse[]>([]);
+ const [loading,setLoading]=React.useState(true);
+ const [saving,setSaving]=React.useState(false);
+ const [busyId,setBusyId]=React.useState("");
+ const [error,setError]=React.useState("");
+ const [showForm,setShowForm]=React.useState(false);
+ const [supplierId,setSupplierId]=React.useState("");
+ const [expectedDate,setExpectedDate]=React.useState("");
+ const [notes,setNotes]=React.useState("");
+ const [lines,setLines]=React.useState<Line[]>([{productId:"",quantity:"1",unitCost:"0",taxRate:"16"}]);
+ const [receiveWarehouse,setReceiveWarehouse]=React.useState("");
+ const [filter,setFilter]=React.useState("all");
+ const refresh=React.useCallback(async()=>{
+  setLoading(true);setError("");
+  try{
+   const [po,sup,prod,wh]=await Promise.all([
+    api.get<PurchaseOrder[]>("/purchase-orders"),api.get<Supplier[]>("/suppliers"),api.get<Product[]>("/products"),api.get<Warehouse[]>("/inventory/warehouses")
+   ]);
+   setOrders(po);setSuppliers(sup.filter(s=>s.is_active&&s.status==="active"));setProducts(prod.filter(p=>p.is_active&&!p.is_service));setWarehouses(wh.filter(w=>w.is_active));
+   setSupplierId(current=>current||sup.find(s=>s.is_active&&s.status==="active")?.id||"");
+   setReceiveWarehouse(current=>wh.some(w=>w.id===current&&w.is_active)?current:wh.find(w=>w.is_active)?.id||"");
+  }catch(e){setError(messageOf(e))}
+  finally{setLoading(false)}
+ },[]);
+ React.useEffect(()=>{void refresh()},[refresh]);
+ const updateLine=(index:number,key:keyof Line,value:string)=>{
+  setLines(current=>current.map((line,i)=>i===index?{...line,[key]:value}:line));
+  if(key==="productId"){const product=products.find(p=>p.id===value);if(product)setLines(current=>current.map((line,i)=>i===index?{...line,productId:value,unitCost:String(product.cost_price??0)}:line))}
+ };
+ const createOrder=async()=>{
+  if(!supplierId||lines.some(l=>!l.productId||Number(l.quantity)<=0||Number(l.unitCost)<0)){setError("Choose a supplier and complete each product line with valid quantities and costs.");return}
+  setSaving(true);setError("");
+  try{
+   await api.post("/purchase-orders",{supplierId,expectedDate:expectedDate||undefined,notes:notes.trim()||undefined,items:lines.map(l=>({productId:l.productId,quantity:Number(l.quantity),unitCost:Number(l.unitCost),taxRate:Number(l.taxRate||0)}))});
+   setShowForm(false);setLines([{productId:"",quantity:"1",unitCost:"0",taxRate:"16"}]);setNotes("");setExpectedDate("");await refresh();
+  }catch(e){setError(messageOf(e))}finally{setSaving(false)}
+ };
+ const changeStatus=async(order:PurchaseOrder,status:"ordered"|"cancelled")=>{
+  setBusyId(order.id);setError("");
+  try{await api.patch(`/purchase-orders/${order.id}/status`,{status});await refresh()}catch(e){setError(messageOf(e))}finally{setBusyId("")}
+ };
+ const receive=async(order:PurchaseOrder)=>{
+  if(!receiveWarehouse){setError("Create and activate a warehouse before receiving stock.");return}
+  setBusyId(order.id);setError("");
+  try{
+   const full=await api.get<PurchaseOrder>(`/purchase-orders/${order.id}`);
+   const remaining=(full.items??[]).filter(i=>Number(i.quantity)-Number(i.received_quantity)>0).map(i=>({itemId:i.id,quantity:Number(i.quantity)-Number(i.received_quantity)}));
+   if(!remaining.length){setError("There are no outstanding quantities to receive.");return}
+   await api.post(`/purchase-orders/${order.id}/receive`,{warehouseId:receiveWarehouse,items:remaining,reference:order.order_number});
+   await refresh();
+  }catch(e){setError(messageOf(e))}finally{setBusyId("")}
+ };
+ const visible=orders.filter(o=>filter==="all"||o.status===filter);
+ const openCount=orders.filter(o=>["draft","ordered","partially_received"].includes(o.status)).length;
+ const receivedValue=orders.filter(o=>o.status==="received"||o.status==="partially_received").reduce((s,o)=>s+Number(o.total),0);
+ return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
+  <PageHeader title="Purchase Orders" description="Create supplier orders, track receipts, and post received quantities to warehouse stock." action={<div className="flex gap-2"><Button variant="outline" onClick={()=>void refresh()} disabled={loading}><RefreshCw className="size-4"/>Refresh</Button><Button onClick={()=>setShowForm(v=>!v)}><Plus className="size-4"/>{showForm?"Close form":"New purchase order"}</Button></div>}/>
+  {error&&<div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0"/>{error}</div>}
+  <div className="grid gap-3 sm:grid-cols-3">
+   <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Purchase orders</p><p className="text-2xl font-semibold tabular-nums">{orders.length}</p></CardContent></Card>
+   <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Open orders</p><p className="text-2xl font-semibold tabular-nums">{openCount}</p></CardContent></Card>
+   <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Received / partially received value</p><p className="text-2xl font-semibold tabular-nums">{formatKES(receivedValue)}</p></CardContent></Card>
+  </div>
+  {showForm&&<Card><CardContent className="flex flex-col gap-4 p-4">
+   <div><h2 className="font-semibold">New purchase order</h2><p className="text-sm text-muted-foreground">Orders start as drafts. Mark them ordered before receiving stock.</p></div>
+   {suppliers.length===0&&<p className="text-sm text-amber-700">Add an active supplier before creating a purchase order.</p>}
+   <div className="grid gap-4 md:grid-cols-2">
+    <div className="flex flex-col gap-2"><Label htmlFor="po-supplier">Supplier</Label><select id="po-supplier" className="h-9 rounded-md border bg-background px-3 text-sm" value={supplierId} onChange={e=>setSupplierId(e.target.value)}><option value="">Choose supplier</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+    <div className="flex flex-col gap-2"><Label htmlFor="po-date">Expected delivery</Label><Input id="po-date" type="date" value={expectedDate} onChange={e=>setExpectedDate(e.target.value)}/></div>
+   </div>
+   <div className="flex flex-col gap-3">
+    <div className="flex items-center justify-between"><h3 className="text-sm font-medium">Order lines</h3><Button type="button" variant="outline" size="sm" onClick={()=>setLines(v=>[...v,{productId:"",quantity:"1",unitCost:"0",taxRate:"16"}])}><Plus className="size-3.5"/>Add line</Button></div>
+    {lines.map((line,index)=><div key={index} className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(180px,2fr)_100px_130px_100px_auto]">
+     <div className="flex flex-col gap-1"><Label>Product</Label><select className="h-9 rounded-md border bg-background px-2 text-sm" value={line.productId} onChange={e=>updateLine(index,"productId",e.target.value)}><option value="">Choose product</option>{products.map(p=><option key={p.id} value={p.id}>{p.sku} — {p.name}</option>)}</select></div>
+     <div className="flex flex-col gap-1"><Label>Quantity</Label><Input type="number" min="0.001" step="0.001" value={line.quantity} onChange={e=>updateLine(index,"quantity",e.target.value)}/></div>
+     <div className="flex flex-col gap-1"><Label>Unit cost (KSh)</Label><Input type="number" min="0" step="0.01" value={line.unitCost} onChange={e=>updateLine(index,"unitCost",e.target.value)}/></div>
+     <div className="flex flex-col gap-1"><Label>Tax %</Label><Input type="number" min="0" max="100" step="0.01" value={line.taxRate} onChange={e=>updateLine(index,"taxRate",e.target.value)}/></div>
+     <div className="flex items-end"><Button type="button" variant="ghost" disabled={lines.length===1} onClick={()=>setLines(v=>v.filter((_,i)=>i!==index))}>Remove</Button></div>
+    </div>)}
+   </div>
+   <div className="flex flex-col gap-2"><Label htmlFor="po-notes">Notes</Label><Input id="po-notes" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional delivery or supplier notes"/></div>
+   <div className="flex justify-end"><Button onClick={()=>void createOrder()} disabled={saving||suppliers.length===0||products.length===0}>{saving?<Loader2 className="size-4 animate-spin"/>:<Plus className="size-4"/>}Create draft order</Button></div>
+  </CardContent></Card>}
+  <Card><CardContent className="flex flex-col gap-4 p-4">
+   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Purchase order register</h2><p className="text-sm text-muted-foreground">Receiving updates stock levels and records a receipt movement atomically.</p></div><div className="flex items-center gap-2 text-sm"><Label htmlFor="po-receive-warehouse" className="whitespace-nowrap">Receive into</Label><select id="po-receive-warehouse" className="h-9 rounded-md border bg-background px-3 text-sm" value={receiveWarehouse} onChange={e=>setReceiveWarehouse(e.target.value)}><option value="">Choose warehouse</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}</select></div></div>
+   <div className="flex justify-end"><select aria-label="Filter purchase order status" className="h-9 rounded-md border bg-background px-3 text-sm" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option>{Object.entries(statusLabel).map(([s,l])=><option key={s} value={s}>{l}</option>)}</select></div>
+   {loading?<div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground"/></div>:visible.length===0?<div className="flex flex-col items-center gap-2 py-12 text-center"><ClipboardList className="size-8 text-muted-foreground"/><p className="font-medium">{orders.length?"No orders in this status":"No purchase orders yet"}</p><p className="max-w-lg text-sm text-muted-foreground">{orders.length?"Choose another status filter.":"Create a purchase order to start tracking supplier deliveries."}</p></div>:<div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>PO #</TableHead><TableHead>Supplier</TableHead><TableHead>Order date</TableHead><TableHead>Expected</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Lines</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{visible.map(order=><TableRow key={order.id}><TableCell className="font-medium">{order.order_number}</TableCell><TableCell>{order.supplier_name}</TableCell><TableCell>{formatDate(order.order_date)}</TableCell><TableCell>{order.expected_date?formatDate(order.expected_date):"—"}</TableCell><TableCell><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusStyle(order.status)}`}>{statusLabel[order.status]}</span></TableCell><TableCell className="text-right tabular-nums">{order.item_count}</TableCell><TableCell className="text-right font-medium tabular-nums">{formatKES(Number(order.total))}</TableCell><TableCell><div className="flex justify-end gap-1">{order.status==="draft"&&<Button size="sm" variant="outline" disabled={busyId===order.id} onClick={()=>void changeStatus(order,"ordered")}>Mark ordered</Button>}{["ordered","partially_received"].includes(order.status)&&<Button size="sm" variant="outline" disabled={busyId===order.id||!receiveWarehouse} onClick={()=>void receive(order)}>{busyId===order.id?<Loader2 className="size-3.5 animate-spin"/>:<Truck className="size-3.5"/>}Receive</Button>}{["draft","ordered"].includes(order.status)&&<Button size="sm" variant="ghost" disabled={busyId===order.id} onClick={()=>void changeStatus(order,"cancelled")}>Cancel</Button>}</div></TableCell></TableRow>)}</TableBody></Table></div>}
+  </CardContent></Card>
+ </div></BaseLayout>;
 }
