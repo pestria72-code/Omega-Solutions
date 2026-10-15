@@ -11,13 +11,17 @@ describe('CrmService', () => {
     companyId: 'company-1', branchId: null, role: 'owner', permissions: ['crm:read','crm:write'],
   };
   let db: { query: ReturnType<typeof vi.fn>; transaction: ReturnType<typeof vi.fn> };
-  let memberships: { getMembership: ReturnType<typeof vi.fn> };
+  let memberships: { getMembership: ReturnType<typeof vi.fn>; getMembershipForCompany: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
   let service: CrmService;
 
   beforeEach(() => {
     db = { query: vi.fn(), transaction: vi.fn() };
-    memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-1', branchId: null, role: 'owner' }) };
+    const membership = { companyId: 'company-1', branchId: null, role: 'owner' };
+    memberships = {
+      getMembership: vi.fn().mockResolvedValue(membership),
+      getMembershipForCompany: vi.fn().mockResolvedValue(membership),
+    };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     service = new CrmService(
       db as unknown as DatabaseService,
@@ -33,6 +37,17 @@ describe('CrmService', () => {
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('WHERE company_id = $1'),
       ['company-1', 'qualified', '%Acme%'],
+    );
+  });
+
+  it('uses the active company membership instead of the default membership', async () => {
+    memberships.getMembershipForCompany.mockResolvedValue({ companyId: 'company-active', branchId: null, role: 'owner' });
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    await service.listLeads(user);
+    expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-1', 'company-1');
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE company_id = $1'),
+      ['company-active', null, null],
     );
   });
 
