@@ -193,4 +193,20 @@ describe('ManufacturingService',()=>{
   expect(audit.log).not.toHaveBeenCalled();
  });
 
+ it('aborts production completion when a required WIP control account is unavailable',async()=>{
+  const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
+   if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:0,bom_id:'bom-1',product_id:'finished-1',product_cost:0}],rowCount:1};
+   if(sql.includes('SELECT material_product_id,required_quantity,reserved_quantity,consumed_quantity,unit_cost'))return {rows:[{material_product_id:'material-1',required_quantity:2,reserved_quantity:2,consumed_quantity:0,unit_cost:50}],rowCount:1};
+   if(sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2}],rowCount:1};
+   if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:1}],rowCount:1};
+   if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:'journal-1'}],rowCount:1};
+   if(sql.includes('SELECT id FROM chart_of_accounts'))return {rows:params[1]==='work_in_progress'?[{id:'account-wip'}]:[],rowCount:params[1]==='work_in_progress'?1:0};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  await expect(service.completeOrder(user,'order-1')).rejects.toThrow('Required accounting account "inventory" is missing or inactive.');
+  expect(db.transaction).toHaveBeenCalledTimes(1);
+  expect(audit.log).not.toHaveBeenCalled();
+ });
+
 });
