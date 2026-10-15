@@ -62,4 +62,18 @@ describe('AccountingService receivables reconciliation', () => {
     expect(result.variance).toBe(-0.01);
     expect(result.reconciled).toBe(true);
   });
+  it('seeds the work-in-progress control account for manufacturing', async () => {
+    const clientQuery = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) =>
+      callback({ query: clientQuery }),
+    );
+
+    await service.ensureDefaults('company-active');
+
+    expect(clientQuery).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO chart_of_accounts'),
+      ['company-active', '1250', 'Work in Progress', 'asset', 'debit', 'work_in_progress'],
+    );
+  });
+
 });
