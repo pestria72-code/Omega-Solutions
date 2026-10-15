@@ -36,4 +36,19 @@ describe('ManufacturingService',()=>{
   expect(client.query).toHaveBeenCalledTimes(1);
   expect(audit.log).not.toHaveBeenCalled();
  });
+
+ it('releases reserved components atomically when an in-progress order is cancelled',async()=>{
+  const client={query:vi.fn().mockImplementation(async(sql:string)=>{
+   if(sql.includes('SELECT id,status,warehouse_id FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1'}],rowCount:1};
+   if(sql.includes('SELECT material_product_id,reserved_quantity FROM manufacturing_order_materials'))return {rows:[{material_product_id:'material-1',reserved_quantity:3}],rowCount:1};
+   if(sql.includes('UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity-$1'))return {rows:[{id:'stock-1'}],rowCount:1};
+   if(sql.includes('SELECT * FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status:'cancelled'}],rowCount:1};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  const result=await service.cancelOrder(user,'order-1');
+  expect(result.status).toBe('cancelled');
+  expect(client.query).toHaveBeenCalledWith(expect.stringContaining('reserved_quantity=reserved_quantity-$1'),[3,'company-active','warehouse-1','material-1']);
+  expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({action:'manufacturing.order.cancel',oldValues:{status:'in_progress'},newValues:{status:'cancelled'}}));
+ });
 });
