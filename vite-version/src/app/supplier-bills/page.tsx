@@ -1,20 +1,114 @@
-import { FileText } from "lucide-react"
-import { ModulePlaceholder } from "@/components/module-placeholder"
+import * as React from "react";
+import { AlertCircle, FileText, Loader2, Plus, RefreshCw, Wallet } from "lucide-react";
+import { BaseLayout } from "@/components/layouts/base-layout";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { api } from "@/lib/api-client";
+import { formatKES, formatDate } from "@/lib/format";
 
-export default function SupplierBillsPage() {
-  return (
-    <ModulePlaceholder
-      title="Supplier Bills"
-      description="Track bills received from suppliers"
-      icon={FileText}
-      tableHeaders={["Bill #", "Supplier", "Date", "Due Date", "Amount"]}
-      tableRows={[
-        ["BILL-2024-022", "Nairobi Electronics Ltd", "03 Oct 2024", "17 Oct 2024", "KSh 280,000"],
-        ["BILL-2024-021", "Stationery World Ltd", "01 Oct 2024", "15 Oct 2024", "KSh 95,000"],
-        ["BILL-2024-020", "CleanPro Distributors", "28 Sep 2024", "12 Oct 2024", "KSh 42,000"],
-        ["BILL-2024-019", "Mombasa Supply Co", "26 Sep 2024", "10 Oct 2024", "KSh 67,000"],
-        ["BILL-2024-018", "Nairobi Electronics Ltd", "20 Sep 2024", "04 Oct 2024", "KSh 125,000"],
-      ]}
-    />
-  )
+type Supplier={id:string;name:string;is_active:boolean;status:string};
+type POLine={id:string;product_name:string;sku:string|null;quantity:string|number;received_quantity:string|number;unit_cost:string|number;tax_rate?:string|number};
+type PO={id:string;order_number:string;supplier_id:string;supplier_name:string;status:string;items?:POLine[]};
+type BillLine={description:string;quantity:string;unitCost:string;taxRate:string;purchaseOrderItemId?:string};
+type Bill={id:string;bill_number:string;supplier_name:string;supplier_id:string;purchase_order_id:string|null;supplier_invoice_number:string|null;bill_date:string;due_date:string|null;status:"open"|"partially_paid"|"paid"|"void";total:string|number;paid_amount:string|number;balance:string|number;item_count:number};
+const statusLabel:Record<Bill["status"],string>={open:"Open",partially_paid:"Partially paid",paid:"Paid",void:"Void"};
+function messageOf(e:unknown){return e&&typeof e==="object"&&"message" in e?String((e as {message:unknown}).message):"Request failed. Please try again."}
+function statusStyle(s:Bill["status"]){return s==="paid"?"bg-emerald-500/10 text-emerald-700":s==="void"?"bg-destructive/10 text-destructive":s==="partially_paid"?"bg-amber-500/10 text-amber-700":"bg-muted text-muted-foreground"}
+export default function SupplierBillsPage(){
+ const [bills,setBills]=React.useState<Bill[]>([]);
+ const [suppliers,setSuppliers]=React.useState<Supplier[]>([]);
+ const [orders,setOrders]=React.useState<PO[]>([]);
+ const [loading,setLoading]=React.useState(true);
+ const [saving,setSaving]=React.useState(false);
+ const [busyId,setBusyId]=React.useState("");
+ const [error,setError]=React.useState("");
+ const [showForm,setShowForm]=React.useState(false);
+ const [supplierId,setSupplierId]=React.useState("");
+ const [purchaseOrderId,setPurchaseOrderId]=React.useState("");
+ const [supplierInvoiceNumber,setSupplierInvoiceNumber]=React.useState("");
+ const [billDate,setBillDate]=React.useState(new Date().toISOString().slice(0,10));
+ const [dueDate,setDueDate]=React.useState("");
+ const [notes,setNotes]=React.useState("");
+ const [lines,setLines]=React.useState<BillLine[]>([{description:"",quantity:"1",unitCost:"0",taxRate:"16"}]);
+ const [payBill,setPayBill]=React.useState<Bill|null>(null);
+ const [paymentAmount,setPaymentAmount]=React.useState("");
+ const [paymentDate,setPaymentDate]=React.useState(new Date().toISOString().slice(0,10));
+ const [paymentMethod,setPaymentMethod]=React.useState("bank_transfer");
+ const [paymentReference,setPaymentReference]=React.useState("");
+ const refresh=React.useCallback(async()=>{
+  setLoading(true);setError("");
+  try{
+   const [b,s,p]=await Promise.all([api.get<Bill[]>("/supplier-bills"),api.get<Supplier[]>("/suppliers"),api.get<PO[]>("/purchase-orders")]);
+   setBills(b);setSuppliers(s.filter(x=>x.is_active&&x.status==="active"));setOrders(p.filter(x=>["ordered","partially_received","received"].includes(x.status)));
+   setSupplierId(current=>current||s.find(x=>x.is_active&&x.status==="active")?.id||"");
+  }catch(e){setError(messageOf(e))}finally{setLoading(false)}
+ },[]);
+ React.useEffect(()=>{void refresh()},[refresh]);
+ const chooseOrder=async(id:string)=>{
+  setPurchaseOrderId(id);
+  if(!id){setLines([{description:"",quantity:"1",unitCost:"0",taxRate:"16"}]);return}
+  setError("");
+  try{
+   const po=await api.get<PO>(`/purchase-orders/${id}`);
+   setSupplierId(po.supplier_id);
+   const received=(po.items??[]).filter(i=>Number(i.received_quantity)>0).map(i=>({description:i.product_name,quantity:String(i.received_quantity),unitCost:String(i.unit_cost),taxRate:"0",purchaseOrderItemId:i.id}));
+   if(!received.length){setError("This order has no received quantities available to bill yet.");setLines([{description:"",quantity:"1",unitCost:"0",taxRate:"16"}]);return}
+   setLines(received);
+  }catch(e){setError(messageOf(e))}
+ };
+ const createBill=async()=>{
+  if(!supplierId||lines.some(l=>!l.description.trim()||Number(l.quantity)<=0||Number(l.unitCost)<0||Number(l.taxRate)<0||Number(l.taxRate)>100)){setError("Choose a supplier and complete each bill line with valid quantities, costs and tax rates.");return}
+  if(purchaseOrderId&&lines.some(l=>!l.purchaseOrderItemId)){setError("All lines on a purchase-order bill must be linked to received order lines.");return}
+  setSaving(true);setError("");
+  try{
+   await api.post("/supplier-bills",{supplierId,purchaseOrderId:purchaseOrderId||undefined,supplierInvoiceNumber:supplierInvoiceNumber.trim()||undefined,billDate:billDate||undefined,dueDate:dueDate||undefined,notes:notes.trim()||undefined,items:lines.map(l=>({description:l.description.trim(),quantity:Number(l.quantity),unitCost:Number(l.unitCost),taxRate:Number(l.taxRate||0),purchaseOrderItemId:l.purchaseOrderItemId}))});
+   setShowForm(false);setPurchaseOrderId("");setSupplierInvoiceNumber("");setDueDate("");setNotes("");setLines([{description:"",quantity:"1",unitCost:"0",taxRate:"16"}]);await refresh();
+  }catch(e){setError(messageOf(e))}finally{setSaving(false)}
+ };
+ const recordPayment=async()=>{
+  if(!payBill)return;
+  const amount=Number(paymentAmount);
+  if(!Number.isFinite(amount)||amount<=0||amount>Number(payBill.balance)+0.000001){setError("Enter a payment greater than zero and no more than the outstanding balance.");return}
+  setBusyId(payBill.id);setError("");
+  try{
+   await api.post(`/supplier-bills/${payBill.id}/payments`,{amount,paymentDate:paymentDate||undefined,method:paymentMethod,reference:paymentReference.trim()||undefined});
+   setPayBill(null);setPaymentAmount("");setPaymentReference("");await refresh();
+  }catch(e){setError(messageOf(e))}finally{setBusyId("")}
+ };
+ const outstanding=bills.filter(b=>b.status==="open"||b.status==="partially_paid").reduce((sum,b)=>sum+Number(b.balance),0);
+ const overdue=bills.filter(b=>(b.status==="open"||b.status==="partially_paid")&&b.due_date&&new Date(b.due_date+"T00:00:00")<new Date(new Date().toDateString())).reduce((sum,b)=>sum+Number(b.balance),0);
+ return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
+  <PageHeader title="Supplier Bills" description="Track supplier invoices, outstanding payables, due dates and payments against received goods." action={<div className="flex gap-2"><Button variant="outline" onClick={()=>void refresh()} disabled={loading}><RefreshCw className="size-4"/>Refresh</Button><Button onClick={()=>setShowForm(v=>!v)}><Plus className="size-4"/>{showForm?"Close form":"New supplier bill"}</Button></div>}/>
+  {error&&<div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0"/>{error}</div>}
+  <div className="grid gap-3 sm:grid-cols-3"><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Supplier bills</p><p className="text-2xl font-semibold tabular-nums">{bills.length}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Outstanding payables</p><p className="text-2xl font-semibold tabular-nums">{formatKES(outstanding)}</p></CardContent></Card><Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Overdue balance</p><p className="text-2xl font-semibold tabular-nums">{formatKES(overdue)}</p></CardContent></Card></div>
+  {showForm&&<Card><CardContent className="flex flex-col gap-4 p-4">
+   <div><h2 className="font-semibold">Create supplier bill</h2><p className="text-sm text-muted-foreground">You can enter a standalone supplier invoice or link it to a purchase order. Linked lines can only bill quantities already received and not previously billed.</p></div>
+   <div className="grid gap-4 md:grid-cols-2">
+    <div className="flex flex-col gap-1"><Label htmlFor="bill-supplier">Supplier</Label><select id="bill-supplier" className="h-9 rounded-md border bg-background px-3 text-sm" value={supplierId} onChange={e=>setSupplierId(e.target.value)} disabled={!!purchaseOrderId}><option value="">Choose supplier</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+    <div className="flex flex-col gap-1"><Label htmlFor="bill-po">Link purchase order (optional)</Label><select id="bill-po" className="h-9 rounded-md border bg-background px-3 text-sm" value={purchaseOrderId} onChange={e=>void chooseOrder(e.target.value)}><option value="">Standalone bill</option>{orders.map(o=><option key={o.id} value={o.id}>{o.order_number} — {o.supplier_name}</option>)}</select></div>
+    <div className="flex flex-col gap-1"><Label htmlFor="supplier-invoice">Supplier invoice number</Label><Input id="supplier-invoice" value={supplierInvoiceNumber} onChange={e=>setSupplierInvoiceNumber(e.target.value)} maxLength={120}/></div>
+    <div className="flex flex-col gap-1"><Label htmlFor="bill-date">Bill date</Label><Input id="bill-date" type="date" value={billDate} onChange={e=>setBillDate(e.target.value)}/></div>
+    <div className="flex flex-col gap-1"><Label htmlFor="bill-due">Due date</Label><Input id="bill-due" type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div>
+   </div>
+   <div className="flex flex-col gap-3"><div className="flex items-center justify-between"><h3 className="text-sm font-medium">Bill lines</h3>{!purchaseOrderId&&<Button type="button" variant="outline" size="sm" onClick={()=>setLines(v=>[...v,{description:"",quantity:"1",unitCost:"0",taxRate:"16"}])}><Plus className="size-3.5"/>Add line</Button>}</div>
+    {lines.map((line,index)=><div key={line.purchaseOrderItemId??index} className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(180px,2fr)_100px_130px_100px_auto]">
+     <div className="flex flex-col gap-1"><Label>Description</Label><Input value={line.description} onChange={e=>setLines(v=>v.map((x,i)=>i===index?{...x,description:e.target.value}:x))} disabled={!!purchaseOrderId}/></div>
+     <div className="flex flex-col gap-1"><Label>Quantity</Label><Input type="number" min="0.001" step="0.001" value={line.quantity} onChange={e=>setLines(v=>v.map((x,i)=>i===index?{...x,quantity:e.target.value}:x))}/></div>
+     <div className="flex flex-col gap-1"><Label>Unit cost (KSh)</Label><Input type="number" min="0" step="0.01" value={line.unitCost} onChange={e=>setLines(v=>v.map((x,i)=>i===index?{...x,unitCost:e.target.value}:x))}/></div>
+     <div className="flex flex-col gap-1"><Label>Tax %</Label><Input type="number" min="0" max="100" step="0.01" value={line.taxRate} onChange={e=>setLines(v=>v.map((x,i)=>i===index?{...x,taxRate:e.target.value}:x))}/></div>
+     {!purchaseOrderId&&<div className="flex items-end"><Button type="button" variant="ghost" disabled={lines.length===1} onClick={()=>setLines(v=>v.filter((_,i)=>i!==index))}>Remove</Button></div>}
+    </div>)}
+   </div>
+   <div className="flex flex-col gap-1"><Label htmlFor="bill-notes">Notes</Label><Input id="bill-notes" value={notes} onChange={e=>setNotes(e.target.value)} maxLength={2000}/></div>
+   <div className="flex justify-end"><Button onClick={()=>void createBill()} disabled={saving||suppliers.length===0||lines.length===0}>{saving?<Loader2 className="size-4 animate-spin"/>:<Plus className="size-4"/>}Create bill</Button></div>
+  </CardContent></Card>}
+  {payBill&&<Card><CardContent className="flex flex-col gap-4 p-4"><div><h2 className="font-semibold">Record payment — {payBill.bill_number}</h2><p className="text-sm text-muted-foreground">Outstanding balance: {formatKES(Number(payBill.balance))}</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className="flex flex-col gap-1"><Label htmlFor="pay-amount">Amount (KSh)</Label><Input id="pay-amount" type="number" min="0.01" max={Number(payBill.balance)} step="0.01" value={paymentAmount} onChange={e=>setPaymentAmount(e.target.value)}/></div><div className="flex flex-col gap-1"><Label htmlFor="pay-date">Payment date</Label><Input id="pay-date" type="date" value={paymentDate} onChange={e=>setPaymentDate(e.target.value)}/></div><div className="flex flex-col gap-1"><Label htmlFor="pay-method">Method</Label><select id="pay-method" className="h-9 rounded-md border bg-background px-3 text-sm" value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)}>{[["bank_transfer","Bank transfer"],["mpesa","M-Pesa"],["cash","Cash"],["cheque","Cheque"],["card","Card"],["other","Other"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div><div className="flex flex-col gap-1"><Label htmlFor="pay-reference">Reference</Label><Input id="pay-reference" value={paymentReference} onChange={e=>setPaymentReference(e.target.value)} maxLength={120}/></div></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setPayBill(null)} disabled={busyId===payBill.id}>Cancel</Button><Button onClick={()=>void recordPayment()} disabled={busyId===payBill.id}>{busyId===payBill.id?<Loader2 className="size-4 animate-spin"/>:<Wallet className="size-4"/>}Record payment</Button></div></CardContent></Card>}
+  <Card><CardContent className="flex flex-col gap-4 p-4"><div><h2 className="font-semibold">Accounts payable register</h2><p className="text-sm text-muted-foreground">Balances update transactionally when payments are recorded. No sample bills are inserted.</p></div>
+   {loading?<div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground"/></div>:bills.length===0?<div className="flex flex-col items-center gap-2 py-12 text-center"><FileText className="size-8 text-muted-foreground"/><p className="font-medium">No supplier bills yet</p><p className="text-sm text-muted-foreground">Create a bill to begin tracking amounts due to suppliers.</p></div>:<div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Bill #</TableHead><TableHead>Supplier</TableHead><TableHead>Supplier invoice</TableHead><TableHead>Bill date</TableHead><TableHead>Due date</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Balance</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{bills.map(b=><TableRow key={b.id}><TableCell className="font-medium">{b.bill_number}</TableCell><TableCell>{b.supplier_name}</TableCell><TableCell>{b.supplier_invoice_number||"—"}</TableCell><TableCell>{formatDate(b.bill_date)}</TableCell><TableCell>{b.due_date?formatDate(b.due_date):"—"}</TableCell><TableCell><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusStyle(b.status)}`}>{statusLabel[b.status]}</span></TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(b.total))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(b.paid_amount))}</TableCell><TableCell className="text-right font-medium tabular-nums">{formatKES(Number(b.balance))}</TableCell><TableCell><div className="flex justify-end">{(b.status==="open"||b.status==="partially_paid")&&<Button size="sm" variant="outline" disabled={busyId===b.id} onClick={()=>{setPayBill(b);setPaymentAmount(String(b.balance));setPaymentReference("")}}><Wallet className="size-3.5"/>Pay</Button>}</div></TableCell></TableRow>)}</TableBody></Table></div>}
+  </CardContent></Card>
+ </div></BaseLayout>;
 }
