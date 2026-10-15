@@ -457,6 +457,35 @@ export class InvoicesService {
     return Math.round(costTotal * 100) / 100;
   }
 
+  async rejectPayment(
+    user: AuthenticatedUser,
+    invoiceId: string,
+    paymentId: string,
+  ): Promise<InvoiceRow> {
+    const membership = await this.memberships.getMembership(user.userId);
+    const payment = await this.db.transaction(async (client) => {
+      const result = await client.query<InvoicePaymentRow>(
+        `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at, reconciliation_reference
+         FROM invoice_payments WHERE id=$1 AND invoice_id=$2 AND company_id=$3 FOR UPDATE`,
+        [paymentId, invoiceId, membership.companyId],
+      );
+      const row = result.rows[0];
+      if (!row) throw new NotFoundException('Payment report not found.');
+      if (row.status !== 'pending') throw new BadRequestException('Only pending payment reports can be rejected.');
+      await client.query(
+        "UPDATE invoice_payments SET status='rejected' WHERE id=$1 AND invoice_id=$2 AND company_id=$3 AND status='pending'",
+        [paymentId, invoiceId, membership.companyId],
+      );
+      return row;
+    });
+    await this.audit.log({
+      userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
+      action: 'invoice.payment.reject', entityType: 'invoice_payment', entityId: payment.id,
+      oldValues: { status: 'pending' }, newValues: { invoiceId, status: 'rejected' }, ipAddress: null,
+    });
+    return this.getById(user, invoiceId);
+  }
+
   async reconcilePayment(
     user: AuthenticatedUser,
     invoiceId: string,
@@ -560,7 +589,7 @@ export class InvoicesService {
       }
       if (status === 'cancelled' && (invoice.status === 'sent' || invoice.status === 'overdue')) {
         const reported = await client.query<{ count: string }>(
-          'SELECT COUNT(*)::text AS count FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2',
+          SELECT COUNT(*)::text AS count FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2 AND status <> 'rejected',
           [membership.companyId, invoiceId],
         );
         if (Number(reported.rows[0].count) > 0) throw new BadRequestException('Invoices with payment reports cannot be cancelled. Resolve the payment reports first.');
