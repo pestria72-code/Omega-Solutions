@@ -123,6 +123,9 @@ describe('AccountingService payables reconciliation', () => {
     const calls = db.query.mock.calls as unknown as [string, unknown[]][];
     expect(calls.every((call) => call[1]?.[0] === 'company-active')).toBe(true);
     expect(calls[1][0]).toContain("b.status<>'void'");
+    expect(calls[0][0]).toContain("j.status='posted'");
+    expect(calls[0][0]).toContain("a.system_code='accounts_payable'");
+    expect(calls[2][0]).toContain("b.status<>'void'");
   });
 
   it('flags a supplier subledger variance greater than one cent', async () => {
