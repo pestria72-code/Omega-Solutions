@@ -135,6 +135,14 @@ export class PosService {
     await this.accounting.ensureDefaults(companyId);
     const today=new Date().toISOString().slice(0,10);
     const totals=await this.db.transaction(async client=>{
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[dto.requestId]);
+      const prior=await client.query<{id:string;sale_number:string;total:string|number;subtotal:string|number;tax_amount:string|number;amount_confirmed:string|number;status:string;invoice_id:string}>(
+        'SELECT id,sale_number,total,subtotal,tax_amount,amount_confirmed,status,invoice_id FROM pos_sales WHERE company_id=$1 AND request_id=$2',
+        [companyId,dto.requestId]);
+      if(prior.rows[0]) {
+        const p=prior.rows[0];
+        return {saleId:p.id,invoiceId:p.invoice_id,saleNumber:p.sale_number,total:Number(p.total),subtotal:Number(p.subtotal),taxAmount:Number(p.tax_amount),amountConfirmed:Number(p.amount_confirmed),pendingPayment:Math.max(0,Number(p.total)-Number(p.amount_confirmed)),status:p.status,idempotent:true};
+      }
       const shiftResult=await client.query<{id:string;register_id:string;opened_by:string;status:string}>(
         'SELECT id,register_id,opened_by,status FROM pos_shifts WHERE id=$1 AND company_id=$2 FOR UPDATE',
         [dto.shiftId,companyId]);
@@ -230,9 +238,9 @@ export class PosService {
         costCents+=Math.round(line.quantity*line.cost*100);
       }
       const sale=await client.query<{id:string}>(
-        `INSERT INTO pos_sales(company_id,shift_id,register_id,warehouse_id,invoice_id,sale_number,subtotal,tax_amount,total,amount_confirmed,status,notes,created_by)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
-        [companyId,dto.shiftId,shift.register_id,dto.warehouseId,invoiceId,saleNumber,subtotalCents/100,taxCents/100,total,confirmedCents/100,pendingCents?'awaiting_payment_confirmation':'completed',dto.notes?.trim()||null,user.userId]);
+        `INSERT INTO pos_sales(company_id,shift_id,register_id,warehouse_id,invoice_id,sale_number,request_id,subtotal,tax_amount,total,amount_confirmed,status,notes,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+        [companyId,dto.shiftId,shift.register_id,dto.warehouseId,invoiceId,saleNumber,dto.requestId,subtotalCents/100,taxCents/100,total,confirmedCents/100,pendingCents?'awaiting_payment_confirmation':'completed',dto.notes?.trim()||null,user.userId]);
       await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS sale ${saleNumber}`,sourceType:'invoice',sourceId:invoiceId,lines:[
         {systemCode:'accounts_receivable',debit:total,credit:0,description:'POS customer receivable'},
         {systemCode:'sales_revenue',debit:subtotalCents/100,credit:0,description:'POS sales revenue'},
@@ -257,7 +265,7 @@ export class PosService {
       await client.query('UPDATE customers SET outstanding_balance=GREATEST(0,outstanding_balance-$1),updated_at=NOW() WHERE id=$2 AND company_id=$3',[confirmedCents/100,customerId,companyId]);
       return {saleId:sale.rows[0].id,invoiceId, saleNumber,total,subtotal:subtotalCents/100,taxAmount:taxCents/100,amountConfirmed:confirmedCents/100,pendingPayment:pendingCents/100,status:pendingCents?'awaiting_payment_confirmation':'completed'};
     });
-    await this.audit.log({userId:user.userId,companyId,branchId:null,action:'pos.sale.checkout',entityType:'pos_sale',entityId:totals.saleId,oldValues:null,newValues:totals,ipAddress:null});
+    if(!('idempotent' in totals)) await this.audit.log({userId:user.userId,companyId,branchId:null,action:'pos.sale.checkout',entityType:'pos_sale',entityId:totals.saleId,oldValues:null,newValues:totals,ipAddress:null});
     return totals;
   }
 
