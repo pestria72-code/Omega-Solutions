@@ -255,7 +255,7 @@ export class PosService {
         const isCash=p.method==='cash';
         const inserted=await client.query<{id:string}>(
           `INSERT INTO invoice_payments(company_id,invoice_id,amount,method,reference,notes,created_by,status,verified_at,verified_by,pos_shift_id)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8='confirmed' THEN NOW() ELSE NULL END,CASE WHEN $8='confirmed' THEN $7 ELSE NULL END,$9) RETURNING id`,
+           VALUES($1,$2,$3,$4,$5,$6,$7::uuid,$8::text,CASE WHEN $8::text='confirmed' THEN NOW() ELSE NULL END,CASE WHEN $8::text='confirmed' THEN $7::uuid ELSE NULL END,$9::uuid) RETURNING id`,
           [companyId,invoiceId,p.cents/100,p.method,p.reference?.trim()||null,`POS shift ${dto.shiftId}`,user.userId,isCash?'confirmed':'pending',dto.shiftId]);
         if(isCash) {
           await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS cash receipt ${saleNumber}`,sourceType:'invoice_payment',sourceId:inserted.rows[0].id,lines:[
