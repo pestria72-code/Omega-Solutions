@@ -84,13 +84,13 @@ export function LandingNavbar() {
         {/* Logo */}
         <div className="flex items-center gap-2">
           <Link
-            href="https://shadcnstore.com"
+            href="/"
             className="flex items-center gap-2 cursor-pointer"
             target="_blank"
             rel="noopener noreferrer"
           >
             <Logo size={32} />
-            <span className="font-bold">ShadcnStore</span>
+            <span className="font-bold">Omega Solutions</span>
           </Link>
         </div>
 
@@ -138,7 +138,7 @@ export function LandingNavbar() {
             nativeButton={false}
             render={
               <a
-                href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                href="https://github.com/pestria72-code/Omega-Solutions"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub Repository"
@@ -203,7 +203,7 @@ export function LandingNavbar() {
                     <Logo size={16} />
                   </div>
                   <SheetTitle className="text-lg font-semibold">
-                    ShadcnStore
+                    Omega Solutions
                   </SheetTitle>
                   <div className="ml-auto flex items-center gap-2">
                     <Button
