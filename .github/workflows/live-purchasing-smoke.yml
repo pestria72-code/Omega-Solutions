@@ -7,16 +7,19 @@ on:
       - development
     paths:
       - "api/scripts/live-purchasing-smoke.mjs"
+      - "api/scripts/live-hrm-expenses-smoke.mjs"
       - "api/src/supplier-bills/**"
       - "api/src/accounting/**"
       - "api/src/purchase-orders/**"
       - "api/src/inventory/**"
+      - "api/src/employees/**"
+      - "api/src/expenses/**"
       - ".github/workflows/live-purchasing-smoke.yml"
 
 permissions:
   contents: read
 
-# Keep the authenticated end-to-end check available after development API deployments.
+# Keep authenticated development ERP end-to-end checks available after API changes.
 
 jobs:
   live-purchasing-smoke:
@@ -32,3 +35,8 @@ jobs:
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
         run: node api/scripts/live-purchasing-smoke.mjs
+
+      - name: Verify live authenticated HRM, expenses and trial balance
+        env:
+          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+        run: node api/scripts/live-hrm-expenses-smoke.mjs
