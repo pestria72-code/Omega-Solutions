@@ -2,7 +2,6 @@ import * as React from "react";
 import { Loader2, RefreshCw, MapPin, ClipboardList, Clock3 } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
