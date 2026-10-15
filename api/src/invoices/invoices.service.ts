@@ -589,7 +589,7 @@ export class InvoicesService {
       }
       if (status === 'cancelled' && (invoice.status === 'sent' || invoice.status === 'overdue')) {
         const reported = await client.query<{ count: string }>(
-          SELECT COUNT(*)::text AS count FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2 AND status <> 'rejected',
+          "SELECT COUNT(*)::text AS count FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2 AND status <> 'rejected'",
           [membership.companyId, invoiceId],
         );
         if (Number(reported.rows[0].count) > 0) throw new BadRequestException('Invoices with payment reports cannot be cancelled. Resolve the payment reports first.');
