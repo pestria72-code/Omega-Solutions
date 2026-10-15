@@ -15,27 +15,27 @@ import { Github } from "@/components/icons/brand-icons"
 const values = [
   {
     icon: Code,
-    title: "Developer First",
+    title: "Operational Clarity",
     description:
-      "Every component is built with the developer experience in mind, ensuring clean code and easy integration.",
+      "Give teams a shared view of the processes and records they need to do their work.",
   },
   {
     icon: Palette,
-    title: "Design Excellence",
+    title: "Controlled Access",
     description:
-      "We maintain the highest design standards, following shadcn/ui principles and modern UI patterns.",
+      "Use role-based permissions to help protect sensitive business operations.",
   },
   {
     icon: Layout,
-    title: "Production Ready",
+    title: "Connected Workflows",
     description:
-      "Battle-tested components used in real applications with proven performance and reliability across different environments.",
+      "Connect operational processes across departments instead of relying on disconnected tools.",
   },
   {
     icon: Crown,
-    title: "Premium Quality",
+    title: "Tenant Separation",
     description:
-      "Hand-crafted with attention to detail and performance optimization, ensuring exceptional user experience and accessibility.",
+      "Keep organization data appropriately separated through tenant-aware access controls.",
   },
 ]
 
@@ -46,15 +46,13 @@ export function AboutSection() {
         {/* Section Header */}
         <div className="mx-auto max-w-4xl text-center mb-16">
           <Badge variant="outline" className="mb-4">
-            About ShadcnStore
+            About Omega Solutions
           </Badge>
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-6">
-            Built for developers, by developers
+            One platform for connected business operations
           </h2>
           <p className="text-lg text-muted-foreground mb-8">
-            We're passionate about creating the best marketplace for shadcn/ui
-            components and templates. Our mission is to accelerate development
-            and help developers build beautiful admin interfaces faster.
+            Omega Solutions brings finance, inventory, workforce, payroll, sales, and operations into one business management platform, with a focus on reliable workflows, clear permissions, and tenant-aware data separation.
           </p>
         </div>
 
@@ -81,7 +79,7 @@ export function AboutSection() {
         <div className="mt-16 text-center">
           <div className="flex items-center justify-center gap-2 mb-6">
             <span className="text-muted-foreground">
-              ❤️ Made with love for the developer community
+              Ready to bring your business workflows together?
             </span>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -91,14 +89,14 @@ export function AboutSection() {
               nativeButton={false}
               render={
                 <a
-                  href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                  href="/login"
                   target="_blank"
                   rel="noopener noreferrer"
                 />
               }
             >
               <Github data-icon="inline-start" />
-              Star on GitHub
+              Open your workspace
             </Button>
             <Button
               size="lg"
@@ -107,13 +105,13 @@ export function AboutSection() {
               nativeButton={false}
               render={
                 <a
-                  href="https://discord.com/invite/XEQhPc9a6p"
+                  href="#features"
                   target="_blank"
                   rel="noopener noreferrer"
                 />
               }
             >
-              Join Discord Community
+              Explore ERP capabilities
             </Button>
           </div>
         </div>
