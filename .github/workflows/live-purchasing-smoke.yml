@@ -2,12 +2,6 @@ name: Authenticated purchasing live smoke test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - development
-    paths:
-      - .github/workflows/live-purchasing-smoke.yml
-      - api/scripts/live-purchasing-smoke.mjs
 
 permissions:
   contents: read
@@ -22,7 +16,7 @@ jobs:
         with:
           ref: development
 
-      - name: Verify live authenticated purchasing workflow
+      - name: Verify live authenticated purchasing and accounting workflow
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
         run: node api/scripts/live-purchasing-smoke.mjs
