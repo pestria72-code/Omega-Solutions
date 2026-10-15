@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS pos_sales (
   warehouse_id UUID NOT NULL,
   invoice_id UUID NOT NULL,
   sale_number VARCHAR(40) NOT NULL,
+  request_id UUID,
   subtotal NUMERIC(14,2) NOT NULL CHECK(subtotal >= 0),
   tax_amount NUMERIC(14,2) NOT NULL CHECK(tax_amount >= 0),
   total NUMERIC(14,2) NOT NULL CHECK(total >= 0),
@@ -39,3 +40,8 @@ CREATE TABLE IF NOT EXISTS pos_sales (
 CREATE INDEX IF NOT EXISTS idx_pos_sales_company_created ON pos_sales(company_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_pos_sales_shift ON pos_sales(company_id,shift_id,created_at DESC);
 ALTER TABLE pos_sales ENABLE ROW LEVEL SECURITY;
+
+-- Backfill existing sales before requiring idempotency keys on new checkouts.
+UPDATE pos_sales SET request_id=uuid_generate_v4() WHERE request_id IS NULL;
+ALTER TABLE pos_sales ALTER COLUMN request_id SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pos_sales_company_request_id ON pos_sales(company_id,request_id);
