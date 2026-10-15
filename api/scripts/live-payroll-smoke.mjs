@@ -136,9 +136,9 @@ try {
   }
 
   console.log(JSON.stringify({ ok: true, target: base, companyId, employeeId, payrollRunId, status: details.status, checks,
-    note: "Test tenant and draft payroll records are retained; no approval or posting was performed." }, null, 2));
+    note: "No approval or posting was performed. The workflow cleanup job removes this isolated tenant when configured." }, null, 2));
 } catch (error) {
   console.error(JSON.stringify({ ok: false, target: base, error: String(error), companyId, employeeId, payrollRunId, checks,
-    note: "Any records created before failure are retained in the isolated test tenant; inspect before retrying." }, null, 2));
+    note: "If cleanup is not configured or fails, inspect the isolated test tenant before retrying." }, null, 2));
   process.exitCode = 1;
 }
