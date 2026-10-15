@@ -67,13 +67,15 @@ export class SupplierBillsService {
       const seq=await client.query<{next_number:number}>(`INSERT INTO supplier_bill_sequences(company_id,bill_year,next_number) VALUES($1,$2,1) ON CONFLICT(company_id,bill_year) DO UPDATE SET next_number=supplier_bill_sequences.next_number+1 RETURNING next_number`,[companyId,year]);
       const number=`BILL-${year}-${String(seq.rows[0].next_number).padStart(5,'0')}`;
       let subtotal=0,taxAmount=0;
-      const lines:Array<{description:string;qty:number;cost:number;rate:number;sub:number;tax:number;total:number;poItemId:string|null}>=[];
+      const lines:Array<{description:string;qty:number;cost:number;rate:number;sub:number;tax:number;total:number;poItemId:string|null;receiptValue:number}>=[];
       for(const item of dto.items){
         if(dto.purchaseOrderId&&!item.purchaseOrderItemId)throw new BadRequestException('Each bill line must reference a received purchase order line when a purchase order is linked.');
+        let receiptUnitCost = 0;
         if(item.purchaseOrderItemId){
           if(!dto.purchaseOrderId)throw new BadRequestException('A purchase order item requires a linked purchase order.');
           const poItem=await client.query<{id:string;product_name:string;unit_cost:string|number;purchase_order_id:string;quantity:string|number;received_quantity:string|number}>('SELECT id,product_name,unit_cost,purchase_order_id,quantity,received_quantity FROM purchase_order_items WHERE id=$1 AND company_id=$2 AND purchase_order_id=$3 FOR UPDATE',[item.purchaseOrderItemId,companyId,dto.purchaseOrderId]);
           if(!poItem.rows[0])throw new NotFoundException('Linked purchase order item not found.');
+          receiptUnitCost = Number(poItem.rows[0].unit_cost);
           const billed=await client.query<{quantity:string|number}>("SELECT COALESCE(SUM(i.quantity),0) AS quantity FROM supplier_bill_items i JOIN supplier_bills b ON b.id=i.supplier_bill_id AND b.company_id=i.company_id WHERE i.company_id=$1 AND i.purchase_order_item_id=$2 AND b.status<>'void'",[companyId,item.purchaseOrderItemId]);
           const available=Number(poItem.rows[0].received_quantity)-Number(billed.rows[0].quantity);
           if(item.quantity>available+0.0000001)throw new BadRequestException(`Bill quantity exceeds received, not-yet-billed quantity for "${poItem.rows[0].product_name}" (available: ${Math.max(0,available)}).`);
@@ -81,7 +83,7 @@ export class SupplierBillsService {
         const sub=Math.round(item.quantity*item.unitCost*100)/100;
         const tax=Math.round(sub*(item.taxRate??0))/100;
         subtotal+=sub;taxAmount+=tax;
-        lines.push({description:item.description.trim(),qty:item.quantity,cost:item.unitCost,rate:item.taxRate??0,sub,tax,total:sub+tax,poItemId:item.purchaseOrderItemId??null});
+        lines.push({description:item.description.trim(),qty:item.quantity,cost:item.unitCost,rate:item.taxRate??0,sub,tax,total:sub+tax,poItemId:item.purchaseOrderItemId??null,receiptValue:Math.round(item.quantity*receiptUnitCost*100)/100});
       }
       if(subtotal+taxAmount<=0)throw new BadRequestException('Supplier bill total must be greater than zero to post to the ledger.');
       const inserted=await client.query<{id:string}>(`INSERT INTO supplier_bills(company_id,supplier_id,purchase_order_id,bill_number,supplier_invoice_number,bill_date,due_date,status,subtotal,tax_amount,total,notes,created_by)
@@ -91,11 +93,14 @@ export class SupplierBillsService {
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[companyId,inserted.rows[0].id,line.poItemId,line.description,line.qty,line.cost,line.rate,line.sub,line.tax,line.total]);
       const billId=inserted.rows[0].id;
       // Goods received through a purchase order increase inventory; standalone bills remain expense-coded.
-      const inventorySubtotal=lines.filter(line=>line.poItemId!==null).reduce((sum,line)=>sum+line.sub,0);
-      const expenseSubtotal=subtotal-inventorySubtotal;
+      const receiptValue=lines.reduce((sum,line)=>sum+line.receiptValue,0);
+      const standaloneSubtotal=lines.filter(line=>line.poItemId===null).reduce((sum,line)=>sum+line.sub,0);
+      const priceVariance=subtotal-standaloneSubtotal-receiptValue;
       const journalLines:Array<{systemCode:string;debit:number;credit:number;description:string}>=[];
-      if(inventorySubtotal>0)journalLines.push({systemCode:'inventory',debit:inventorySubtotal,credit:0,description:'Received goods added to inventory'});
-      if(expenseSubtotal>0)journalLines.push({systemCode:'purchases_expense',debit:expenseSubtotal,credit:0,description:'Standalone supplier bill expense'});
+      if(receiptValue>0)journalLines.push({systemCode:'goods_received_not_invoiced',debit:receiptValue,credit:0,description:'Clear goods received not yet invoiced'});
+      if(standaloneSubtotal>0)journalLines.push({systemCode:'purchases_expense',debit:standaloneSubtotal,credit:0,description:'Standalone supplier bill expense'});
+      if(priceVariance>0)journalLines.push({systemCode:'purchases_expense',debit:priceVariance,credit:0,description:'Purchase price variance'});
+      if(priceVariance<0)journalLines.push({systemCode:'purchases_expense',debit:0,credit:-priceVariance,description:'Purchase price variance credit'});
       if(taxAmount>0)journalLines.push({systemCode:'input_tax',debit:taxAmount,credit:0,description:'Recoverable input tax'});
       journalLines.push({systemCode:'accounts_payable',debit:0,credit:subtotal+taxAmount,description:'Supplier payable'});
       await this.postJournal(client,{companyId,date:dto.billDate??null,description:`Supplier bill ${number}`,sourceType:'supplier_bill',sourceId:billId,userId:user.userId,lines:journalLines});
