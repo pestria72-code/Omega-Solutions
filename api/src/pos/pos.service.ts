@@ -249,20 +249,9 @@ export class PosService {
            VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8='confirmed' THEN NOW() ELSE NULL END,CASE WHEN $8='confirmed' THEN $7 ELSE NULL END,$9) RETURNING id`,
           [companyId,invoiceId,p.cents/100,p.method,p.reference?.trim()||null,`POS shift ${dto.shiftId}`,user.userId,isCash?'confirmed':'pending',dto.shiftId]);
         if(isCash) {
-          // The invoice-level receipt journal is posted once below using the actual payment ID.
-          const paymentId=inserted.rows[0].id;
-          await client.query(
-            `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
-             VALUES($1,$2,$3,$4,'invoice_payment',$5,'posted',NOW(),$6)`,
-            [companyId,`JE-${today.slice(0,4)}-POS-${paymentId.slice(0,8)}`,today,`POS cash receipt ${saleNumber}`,paymentId,user.userId]);
-          const je=await client.query<{id:string}>("SELECT id FROM journal_entries WHERE company_id=$1 AND source_type='invoice_payment' AND source_id=$2",[companyId,paymentId]);
-          for(const line of [
-            {code:'cash',debit:p.cents/100,credit:0,description:'POS cash received'},
-            {code:'accounts_receivable',debit:0,credit:p.cents/100,description:'Reduce customer receivable'}]) {
-            const account=await client.query<{id:string}>('SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true',[companyId,line.code]);
-            if(!account.rows[0]) throw new BadRequestException(`Required accounting account "${line.code}" is missing or inactive.`);
-            await client.query('INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)',[companyId,je.rows[0].id,account.rows[0].id,line.description,line.debit,line.credit]);
-          }
+          await this.postJournal(client,{companyId,userId:user.userId,date:today,description:`POS cash receipt ${saleNumber}`,sourceType:'invoice_payment',sourceId:inserted.rows[0].id,lines:[
+            {systemCode:'cash',debit:p.cents/100,credit:0,description:'POS cash received'},
+            {systemCode:'accounts_receivable',debit:0,credit:p.cents/100,description:'Reduce customer receivable'}]});
         }
       }
       await client.query('UPDATE customers SET outstanding_balance=GREATEST(0,outstanding_balance-$1),updated_at=NOW() WHERE id=$2 AND company_id=$3',[confirmedCents/100,customerId,companyId]);
