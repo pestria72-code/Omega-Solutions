@@ -63,8 +63,8 @@ export class WorkforceService {
     const toDate = to ? this.date(to, 'to') : undefined;
     if (fromDate && toDate && fromDate > toDate) throw new BadRequestException('from must be on or before to.');
     let sql='SELECT a.*,e.employee_number,e.first_name,e.last_name,s.site_name,s.client_name FROM attendance_records a JOIN employees e ON e.id=a.employee_id AND e.company_id=a.company_id LEFT JOIN employee_assignments x ON x.id=a.assignment_id AND x.company_id=a.company_id LEFT JOIN client_sites s ON s.id=x.site_id AND s.company_id=x.company_id WHERE a.company_id=$1';
-    if(fromDate){params.push(fromDate);sql+=' AND a.punched_at >= 
-    if(toDate){params.push(toDate);sql+=' AND a.punched_at < (
+    if(fromDate){params.push(fromDate);sql+=' AND a.punched_at >= $'+params.length+'::date';}
+    if(toDate){params.push(toDate);sql+=' AND a.punched_at < ($'+params.length+'::date + INTERVAL \'1 day\')';}
     if(employeeId){params.push(employeeId);sql+=' AND a.employee_id=$'+params.length;}
     sql+=' ORDER BY a.punched_at DESC LIMIT 1000'; return (await this.db.query(sql,params)).rows;
   }
