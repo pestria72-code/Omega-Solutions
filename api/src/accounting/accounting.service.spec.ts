@@ -77,3 +77,63 @@ describe('AccountingService receivables reconciliation', () => {
   });
 
 });
+
+
+describe('AccountingService payables reconciliation', () => {
+  const user: AuthenticatedUser = {
+    userId: 'user-1', email: 'owner@example.test', fullName: 'Test Owner',
+    companyId: 'company-active', branchId: null, role: 'owner', permissions: ['accounting:read'],
+  };
+  let db: { query: ReturnType<typeof vi.fn>; transaction: ReturnType<typeof vi.fn> };
+  let memberships: { getMembership: ReturnType<typeof vi.fn>; getMembershipForCompany: ReturnType<typeof vi.fn> };
+  let service: AccountingService;
+
+  beforeEach(() => {
+    db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ balance: '232.00' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [{ balance: '232.00' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [{ current: '132.00', days_1_to_30: '100.00', days_31_to_60: '0.00', days_61_plus: '0.00' }], rowCount: 1 }),
+      transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) =>
+        callback({ query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }) }),
+      ),
+    };
+    memberships = {
+      getMembership: vi.fn().mockResolvedValue({ companyId: 'company-default', branchId: null, role: 'owner' }),
+      getMembershipForCompany: vi.fn().mockResolvedValue({ companyId: 'company-active', branchId: null, role: 'owner' }),
+    };
+    service = new AccountingService(
+      db as unknown as DatabaseService,
+      memberships as unknown as MembershipsService,
+      { log: vi.fn() } as unknown as AuditService,
+    );
+  });
+
+  it('reconciles the AP control account to outstanding supplier bills and returns ageing', async () => {
+    const result = await service.payablesReconciliation(user);
+
+    expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-1', 'company-active');
+    expect(memberships.getMembership).not.toHaveBeenCalled();
+    expect(result.controlAccountBalance).toBe(232);
+    expect(result.supplierBillsBalance).toBe(232);
+    expect(result.variance).toBe(0);
+    expect(result.reconciled).toBe(true);
+    expect(result.ageing).toEqual({ current: 132, days1to30: 100, days31to60: 0, days61plus: 0 });
+    expect(db.query).toHaveBeenCalledTimes(3);
+    const calls = db.query.mock.calls as unknown as [string, unknown[]][];
+    expect(calls.every((call) => call[1]?.[0] === 'company-active')).toBe(true);
+    expect(calls[1][0]).toContain("b.status<>'void'");
+  });
+
+  it('flags a supplier subledger variance greater than one cent', async () => {
+    db.query.mockReset()
+      .mockResolvedValueOnce({ rows: [{ balance: '232.00' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ balance: '231.98' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ current: '231.98', days_1_to_30: '0', days_31_to_60: '0', days_61_plus: '0' }], rowCount: 1 });
+
+    const result = await service.payablesReconciliation(user);
+
+    expect(result.variance).toBe(0.02);
+    expect(result.reconciled).toBe(false);
+  });
+});
