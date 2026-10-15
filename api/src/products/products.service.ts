@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { ProductRow } from './product.types.js';
 import type { CreateProductDto, UpdateProductDto } from './dto/product.dto.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 
 const PRODUCT_COLUMNS = `
   id, company_id, sku, name, description, category, unit,
@@ -23,6 +24,7 @@ export class ProductsService {
     private readonly db: DatabaseService,
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
+    private readonly accounting: AccountingService,
   ) {}
 
   async list(user: AuthenticatedUser, search?: string): Promise<ProductRow[]> {
@@ -58,6 +60,10 @@ export class ProductsService {
 
     if (isService && initialStock > 0) {
       throw new BadRequestException('Service items cannot have an initial stock quantity.');
+    }
+
+    if (!isService && initialStock > 0 && Number(dto.costPrice ?? 0) > 0) {
+      await this.accounting.ensureDefaults(membership.companyId);
     }
 
     const product = await this.db.transaction(async (client) => {
@@ -146,6 +152,39 @@ export class ProductsService {
             user.userId,
           ],
         );
+
+        const openingValue = Math.round(initialStock * Number(dto.costPrice ?? 0) * 100) / 100;
+        if (openingValue > 0) {
+          const year = new Date().getFullYear();
+          const seq = await client.query<{ next_number: number }>(
+            `INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
+             ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1
+             RETURNING next_number`,
+            [membership.companyId, year],
+          );
+          const entryNumber = `JE-${year}-${String(seq.rows[0].next_number).padStart(6, '0')}`;
+          const entry = await client.query<{ id: string }>(
+            `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+             VALUES($1,$2,CURRENT_DATE,$3,'inventory_opening_balance',$4,'posted',NOW(),$5) RETURNING id`,
+            [membership.companyId, entryNumber, `Opening inventory balance for ${created.name}`, created.id, user.userId],
+          );
+          const accounts = await client.query<{ id: string; system_code: string }>(
+            `SELECT id,system_code FROM chart_of_accounts
+             WHERE company_id=$1 AND system_code IN ('inventory','equity') AND is_active=true`,
+            [membership.companyId],
+          );
+          const inventoryAccount = accounts.rows.find((account) => account.system_code === 'inventory');
+          const equityAccount = accounts.rows.find((account) => account.system_code === 'equity');
+          if (!inventoryAccount || !equityAccount) {
+            throw new BadRequestException('Required inventory and equity accounts must be active to post opening stock value.');
+          }
+          await client.query(
+            `INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit)
+             VALUES($1,$2,$3,$4,$5,0),($1,$2,$6,$7,0,$5)`,
+            [membership.companyId, entry.rows[0].id, inventoryAccount.id, 'Opening inventory value', openingValue,
+              equityAccount.id, 'Opening stock funded by opening equity'],
+          );
+        }
       }
 
       return created;
