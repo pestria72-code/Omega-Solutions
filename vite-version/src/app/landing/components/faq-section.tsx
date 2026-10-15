@@ -19,39 +19,39 @@ type FaqItem = {
 const faqItems: FaqItem[] = [
   {
     value: "item-1",
-    question: "How do I integrate ShadcnStore components into my project?",
+    question: "How do I access Omega Solutions?",
     answer:
-      "Integration is simple! All our components are built with shadcn/ui and work with React, Next.js, and Vite. Just copy the component code, install any required dependencies, and paste it into your project. Each component comes with detailed installation instructions and examples.",
+      "Use the Sign in or register button to open the existing Omega Solutions authentication page. After successful sign-in, the app takes you to your ERP dashboard.",
   },
   {
     value: "item-2",
-    question: "What's the difference between free and premium components?",
+    question: "Which business areas does the ERP cover?",
     answer:
-      "Free components include essential UI elements like buttons, forms, and basic layouts. Premium components offer advanced features like complex data tables, analytics dashboards, authentication flows, and complete admin templates. Premium also includes Figma files, priority support, and commercial licenses.",
+      "Omega Solutions includes workflows for finance and accounting, inventory and warehousing, sales and customers, workforce and payroll, purchasing, and administration.",
   },
   {
     value: "item-3",
-    question: "Can I use these components in commercial projects?",
+    question: "How is access to the ERP controlled?",
     answer:
-      "Yes! Free components come with an MIT license for unlimited use. Premium components include a commercial license that allows usage in client projects, SaaS applications, and commercial products without attribution requirements.",
+      "ERP pages require authentication, and access to sensitive actions should follow the permissions configured for the signed-in user.",
   },
   {
     value: "item-4",
-    question: "Do you provide support and updates?",
+    question: "Can multiple organizations use the ERP?",
     answer:
-      "Absolutely! We provide community support for free components through our Discord server and GitHub issues. Premium subscribers get priority email support, regular component updates, and early access to new releases. We also maintain compatibility with the latest shadcn/ui versions.",
+      "The project is being developed with tenant-aware access and data separation in mind. Tenant configuration and isolation should be validated for your deployment before onboarding real customer data.",
   },
   {
     value: "item-5",
-    question: "What frameworks and tools do you support?",
+    question: "Where do I go after signing in?",
     answer:
-      "Our components work with React 18+, Next.js 13+, and Vite. We use TypeScript, Tailwind CSS, and follow shadcn/ui conventions. Components are tested with popular tools like React Hook Form, TanStack Query, and Zustand for state management.",
+      "After authentication, the existing application directs you to the ERP dashboard. The landing page remains public, while the dashboard and business modules remain behind the existing protected route.",
   },
   {
     value: "item-6",
-    question: "How often do you release new components?",
+    question: "How can I report an issue?",
     answer:
-      "We release new components and templates weekly. Premium subscribers get early access to new releases, while free components are updated regularly based on community feedback. You can track our roadmap and request specific components through our GitHub repository.",
+      "Use the Omega Solutions GitHub repository to report bugs or request improvements.",
   },
 ]
 
@@ -68,8 +68,7 @@ const FaqSection = () => {
             Frequently Asked Questions
           </h2>
           <p className="text-lg text-muted-foreground">
-            Everything you need to know about ShadcnStore components, licensing,
-            and integration. Still have questions? We're here to help!
+            Answers about accessing the ERP, available business modules, and application access controls.
           </p>
         </div>
 
