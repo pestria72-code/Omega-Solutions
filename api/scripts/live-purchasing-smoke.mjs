@@ -30,8 +30,8 @@ try {
  const partial=(await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:2}],reference:`E2E-${stamp}`},token,[201])).data;
  ok(partial.status==="partially_received"&&Number(partial.items?.[0]?.received_quantity)===2,"partial receipt state");
  const partialJournals=(await req("GET","/accounting/journals",undefined,token)).data;
- const partialReceiptJournal=partialJournals.find(x=>x.source_type==="purchase_order_receipt"&&x.source_id===po.id);
- ok(!!partialReceiptJournal&&Math.abs(Number(partialReceiptJournal.total_debits)-200)<0.005&&Math.abs(Number(partialReceiptJournal.total_credits)-200)<0.005,"partial receipt posts balanced KES 200 inventory/GRNI journal");
+ const partialReceiptJournal=partialJournals.find(x=>x.source_type==="purchase_order_receipt"&&x.source_id===partial.receiptId);
+ ok(!!partial.receiptId&&!!partialReceiptJournal&&partialReceiptJournal.description.includes(po.order_number)&&Math.abs(Number(partialReceiptJournal.total_debits)-200)<0.005&&Math.abs(Number(partialReceiptJournal.total_credits)-200)<0.005,"partial receipt has unique receipt ID and balanced KES 200 inventory/GRNI journal");
  const partialReceiptDetail=(await req("GET",`/accounting/journals/${partialReceiptJournal.id}`,undefined,token)).data;
  ok(partialReceiptDetail.lines.some(x=>x.account_code==="1200"&&Math.abs(Number(x.debit)-200)<0.005),"receipt journal debits inventory");
  ok(partialReceiptDetail.lines.some(x=>/goods received/i.test(x.description||"")&&Math.abs(Number(x.credit)-200)<0.005),"receipt journal credits GRNI");
@@ -71,7 +71,7 @@ try {
  ok(finalJournals.filter(x=>["supplier_bill","supplier_bill_payment"].includes(x.source_type)).every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005),"all supplier bill/payment journal entries balance");
  const received=(await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:3}],reference:`E2E-FINAL-${stamp}`},token,[201])).data;
  ok(received.status==="received"&&Number(received.items?.[0]?.received_quantity)===5,"second receipt completes order");
- const finalReceiptJournals=(await req("GET","/accounting/journals",undefined,token)).data.filter(x=>x.source_type==="purchase_order_receipt"&&x.source_id===po.id);
+ const finalReceiptJournals=(await req("GET","/accounting/journals",undefined,token)).data.filter(x=>x.source_type==="purchase_order_receipt"&&[partial.receiptId,received.receiptId].includes(x.source_id));
  ok(finalReceiptJournals.length===2&&finalReceiptJournals.every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005)&&Math.abs(finalReceiptJournals.reduce((sum,x)=>sum+Number(x.total_debits),0)-500)<0.005,"both receipt journals balance and capitalize KES 500 total inventory");
  console.log(JSON.stringify({ok:true,email,userId:reg.userId,companyId:reg.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,checks},null,2));
 } catch(e) { console.error(JSON.stringify({ok:false,email,error:String(e),checks},null,2));process.exitCode=1; }
