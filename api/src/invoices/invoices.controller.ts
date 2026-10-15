@@ -45,6 +45,16 @@ export class InvoicesController {
     return this.invoices.recordPayment(req.user, id, dto);
   }
 
+  @Post(':id/payments/:paymentId/confirm')
+  @RequirePermissions('payments:verify')
+  confirmPayment(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    return this.invoices.confirmPayment(req.user, id, paymentId);
+  }
+
   @Patch(':id/status')
   @RequirePermissions('sales:write')
   updateStatus(
