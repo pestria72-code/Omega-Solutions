@@ -168,4 +168,29 @@ describe('ManufacturingService',()=>{
   expect(finishedGoodsJournal).toBeDefined();
  });
 
+ it('rejects duplicate completion before changing stock or posting journals',async()=>{
+  const client={query:vi.fn().mockImplementation(async(sql:string)=>{
+   if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status:'completed',warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:1,bom_id:'bom-1',product_id:'finished-1',product_cost:150}],rowCount:1};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  await expect(service.completeOrder(user,'order-1')).rejects.toThrow('Only in-progress production orders can be completed.');
+  expect(client.query).toHaveBeenCalledTimes(1);
+  expect(client.query.mock.calls.some((call:[string,unknown[]])=>call[0].includes('INSERT INTO journal_entries'))).toBe(false);
+  expect(audit.log).not.toHaveBeenCalled();
+ });
+ it('does not mark an order cancelled when a component reservation cannot be released',async()=>{
+  const client={query:vi.fn().mockImplementation(async(sql:string)=>{
+   if(sql.includes('SELECT id,status,warehouse_id FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1'}],rowCount:1};
+   if(sql.includes('SELECT COUNT(*)::int AS count FROM manufacturing_order_costs'))return {rows:[{count:0}],rowCount:1};
+   if(sql.includes('SELECT material_product_id,reserved_quantity FROM manufacturing_order_materials'))return {rows:[{material_product_id:'material-1',reserved_quantity:3}],rowCount:1};
+   if(sql.includes('UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity-$1'))return {rows:[],rowCount:0};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  await expect(service.cancelOrder(user,'order-1')).rejects.toThrow('Material reservation could not be released safely');
+  expect(client.query.mock.calls.some((call:[string,unknown[]])=>call[0].includes("SET status='cancelled'"))).toBe(false);
+  expect(audit.log).not.toHaveBeenCalled();
+ });
+
 });
