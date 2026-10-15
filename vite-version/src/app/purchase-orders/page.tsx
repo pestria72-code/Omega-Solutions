@@ -34,6 +34,11 @@ export default function PurchaseOrdersPage(){
  const [notes,setNotes]=React.useState("");
  const [lines,setLines]=React.useState<Line[]>([{productId:"",quantity:"1",unitCost:"0",taxRate:"16"}]);
  const [receiveWarehouse,setReceiveWarehouse]=React.useState("");
+ const [receivingOrder,setReceivingOrder]=React.useState<PurchaseOrder|null>(null);
+ const [receiveItems,setReceiveItems]=React.useState<Item[]>([]);
+ const [receiveQuantities,setReceiveQuantities]=React.useState<Record<string,string>>({});
+ const [receiveReference,setReceiveReference]=React.useState("");
+ const [receiveNotes,setReceiveNotes]=React.useState("");
  const [filter,setFilter]=React.useState("all");
  const refresh=React.useCallback(async()=>{
   setLoading(true);setError("");
@@ -69,10 +74,26 @@ export default function PurchaseOrdersPage(){
   setBusyId(order.id);setError("");
   try{
    const full=await api.get<PurchaseOrder>(`/purchase-orders/${order.id}`);
-   const remaining=(full.items??[]).filter(i=>Number(i.quantity)-Number(i.received_quantity)>0).map(i=>({itemId:i.id,quantity:Number(i.quantity)-Number(i.received_quantity)}));
-   if(!remaining.length){setError("There are no outstanding quantities to receive.");return}
-   await api.post(`/purchase-orders/${order.id}/receive`,{warehouseId:receiveWarehouse,items:remaining,reference:order.order_number});
-   await refresh();
+   const outstanding=(full.items??[]).filter(i=>Number(i.quantity)-Number(i.received_quantity)>0);
+   if(!outstanding.length){setError("There are no outstanding quantities to receive.");return}
+   setReceivingOrder(full);setReceiveItems(outstanding);
+   setReceiveQuantities(Object.fromEntries(outstanding.map(i=>[i.id,""])));
+   setReceiveReference(full.order_number);setReceiveNotes("");
+  }catch(e){setError(messageOf(e))}finally{setBusyId("")}
+ };
+ const submitReceipt=async()=>{
+  if(!receivingOrder||!receiveWarehouse)return;
+  const items=receiveItems.map(i=>({itemId:i.id,quantity:Number(receiveQuantities[i.id]||0)})).filter(i=>i.quantity>0);
+  if(!items.length){setError("Enter a quantity for at least one line to receive.");return}
+  for(const item of items){
+   const line=receiveItems.find(i=>i.id===item.itemId)!;
+   const remaining=Number(line.quantity)-Number(line.received_quantity);
+   if(item.quantity>remaining+0.0000001){setError(`Receipt quantity exceeds the remaining ${remaining} for ${line.product_name}.`);return}
+  }
+  setBusyId(receivingOrder.id);setError("");
+  try{
+   await api.post(`/purchase-orders/${receivingOrder.id}/receive`,{warehouseId:receiveWarehouse,items,reference:receiveReference.trim()||receivingOrder.order_number,notes:receiveNotes.trim()||undefined});
+   setReceivingOrder(null);setReceiveItems([]);setReceiveQuantities({});await refresh();
   }catch(e){setError(messageOf(e))}finally{setBusyId("")}
  };
  const visible=orders.filter(o=>filter==="all"||o.status===filter);
@@ -105,6 +126,12 @@ export default function PurchaseOrdersPage(){
    </div>
    <div className="flex flex-col gap-2"><Label htmlFor="po-notes">Notes</Label><Input id="po-notes" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Optional delivery or supplier notes"/></div>
    <div className="flex justify-end"><Button onClick={()=>void createOrder()} disabled={saving||suppliers.length===0||products.length===0}>{saving?<Loader2 className="size-4 animate-spin"/>:<Plus className="size-4"/>}Create draft order</Button></div>
+  </CardContent></Card>}
+  {receivingOrder&&<Card><CardContent className="flex flex-col gap-4 p-4">
+   <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold">Receive stock — {receivingOrder.order_number}</h2><p className="text-sm text-muted-foreground">Enter only the quantities delivered now. Leave other lines blank to receive them later.</p></div><Button variant="ghost" onClick={()=>setReceivingOrder(null)} disabled={busyId===receivingOrder.id}>Close</Button></div>
+   <div className="grid gap-3 sm:grid-cols-2"><div className="flex flex-col gap-1"><Label htmlFor="receipt-reference">Receipt reference</Label><Input id="receipt-reference" value={receiveReference} onChange={e=>setReceiveReference(e.target.value)} maxLength={120}/></div><div className="flex flex-col gap-1"><Label htmlFor="receipt-notes">Notes</Label><Input id="receipt-notes" value={receiveNotes} onChange={e=>setReceiveNotes(e.target.value)} maxLength={2000} placeholder="Optional delivery note"/></div></div>
+   <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Product</TableHead><TableHead className="text-right">Ordered</TableHead><TableHead className="text-right">Received</TableHead><TableHead className="text-right">Remaining</TableHead><TableHead className="w-40">Receive now</TableHead></TableRow></TableHeader><TableBody>{receiveItems.map(item=>{const remaining=Number(item.quantity)-Number(item.received_quantity);return <TableRow key={item.id}><TableCell><div className="font-medium">{item.product_name}</div><div className="text-xs text-muted-foreground">{item.sku||"No SKU"}</div></TableCell><TableCell className="text-right tabular-nums">{Number(item.quantity)}</TableCell><TableCell className="text-right tabular-nums">{Number(item.received_quantity)}</TableCell><TableCell className="text-right tabular-nums">{remaining}</TableCell><TableCell><Input aria-label={`Receive quantity for ${item.product_name}`} type="number" min="0" max={remaining} step="0.001" value={receiveQuantities[item.id]??""} onChange={e=>setReceiveQuantities(current=>({...current,[item.id]:e.target.value}))} placeholder="0"/></TableCell></TableRow>})}</TableBody></Table></div>
+   <div className="flex justify-end gap-2"><Button variant="outline" onClick={()=>setReceivingOrder(null)} disabled={busyId===receivingOrder.id}>Cancel</Button><Button onClick={()=>void submitReceipt()} disabled={busyId===receivingOrder.id||!receiveWarehouse}>{busyId===receivingOrder.id?<Loader2 className="size-4 animate-spin"/>:<Truck className="size-4"/>}Post receipt</Button></div>
   </CardContent></Card>}
   <Card><CardContent className="flex flex-col gap-4 p-4">
    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Purchase order register</h2><p className="text-sm text-muted-foreground">Receiving updates stock levels and records a receipt movement atomically.</p></div><div className="flex items-center gap-2 text-sm"><Label htmlFor="po-receive-warehouse" className="whitespace-nowrap">Receive into</Label><select id="po-receive-warehouse" className="h-9 rounded-md border bg-background px-3 text-sm" value={receiveWarehouse} onChange={e=>setReceiveWarehouse(e.target.value)}><option value="">Choose warehouse</option>{warehouses.map(w=><option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}</select></div></div>
