@@ -11,6 +11,7 @@ export class AccountingController {
  constructor(private readonly accounting:AccountingService){}
  @Get('accounts') @RequirePermissions('accounting:read') accounts(@Req() req:{user:AuthenticatedUser}){return this.accounting.listAccounts(req.user);}
  @Post('accounts') @RequirePermissions('accounting:write') createAccount(@Req() req:{user:AuthenticatedUser},@Body() dto:CreateAccountDto){return this.accounting.createAccount(req.user,dto);}
+ @Get('reconciliation/payables') @RequirePermissions('accounting:read') payablesReconciliation(@Req() req:{user:AuthenticatedUser}){return this.accounting.payablesReconciliation(req.user);}
  @Get('journals') @RequirePermissions('accounting:read') journals(@Req() req:{user:AuthenticatedUser}){return this.accounting.listJournals(req.user);}
  @Get('journals/:id') @RequirePermissions('accounting:read') journal(@Req() req:{user:AuthenticatedUser},@Param('id',ParseUUIDPipe) id:string){return this.accounting.getJournal(req.user,id);}
 }
