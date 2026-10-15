@@ -84,8 +84,8 @@ export default function WorkforcePage() {
       if (ch === '"' && quoted && text[i + 1] === '"') { cell += '"'; i++; }
       else if (ch === '"') quoted = !quoted;
       else if (ch === "," && !quoted) { row.push(cell.trim()); cell = ""; }
-      else if ((ch === "\\n" || ch === "\\r") && !quoted) {
-        if (ch === "\\r" && text[i + 1] === "\\n") i++;
+      else if ((ch === "\n" || ch === "\r") && !quoted) {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
         row.push(cell.trim()); if (row.some(value => value !== "")) records.push(row);
         row = []; cell = "";
       } else cell += ch;
@@ -241,7 +241,7 @@ export default function WorkforcePage() {
           <div className="grid gap-1.5 sm:col-span-2"><Label>CSV checklist file</Label><Input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={async e => { const file=e.target.files?.[0]; if(!file) return; setImportFileName(file.name); setImportCsv(await file.text()); setImportPreview(null); setImportError(null); }} /></div>
         </div>
         <div className="grid gap-1.5"><Label>Checklist CSV data</Label><textarea className="min-h-36 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" value={importCsv} onChange={e => { setImportCsv(e.target.value); setImportPreview(null); }} placeholder={"nationalId,siteCode,scheduledDays,presentDays,absentDays,leaveDays,restDays,unresolvedDays,notes\n12345678,SITE-01,22,20,1,1,8,0,"} /></div>
-        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { const blob=new Blob(["nationalId,siteCode,scheduledDays,presentDays,absentDays,leaveDays,restDays,unresolvedDays,notes\\n"],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="omega-monthly-attendance-template.csv"; a.click(); URL.revokeObjectURL(url); }}>Download CSV template</Button><Button onClick={() => void previewMonthlyImport()} disabled={importBusy || !importCsv.trim()}>{importBusy && <Loader2 className="mr-2 size-4 animate-spin" />}<Upload className="mr-2 size-4" />Preview checklist</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { const blob=new Blob(["nationalId,siteCode,scheduledDays,presentDays,absentDays,leaveDays,restDays,unresolvedDays,notes\n"],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="omega-monthly-attendance-template.csv"; a.click(); URL.revokeObjectURL(url); }}>Download CSV template</Button><Button onClick={() => void previewMonthlyImport()} disabled={importBusy || !importCsv.trim()}>{importBusy && <Loader2 className="mr-2 size-4 animate-spin" />}<Upload className="mr-2 size-4" />Preview checklist</Button></div>
         {importError && <p role="alert" className="text-sm text-destructive">{importError}</p>}
         {importNotice && <p role="status" className="text-sm text-emerald-700">{importNotice}</p>}
         {importPreview && <div className="space-y-3 rounded-lg border p-3">

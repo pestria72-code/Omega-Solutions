@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS monthly_attendance_imports (
   CHECK (period_end >= period_start),
   CHECK (date_trunc('month', period_start::timestamp) = period_start::timestamp),
   CHECK (period_end = (period_start + INTERVAL '1 month - 1 day')::date),
-  UNIQUE (id, company_id)
+  UNIQUE (id, company_id),
+  UNIQUE (company_id, period_start, period_end)
 );
 CREATE INDEX IF NOT EXISTS idx_monthly_attendance_imports_company_period
   ON monthly_attendance_imports(company_id, period_start DESC, created_at DESC);

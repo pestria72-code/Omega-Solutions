@@ -26,15 +26,15 @@ export class EmployeesService {
     const nationalId=dto.nationalId?.trim().replace(/[^0-9]/g,'')||null;
     if(nationalId && !/^\\d{5,12}$/.test(nationalId)) throw new BadRequestException('National ID must contain 5 to 12 digits.');
     try {
-      const result=await this.db.query(`INSERT INTO employees(company_id,branch_id,employee_number,first_name,last_name,work_email,phone,job_title,department,hire_date,created_by)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::date,$11)
+      const result=await this.db.query(`INSERT INTO employees(company_id,branch_id,employee_number,national_id,first_name,last_name,work_email,phone,job_title,department,hire_date,created_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12)
         RETURNING id,company_id,branch_id,employee_number,first_name,last_name,work_email,phone,job_title,department,employment_status,hire_date,created_at,updated_at`,
-      [membership.companyId,dto.branchId??null,dto.employeeNumber.trim(),dto.firstName.trim(),dto.lastName.trim(),dto.workEmail?.trim().toLowerCase()??null,dto.phone?.trim()??null,dto.jobTitle?.trim()??null,dto.department?.trim()??null,dto.hireDate??null,user.userId]);
+      [membership.companyId,dto.branchId??null,dto.employeeNumber.trim(),nationalId,dto.firstName.trim(),dto.lastName.trim(),dto.workEmail?.trim().toLowerCase()??null,dto.phone?.trim()??null,dto.jobTitle?.trim()??null,dto.department?.trim()??null,dto.hireDate??null,user.userId]);
       const employee=result.rows[0];
       await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'employees.create',entityType:'employee',entityId:String(employee.id),oldValues:null,newValues:{employeeNumber:employee.employee_number},ipAddress:null});
       return employee;
     } catch(error) {
-      if((error as {code?:string}).code==='23505') throw new ConflictException('An employee with this number already exists in this company.');
+      if((error as {code?:string}).code==='23505') throw new ConflictException('An employee with this number or national ID already exists in this company.');
       throw error;
     }
   }
