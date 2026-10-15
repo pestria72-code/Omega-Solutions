@@ -59,6 +59,8 @@ try {
  const accounts=(await req("GET","/accounting/accounts",undefined,token)).data;
  const apAccount=accounts.find(x=>x.system_code==="accounts_payable");
  ok(!!apAccount&&Number(apAccount.balance)===0,"accounts payable ledger clears after full payment");
+ const reconciliation=(await req("GET","/accounting/reconciliation/payables",undefined,token)).data;
+ ok(reconciliation.reconciled===true&&Number(reconciliation.controlAccountBalance)===0&&Number(reconciliation.supplierBillsBalance)===0&&Number(reconciliation.variance)===0,"payables reconciliation matches ledger and supplier bills");
  const finalJournals=(await req("GET","/accounting/journals",undefined,token)).data;
  ok(finalJournals.filter(x=>["supplier_bill","supplier_bill_payment"].includes(x.source_type)).every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005),"all supplier bill/payment journal entries balance");
  const received=(await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity:3}],reference:`E2E-FINAL-${stamp}`},token,[201])).data;
