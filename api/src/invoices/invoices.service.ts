@@ -445,6 +445,15 @@ export class InvoicesService {
         [input.companyId, line.product_id],
       );
     }
+    if (input.reverse) {
+      const originalCost = await client.query<{ cost_total: string | number }>(
+        `SELECT COALESCE(SUM(ABS(quantity) * unit_cost),0) AS cost_total
+         FROM inventory_stock_movements
+         WHERE company_id=$1 AND reference=$2 AND movement_type='issue' AND notes='Stock issue for sent invoice'`,
+        [input.companyId, input.invoiceNumber],
+      );
+      costTotal = Number(originalCost.rows[0]?.cost_total ?? 0);
+    }
     return Math.round(costTotal * 100) / 100;
   }
 
