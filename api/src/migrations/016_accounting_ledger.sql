@@ -73,3 +73,21 @@ ON CONFLICT(role,permission_id) DO NOTHING;
 INSERT INTO role_permissions(role,permission_id)
 SELECT 'viewer',id FROM permissions WHERE permission='accounting:read'
 ON CONFLICT(role,permission_id) DO NOTHING;
+
+-- Seed standard accounts for companies already present; new tenants are seeded lazily by AccountingService.
+INSERT INTO chart_of_accounts(company_id,code,name,account_type,normal_side,system_code)
+SELECT c.id,a.code,a.name,a.account_type,a.normal_side,a.system_code
+FROM companies c CROSS JOIN (VALUES
+ ('1000','Cash on Hand','asset','debit','cash'),
+ ('1010','Bank Account','asset','debit','bank'),
+ ('1020','M-Pesa Clearing','asset','debit','mpesa'),
+ ('1100','Accounts Receivable','asset','debit','accounts_receivable'),
+ ('1200','Inventory','asset','debit','inventory'),
+ ('1300','Input VAT Recoverable','asset','debit','input_tax'),
+ ('2000','Accounts Payable','liability','credit','accounts_payable'),
+ ('3000','Owner Equity','equity','credit','equity'),
+ ('4000','Sales Revenue','income','credit','sales_revenue'),
+ ('5000','Purchases and Cost of Goods','expense','debit','purchases_expense'),
+ ('5100','Operating Expenses','expense','debit','operating_expense')
+) AS a(code,name,account_type,normal_side,system_code)
+ON CONFLICT(company_id,code) DO NOTHING;
