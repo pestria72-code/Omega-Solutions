@@ -51,7 +51,7 @@ export class ManufacturingService {
  }
  async listOrders(user:AuthenticatedUser){
   const {companyId}=await this.companyFor(user);
-  return (await this.db.query(`SELECT o.id,o.company_id,o.order_number,o.bom_id,b.code AS bom_code,b.name AS bom_name,b.product_id,p.name AS product_name,o.warehouse_id,w.name AS warehouse_name,o.planned_quantity,o.produced_quantity,o.status,o.planned_start_date,o.planned_end_date,o.actual_start_at,o.completed_at,o.notes,o.created_at,o.updated_at
+  return (await this.db.query(`SELECT o.id,o.company_id,o.order_number,o.bom_id,b.code AS bom_code,b.name AS bom_name,b.product_id,p.name AS product_name,o.warehouse_id,w.name AS warehouse_name,o.planned_quantity,o.produced_quantity,o.status,o.planned_start_date,o.planned_end_date,o.actual_start_at,o.completed_at,o.notes,o.created_at,o.updated_at,COALESCE((SELECT SUM(m.required_quantity*m.unit_cost) FROM manufacturing_order_materials m WHERE m.company_id=o.company_id AND m.production_order_id=o.id),0)::numeric AS estimated_material_cost
    FROM manufacturing_production_orders o JOIN manufacturing_boms b ON b.id=o.bom_id AND b.company_id=o.company_id
    JOIN products p ON p.id=b.product_id AND p.company_id=o.company_id JOIN warehouses w ON w.id=o.warehouse_id AND w.company_id=o.company_id
    WHERE o.company_id=$1 ORDER BY o.created_at DESC LIMIT 200`,[companyId])).rows;
