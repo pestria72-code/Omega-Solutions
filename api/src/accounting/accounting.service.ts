@@ -13,6 +13,7 @@ const DEFAULT_ACCOUNTS = [
  {code:'1200',name:'Inventory',type:'asset',side:'debit',system:'inventory'},
  {code:'1300',name:'Input VAT Recoverable',type:'asset',side:'debit',system:'input_tax'},
  {code:'2000',name:'Accounts Payable',type:'liability',side:'credit',system:'accounts_payable'},
+ {code:'2100',name:'Output VAT Payable',type:'liability',side:'credit',system:'output_tax'},
  {code:'3000',name:'Owner Equity',type:'equity',side:'credit',system:'equity'},
  {code:'4000',name:'Sales Revenue',type:'income',side:'credit',system:'sales_revenue'},
  {code:'5000',name:'Purchases and Cost of Goods',type:'expense',side:'debit',system:'purchases_expense'},
