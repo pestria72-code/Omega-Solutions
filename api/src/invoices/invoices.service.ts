@@ -136,7 +136,7 @@ export class InvoicesService {
     );
     invoice.items = items.rows;
     const payments = await this.db.query<InvoicePaymentRow>(
-      `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at
+      `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at, reconciliation_reference
        FROM invoice_payments WHERE company_id = $1 AND invoice_id = $2
        ORDER BY paid_at DESC, created_at DESC`,
       [membership.companyId, invoiceId],
@@ -310,7 +310,7 @@ export class InvoicesService {
     await this.accounting.ensureDefaults(membership.companyId);
     const confirmed = await this.db.transaction(async (client) => {
       const paymentResult = await client.query<InvoicePaymentRow>(
-        `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at
+        `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at, reconciliation_reference
          FROM invoice_payments
          WHERE id=$1 AND invoice_id=$2 AND company_id=$3
          FOR UPDATE`,
