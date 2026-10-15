@@ -37,16 +37,16 @@ export class UpdateOpportunityDto {
   @IsOptional() @IsNumber() @Min(0) expectedValue?: number;
   @IsOptional() @IsNumber() @Min(0) @Max(100) probability?: number;
   @IsOptional() @IsIn(['qualification','needs_analysis','proposal','negotiation','won','lost']) stage?: 'qualification'|'needs_analysis'|'proposal'|'negotiation'|'won'|'lost';
-  @IsOptional() @IsString() expectedCloseDate?: string;
+  @IsOptional() @IsDateString() expectedCloseDate?: string;
   @IsOptional() @IsString() lossReason?: string;
 }
 export class CreateActivityDto {
   @IsString() @IsIn(['call','email','meeting','task','note']) activityType!: 'call'|'email'|'meeting'|'task'|'note';
   @IsString() @MinLength(2) @MaxLength(180) subject!: string;
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsString() leadId?: string;
+  @IsOptional() @IsUUID() leadId?: string;
   @IsOptional() @IsUUID() opportunityId?: string;
-  @IsOptional() @IsString() customerId?: string;
+  @IsOptional() @IsUUID() customerId?: string;
   @IsOptional() @IsUUID() assignedUserId?: string;
   @IsOptional() @IsDateString() dueAt?: string;
 }
