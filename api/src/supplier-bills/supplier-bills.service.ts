@@ -46,6 +46,7 @@ export class SupplierBillsService {
       let subtotal=0,taxAmount=0;
       const lines:Array<{description:string;qty:number;cost:number;rate:number;sub:number;tax:number;total:number;poItemId:string|null}>=[];
       for(const item of dto.items){
+        if(dto.purchaseOrderId&&!item.purchaseOrderItemId)throw new BadRequestException('Each bill line must reference a received purchase order line when a purchase order is linked.');
         if(item.purchaseOrderItemId){
           if(!dto.purchaseOrderId)throw new BadRequestException('A purchase order item requires a linked purchase order.');
           const poItem=await client.query<{id:string;product_name:string;unit_cost:string|number;purchase_order_id:string;quantity:string|number;received_quantity:string|number}>('SELECT id,product_name,unit_cost,purchase_order_id,quantity,received_quantity FROM purchase_order_items WHERE id=$1 AND company_id=$2 AND purchase_order_id=$3',[item.purchaseOrderItemId,companyId,dto.purchaseOrderId]);
