@@ -26,6 +26,11 @@ describe('WorkforceService validation and attendance', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
+  it('rejects an inverted attendance date range before querying', async () => {
+    await expect(service.attendance(user, '2026-10-16', '2026-10-15')).rejects.toThrow(BadRequestException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid punch type before opening a transaction', async () => {
     await expect(service.punch(user, { employeeId: 'employee-a', punchType: 'break' })).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
