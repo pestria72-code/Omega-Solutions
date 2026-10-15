@@ -134,7 +134,8 @@ export default function InvoicesPage() {
   };
   const openPaymentDialog = () => {
     if (!viewingInvoice) return;
-    const balance = Math.max(0, Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid));
+    const pendingReports = (viewingInvoice.payments ?? []).filter((payment) => payment.status === "pending").reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const balance = Math.max(0, Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid) - pendingReports);
     setPaymentDraft({ amount: balance.toFixed(2), method: "mpesa", reference: "", notes: "" });
     setActionError("");
     setPaymentOpen(true);
@@ -142,7 +143,8 @@ export default function InvoicesPage() {
   const recordPayment = async () => {
     if (!viewingInvoice) return;
     const amount = Number(paymentDraft.amount);
-    const balance = Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid);
+    const pendingReports = (viewingInvoice.payments ?? []).filter((payment) => payment.status === "pending").reduce((sum, payment) => sum + Number(payment.amount), 0);
+    const balance = Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid) - pendingReports;
     if (!Number.isFinite(amount) || amount <= 0 || amount > balance) {
       setActionError("Enter a payment greater than zero and no more than the outstanding balance.");
       return;
@@ -215,7 +217,7 @@ export default function InvoicesPage() {
     </Dialog>
     <Dialog open={paymentOpen} onOpenChange={(open) => { setPaymentOpen(open); if (!open) setActionError(""); }}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>Record invoice payment</DialogTitle><DialogDescription>Outstanding balance: {viewingInvoice ? formatKES(Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid)) : formatKES(0)}. Saving creates a pending payment report. Invoice balances and accounting change only after an authorized user confirms it.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Record invoice payment</DialogTitle><DialogDescription>Available to report: {viewingInvoice ? formatKES(Math.max(0, Number(viewingInvoice.total) - Number(viewingInvoice.amount_paid) - (viewingInvoice.payments ?? []).filter((payment) => payment.status === "pending").reduce((sum, payment) => sum + Number(payment.amount), 0))) : formatKES(0)}. Saving creates a pending payment report. Invoice balances and accounting change only after an authorized user confirms it.</DialogDescription></DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5"><Label htmlFor="payment-amount">Amount (KES) *</Label><Input id="payment-amount" type="number" min="0.01" step="0.01" value={paymentDraft.amount} onChange={(event) => setPaymentDraft((current) => ({ ...current, amount: event.target.value }))} /></div>
           <div className="flex flex-col gap-1.5"><Label htmlFor="payment-method">Payment method *</Label><Select value={paymentDraft.method} onValueChange={(value) => value && setPaymentDraft((current) => ({ ...current, method: value }))}><SelectTrigger id="payment-method" size="sm"><SelectValue placeholder="Choose method" /></SelectTrigger><SelectContent><SelectItem value="mpesa">M-Pesa</SelectItem><SelectItem value="bank">Bank transfer</SelectItem><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
