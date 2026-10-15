@@ -84,3 +84,10 @@ export class CreateInvoicePaymentDto {
   @MaxLength(1000)
   notes?: string;
 }
+
+
+export class ReconcileInvoicePaymentDto {
+  @IsString()
+  @MaxLength(120)
+  statementReference!: string;
+}
