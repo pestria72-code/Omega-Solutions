@@ -282,7 +282,7 @@ export class InvoicesService {
         `INSERT INTO invoice_payments
           (company_id, invoice_id, amount, method, reference, notes, created_by, status)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-         RETURNING id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at`,
+         RETURNING id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at, reconciliation_reference`,
         [
           membership.companyId, invoiceId, paymentAmount, dto.method,
           dto.reference?.trim() || null, dto.notes?.trim() || null, user.userId,
