@@ -136,11 +136,12 @@ export class PosService {
     const today=new Date().toISOString().slice(0,10);
     const totals=await this.db.transaction(async client=>{
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[dto.requestId]);
-      const prior=await client.query<{id:string;sale_number:string;total:string|number;subtotal:string|number;tax_amount:string|number;amount_confirmed:string|number;status:string;invoice_id:string}>(
-        'SELECT id,sale_number,total,subtotal,tax_amount,amount_confirmed,status,invoice_id FROM pos_sales WHERE company_id=$1 AND request_id=$2',
+      const prior=await client.query<{id:string;sale_number:string;total:string|number;subtotal:string|number;tax_amount:string|number;amount_confirmed:string|number;status:string;invoice_id:string;created_by:string|null}>(
+        'SELECT id,sale_number,total,subtotal,tax_amount,amount_confirmed,status,invoice_id,created_by FROM pos_sales WHERE company_id=$1 AND request_id=$2',
         [companyId,dto.requestId]);
       if(prior.rows[0]) {
         const p=prior.rows[0];
+        if(p.created_by!==user.userId) throw new ConflictException('This checkout request key has already been used.');
         return {saleId:p.id,invoiceId:p.invoice_id,saleNumber:p.sale_number,total:Number(p.total),subtotal:Number(p.subtotal),taxAmount:Number(p.tax_amount),amountConfirmed:Number(p.amount_confirmed),pendingPayment:Math.max(0,Number(p.total)-Number(p.amount_confirmed)),status:p.status,idempotent:true};
       }
       const shiftResult=await client.query<{id:string;register_id:string;opened_by:string;status:string}>(
