@@ -13,7 +13,7 @@ async function req(method,path,body,token,expected=[200,201]) {
 function ok(v,m){if(!v)throw Error(m);checks.push(m)}
 try {
  const h=await req("GET","/health");ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
- const reg=(await req("POST","/auth/register",{email,password,fullName:"Omega E2E Runner",companyName},null,[201])).data;
+ const reg=(await req("POST","/auth/register",{email,password,fullName:"Omega E2E Runner",phone:"+254700000000",companyName},null,[201])).data;
  ok(!!reg.userId&&!!reg.companyId,"register temporary tenant");
  const login=(await req("POST","/auth/login",{email,password})).data;const token=login.accessToken;
  ok(!!token&&!!login.refreshToken,"login and token pair");
