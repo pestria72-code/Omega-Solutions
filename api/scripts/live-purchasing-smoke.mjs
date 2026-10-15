@@ -35,6 +35,8 @@ try {
  ok(stockRows.some(x=>(x.product_id||x.productId)===product.id&&Number(x.quantity)===2),"stock ledger quantity after receipt");
  const bill=(await req("POST","/supplier-bills",{supplierId:supplier.id,purchaseOrderId:po.id,supplierInvoiceNumber:`SUP-${stamp}`,billDate:new Date().toISOString().slice(0,10),items:[{purchaseOrderItemId:line.id,description:line.product_name,quantity:2,unitCost:100,taxRate:16}]},token,[201])).data;
  ok(!!bill.id&&Number(bill.total)===232&&Number(bill.balance)===232,"supplier bill total/tax/balance");
+ const billDetailBeforePayment=(await req("GET","/supplier-bills/"+bill.id,undefined,token)).data;
+ ok(billDetailBeforePayment.id===bill.id&&billDetailBeforePayment.items?.length===1&&billDetailBeforePayment.payments?.length===0,"bill detail returns lines and empty payment history");
  const billJournals=(await req("GET","/accounting/journals",undefined,token)).data;
  const billJournal=billJournals.find(x=>x.source_type==="supplier_bill"&&x.source_id===bill.id);
  ok(!!billJournal&&Number(billJournal.total_debits)===232&&Number(billJournal.total_credits)===232,"supplier bill posts balanced journal entry");
