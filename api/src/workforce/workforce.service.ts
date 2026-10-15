@@ -9,7 +9,7 @@ export class WorkforceService {
   constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService) {}
   private async membership(u: AuthenticatedUser) { return u.companyId ? this.memberships.getMembershipForCompany(u.userId, u.companyId) : this.memberships.getMembership(u.userId); }
   private required(v: unknown, label: string) { if (typeof v !== 'string' || !v.trim()) throw new BadRequestException(label + ' is required.'); return v.trim(); }
-  private date(v: unknown, label: string) { const s = this.required(v, label); if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) throw new BadRequestException(label + ' must be YYYY-MM-DD.'); return s; }
+  private date(v: unknown, label: string) { const s = this.required(v, label); const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s); if (!match) throw new BadRequestException(label + ' must be a real date in YYYY-MM-DD format.'); const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]); const parsed = new Date(Date.UTC(year, month - 1, day)); if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) throw new BadRequestException(label + ' must be a real date in YYYY-MM-DD format.'); return s; }
   private rate(v: unknown) { const n = Number(v); if (!Number.isFinite(n) || n < 0) throw new BadRequestException('payRate must be non-negative.'); return n; }
 
   async sites(u: AuthenticatedUser) { const m = await this.membership(u); return (await this.db.query('SELECT * FROM client_sites WHERE company_id=$1 ORDER BY client_name,site_name', [m.companyId])).rows; }
