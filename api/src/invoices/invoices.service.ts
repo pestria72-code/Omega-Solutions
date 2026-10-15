@@ -95,6 +95,28 @@ export class InvoicesService {
     return result.rows;
   }
 
+  async getSalesTeamSummary(user: AuthenticatedUser) {
+    const membership = await this.memberships.getMembership(user.userId);
+    const result = await this.db.query<{
+      user_id: string; full_name: string; role: string; invoice_count: number;
+      sales_total: string | number; collected_total: string | number; outstanding_total: string | number;
+    }>(
+      `SELECT u.id AS user_id,u.full_name,m.role::text AS role,
+        COUNT(i.id) FILTER (WHERE i.status NOT IN ('draft','cancelled'))::int AS invoice_count,
+        COALESCE(SUM(i.total) FILTER (WHERE i.status NOT IN ('draft','cancelled')),0) AS sales_total,
+        COALESCE(SUM(i.amount_paid),0) AS collected_total,
+        COALESCE(SUM(GREATEST(i.total-i.amount_paid,0)) FILTER (WHERE i.status NOT IN ('draft','cancelled')),0) AS outstanding_total
+       FROM company_memberships m
+       JOIN users u ON u.id=m.user_id
+       LEFT JOIN invoices i ON i.created_by=u.id AND i.company_id=m.company_id
+       WHERE m.company_id=$1 AND m.is_active=TRUE AND u.is_active=TRUE
+       GROUP BY u.id,u.full_name,m.role
+       ORDER BY sales_total DESC,u.full_name ASC`,
+      [membership.companyId],
+    );
+    return result.rows;
+  }
+
   async getById(user: AuthenticatedUser, invoiceId: string): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
     const result = await this.db.query<InvoiceRow>(
