@@ -14,6 +14,10 @@ export class EmployeesController {
   list(@Req() req:{user:AuthenticatedUser}) { return this.employees.list(req.user); }
   @Post() @RequirePermissions('employees:write')
   create(@Req() req:{user:AuthenticatedUser},@Body() dto:CreateEmployeeDto) { return this.employees.create(req.user,dto); }
+  @Patch(':id/national-id') @RequirePermissions('employees:write')
+  updateNationalId(@Req() req:{user:AuthenticatedUser}, @Param('id',ParseUUIDPipe) id:string, @Body() dto:{nationalId?:unknown}) {
+    return this.employees.updateNationalId(req.user,id,dto.nationalId);
+  }
   @Get('leave-requests') @RequirePermissions('employees:read')
   listLeaveRequests(@Req() req:{user:AuthenticatedUser}) { return this.employees.listLeaveRequests(req.user); }
   @Post('leave-requests') @RequirePermissions('employees:write')

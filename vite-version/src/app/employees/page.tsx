@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Loader2, RefreshCw, UserPlus, Users } from "lucide-react";
+import { Loader2, RefreshCw, UserPlus, Users, Save } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -21,8 +21,16 @@ export default function EmployeesPage(){
  const [error,setError]=React.useState<string|null>(null);
  const [formError,setFormError]=React.useState<string|null>(null);
  const [form,setForm]=React.useState(blank);
+ const [nationalIds,setNationalIds]=React.useState<Record<string,string>>({});
+ const [savingNationalId,setSavingNationalId]=React.useState<string|null>(null);
+ const [idMessage,setIdMessage]=React.useState<string|null>(null);
  const load=React.useCallback(async()=>{setLoading(true);setError(null);try{setRows(await api.get<Employee[]>("/employees"));}catch(e){setError(message(e));}finally{setLoading(false);}},[]);
  React.useEffect(()=>{void load();},[load]);
+ async function saveNationalId(employeeId:string){
+  setSavingNationalId(employeeId);setFormError(null);setIdMessage(null);
+  try{const result=await api.patch<{nationalIdMasked:string}>(`/employees/${employeeId}/national-id`,{nationalId:nationalIds[employeeId]||""});setNationalIds({...nationalIds,[employeeId]:""});setIdMessage(`National ID saved for this employee (${result.nationalIdMasked}).`);}
+  catch(e){setFormError(message(e));}finally{setSavingNationalId(null);}
+ }
  async function submit(e:React.FormEvent<HTMLFormElement>){e.preventDefault();setSaving(true);setFormError(null);try{await api.post("/employees",{...form,nationalId:form.nationalId.trim()||undefined,workEmail:form.workEmail.trim()||undefined,phone:form.phone.trim()||undefined,jobTitle:form.jobTitle.trim()||undefined,department:form.department.trim()||undefined,hireDate:form.hireDate||undefined});setForm(blank);await load();}catch(e){setFormError(message(e));}finally{setSaving(false);}}
  return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
   <PageHeader title="Employees" description="Manage employee records for the active company." />
@@ -37,12 +45,13 @@ export default function EmployeesPage(){
    <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={e=>setForm({...form,department:e.target.value})}/></div>
    <div className="grid gap-2"><Label>Hire date</Label><Input type="date" value={form.hireDate} onChange={e=>setForm({...form,hireDate:e.target.value})}/></div>
    <div className="flex items-end"><Button type="submit" disabled={saving}>{saving?<Loader2 className="mr-2 size-4 animate-spin"/>:<UserPlus className="mr-2 size-4"/>}{saving?"Saving…":"Add employee"}</Button></div>
-   {formError&&<p role="alert" className="text-sm text-destructive sm:col-span-2 lg:col-span-3">{formError}</p>}
+   {idMessage&&<p role="status" className="text-sm text-emerald-700">{idMessage}</p>}
+  {formError&&<p role="alert" className="text-sm text-destructive sm:col-span-2 lg:col-span-3">{formError}</p>}
   </form></CardContent></Card>
   <Card><CardContent className="p-0">
    <div className="flex items-center justify-between gap-3 p-4"><h2 className="font-semibold">Employee directory <span className="text-muted-foreground font-normal">({rows.length})</span></h2><Button variant="outline" size="sm" onClick={()=>void load()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button></div>
    {loading?<div className="flex justify-center p-12"><LoadingSpinner/></div>:error?<div className="p-6 text-sm text-destructive" role="alert">{error}<Button className="ml-3" variant="outline" size="sm" onClick={()=>void load()}>Retry</Button></div>:rows.length===0?<EmptyState icon={Users} title="No employees yet" description="Add your first employee above. No sample employee records are loaded."/>:
-   <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/40 text-left"><th className="p-3">Employee</th><th className="p-3">Number</th><th className="p-3">Role / Department</th><th className="p-3">Contact</th><th className="p-3">Status</th><th className="p-3">Hire date</th></tr></thead><tbody>{rows.map(row=><tr key={row.id} className="border-b last:border-0"><td className="p-3 font-medium">{row.first_name} {row.last_name}</td><td className="p-3">{row.employee_number}</td><td className="p-3">{row.job_title||"—"}<div className="text-muted-foreground">{row.department||"—"}</div></td><td className="p-3">{row.work_email||row.phone||"—"}</td><td className="p-3 capitalize">{row.employment_status.replace("_"," ")}</td><td className="p-3">{row.hire_date?row.hire_date.slice(0,10):"—"}</td></tr>)}</tbody></table></div>}
+   <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/40 text-left"><th className="p-3">Employee</th><th className="p-3">Number</th><th className="p-3">Role / Department</th><th className="p-3">Contact</th><th className="p-3">Status</th><th className="p-3">Hire date</th><th className="p-3">Attendance ID number</th></tr></thead><tbody>{rows.map(row=><tr key={row.id} className="border-b last:border-0"><td className="p-3 font-medium">{row.first_name} {row.last_name}</td><td className="p-3">{row.employee_number}</td><td className="p-3">{row.job_title||"—"}<div className="text-muted-foreground">{row.department||"—"}</div></td><td className="p-3">{row.work_email||row.phone||"—"}</td><td className="p-3 capitalize">{row.employment_status.replace("_"," ")}</td><td className="p-3">{row.hire_date?row.hire_date.slice(0,10):"—"}</td><td className="p-3"><div className="flex min-w-56 gap-2"><Input aria-label={`National ID for ${row.first_name} ${row.last_name}`} inputMode="numeric" maxLength={32} placeholder="Enter ID number" value={nationalIds[row.id]||""} onChange={e=>setNationalIds({...nationalIds,[row.id]:e.target.value})}/><Button size="sm" variant="outline" onClick={()=>void saveNationalId(row.id)} disabled={savingNationalId===row.id||!(nationalIds[row.id]||"").trim()}>{savingNationalId===row.id?<Loader2 className="size-4 animate-spin"/>:<Save className="size-4"/>}</Button></div></td></tr>)}</tbody></table></div>}
   </CardContent></Card>
  </div></BaseLayout>;
 }

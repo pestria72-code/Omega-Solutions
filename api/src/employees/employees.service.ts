@@ -38,6 +38,32 @@ export class EmployeesService {
       throw error;
     }
   }
+
+  async updateNationalId(user: AuthenticatedUser, id: string, value: unknown) {
+    const membership = await this.membershipFor(user);
+    if (typeof value !== 'string') throw new BadRequestException('National ID is required.');
+    const nationalId = value.trim().replace(/[^0-9]/g, '');
+    if (!/^\d{5,12}$/.test(nationalId)) throw new BadRequestException('National ID must contain 5 to 12 digits.');
+    try {
+      const result = await this.db.query(
+        `UPDATE employees SET national_id=$3, updated_at=NOW()
+         WHERE id=$1 AND company_id=$2
+         RETURNING id, employee_number, first_name, last_name, updated_at`,
+        [id, membership.companyId, nationalId],
+      );
+      if (!result.rows.length) throw new NotFoundException('Employee not found in this company.');
+      await this.audit.log({
+        userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
+        action: 'employees.national_id.update', entityType: 'employee', entityId: id,
+        oldValues: null, newValues: { nationalIdLast4: nationalId.slice(-4) }, ipAddress: null,
+      });
+      return { ...result.rows[0], nationalIdMasked: `••••${nationalId.slice(-4)}` };
+    } catch (error) {
+      if ((error as { code?: string }).code === '23505') throw new ConflictException('This national ID is already assigned to another employee in this company.');
+      throw error;
+    }
+  }
+
   async listLeaveRequests(user: AuthenticatedUser) {
     const {companyId}=await this.membershipFor(user);
     return (await this.db.query(`SELECT l.id,l.company_id,l.employee_id,e.employee_number,e.first_name,e.last_name,l.leave_type,l.start_date,l.end_date,l.reason,l.status,l.reviewed_by,l.reviewed_at,l.review_note,l.created_at,l.updated_at
