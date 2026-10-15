@@ -59,8 +59,97 @@ export class WorkforceService {
   }
   async attendance(u: AuthenticatedUser, from?: string, to?: string, employeeId?: string) {
     const m=await this.membership(u), params:(string|number|boolean|Date|null)[]=[m.companyId];
+    const fromDate = from ? this.date(from, 'from') : undefined;
+    const toDate = to ? this.date(to, 'to') : undefined;
+    if (fromDate && toDate && fromDate > toDate) throw new BadRequestException('from must be on or before to.');
     let sql='SELECT a.*,e.employee_number,e.first_name,e.last_name,s.site_name,s.client_name FROM attendance_records a JOIN employees e ON e.id=a.employee_id AND e.company_id=a.company_id LEFT JOIN employee_assignments x ON x.id=a.assignment_id AND x.company_id=a.company_id LEFT JOIN client_sites s ON s.id=x.site_id AND s.company_id=x.company_id WHERE a.company_id=$1';
-    if(from){params.push(this.date(from,'from'));sql+=' AND a.punched_at >= $'+params.length+'::date';}
+    if(fromDate){params.push(fromDate);sql+=' AND a.punched_at >= 
+    if(toDate){params.push(toDate);sql+=' AND a.punched_at < (
+    if(employeeId){params.push(employeeId);sql+=' AND a.employee_id=$'+params.length;}
+    sql+=' ORDER BY a.punched_at DESC LIMIT 1000'; return (await this.db.query(sql,params)).rows;
+  }
+  async punch(u: AuthenticatedUser, d: Record<string, unknown>) {
+    const m=await this.membership(u), employeeId=this.required(d.employeeId,'employeeId'), type=this.required(d.punchType,'punchType');
+    if(!['in','out'].includes(type))throw new BadRequestException('punchType must be in or out.');
+    const at=d.punchedAt==null?new Date():new Date(String(d.punchedAt));
+    if(Number.isNaN(at.getTime())||at.getTime()>Date.now()+300000)throw new BadRequestException('Invalid punch timestamp or timestamp too far in the future.');
+    const assignmentId=typeof d.assignmentId==='string'&&d.assignmentId.trim()?d.assignmentId.trim():null, ref=typeof d.externalReference==='string'?d.externalReference.trim()||null:null;
+    const source=typeof d.source==='string'&&['web','mobile','qr','supervisor','import'].includes(d.source)?d.source:'web';
+    try {
+      const row=await this.db.transaction(async c=>{
+        const employee=await c.query("SELECT id FROM employees WHERE id=$1 AND company_id=$2 AND employment_status NOT IN ('terminated','inactive') FOR UPDATE",[employeeId,m.companyId]);
+        if(!employee.rows.length)throw new NotFoundException('Active employee not found in this company.');
+        if(assignmentId){const a=await c.query("SELECT id FROM employee_assignments WHERE id=$1 AND company_id=$2 AND employee_id=$3 AND status='active' AND start_date<=$4::date AND (end_date IS NULL OR end_date >= $4::date)",[assignmentId,m.companyId,employeeId,at.toISOString().slice(0,10)]);if(!a.rows.length)throw new BadRequestException('Assignment is not active for this employee at punch time.');}
+        const last=await c.query('SELECT punch_type,punched_at FROM attendance_records WHERE company_id=$1 AND employee_id=$2 ORDER BY punched_at DESC,id DESC LIMIT 1',[m.companyId,employeeId]);
+        if(last.rows.length) {
+          const lastAt = new Date(last.rows[0].punched_at as string | Date).getTime();
+          if (at.getTime() <= lastAt) throw new BadRequestException('Punch timestamp must be later than the employee’s latest attendance event.');
+          if(last.rows[0].punch_type===type) throw new ConflictException(type==='in'?'Employee is already clocked in.':'Employee is already clocked out.');
+        }
+        return (await c.query('INSERT INTO attendance_records(company_id,employee_id,assignment_id,punch_type,punched_at,source,note,external_reference,recorded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[m.companyId,employeeId,assignmentId,type,at,source,typeof d.note==='string'?d.note.trim()||null:null,ref,u.userId])).rows[0];
+      });
+      await this.audit.log({userId:u.userId,companyId:m.companyId,branchId:m.branchId,action:'workforce.attendance.punch',entityType:'attendance_record',entityId:String(row.id),oldValues:null,newValues:{employeeId,punchType:type,punchedAt:at.toISOString(),assignmentId},ipAddress:null});return row;
+    } catch(e) { if((e as {code?:string}).code==='23505')throw new ConflictException('Attendance event already recorded.');throw e; }
+  }
+}
++params.length+'::date';}
+    if(to){params.push(this.date(to,'to'));sql+=' AND a.punched_at < ($'+params.length+'::date + INTERVAL \'1 day\')';}
+    if(employeeId){params.push(employeeId);sql+=' AND a.employee_id=$'+params.length;}
+    sql+=' ORDER BY a.punched_at DESC LIMIT 1000'; return (await this.db.query(sql,params)).rows;
+  }
+  async punch(u: AuthenticatedUser, d: Record<string, unknown>) {
+    const m=await this.membership(u), employeeId=this.required(d.employeeId,'employeeId'), type=this.required(d.punchType,'punchType');
+    if(!['in','out'].includes(type))throw new BadRequestException('punchType must be in or out.');
+    const at=d.punchedAt==null?new Date():new Date(String(d.punchedAt));
+    if(Number.isNaN(at.getTime())||at.getTime()>Date.now()+300000)throw new BadRequestException('Invalid punch timestamp or timestamp too far in the future.');
+    const assignmentId=typeof d.assignmentId==='string'&&d.assignmentId.trim()?d.assignmentId.trim():null, ref=typeof d.externalReference==='string'?d.externalReference.trim()||null:null;
+    const source=typeof d.source==='string'&&['web','mobile','qr','supervisor','import'].includes(d.source)?d.source:'web';
+    try {
+      const row=await this.db.transaction(async c=>{
+        const employee=await c.query("SELECT id FROM employees WHERE id=$1 AND company_id=$2 AND employment_status NOT IN ('terminated','inactive') FOR UPDATE",[employeeId,m.companyId]);
+        if(!employee.rows.length)throw new NotFoundException('Active employee not found in this company.');
+        if(assignmentId){const a=await c.query("SELECT id FROM employee_assignments WHERE id=$1 AND company_id=$2 AND employee_id=$3 AND status='active' AND start_date<=$4::date AND (end_date IS NULL OR end_date >= $4::date)",[assignmentId,m.companyId,employeeId,at.toISOString().slice(0,10)]);if(!a.rows.length)throw new BadRequestException('Assignment is not active for this employee at punch time.');}
+        const last=await c.query('SELECT punch_type,punched_at FROM attendance_records WHERE company_id=$1 AND employee_id=$2 ORDER BY punched_at DESC,id DESC LIMIT 1',[m.companyId,employeeId]);
+        if(last.rows.length) {
+          const lastAt = new Date(last.rows[0].punched_at as string | Date).getTime();
+          if (at.getTime() <= lastAt) throw new BadRequestException('Punch timestamp must be later than the employee’s latest attendance event.');
+          if(last.rows[0].punch_type===type) throw new ConflictException(type==='in'?'Employee is already clocked in.':'Employee is already clocked out.');
+        }
+        return (await c.query('INSERT INTO attendance_records(company_id,employee_id,assignment_id,punch_type,punched_at,source,note,external_reference,recorded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[m.companyId,employeeId,assignmentId,type,at,source,typeof d.note==='string'?d.note.trim()||null:null,ref,u.userId])).rows[0];
+      });
+      await this.audit.log({userId:u.userId,companyId:m.companyId,branchId:m.branchId,action:'workforce.attendance.punch',entityType:'attendance_record',entityId:String(row.id),oldValues:null,newValues:{employeeId,punchType:type,punchedAt:at.toISOString(),assignmentId},ipAddress:null});return row;
+    } catch(e) { if((e as {code?:string}).code==='23505')throw new ConflictException('Attendance event already recorded.');throw e; }
+  }
+}
++params.length+'::date + INTERVAL \'1 day\')';}
+    if(employeeId){params.push(employeeId);sql+=' AND a.employee_id=$'+params.length;}
+    sql+=' ORDER BY a.punched_at DESC LIMIT 1000'; return (await this.db.query(sql,params)).rows;
+  }
+  async punch(u: AuthenticatedUser, d: Record<string, unknown>) {
+    const m=await this.membership(u), employeeId=this.required(d.employeeId,'employeeId'), type=this.required(d.punchType,'punchType');
+    if(!['in','out'].includes(type))throw new BadRequestException('punchType must be in or out.');
+    const at=d.punchedAt==null?new Date():new Date(String(d.punchedAt));
+    if(Number.isNaN(at.getTime())||at.getTime()>Date.now()+300000)throw new BadRequestException('Invalid punch timestamp or timestamp too far in the future.');
+    const assignmentId=typeof d.assignmentId==='string'&&d.assignmentId.trim()?d.assignmentId.trim():null, ref=typeof d.externalReference==='string'?d.externalReference.trim()||null:null;
+    const source=typeof d.source==='string'&&['web','mobile','qr','supervisor','import'].includes(d.source)?d.source:'web';
+    try {
+      const row=await this.db.transaction(async c=>{
+        const employee=await c.query("SELECT id FROM employees WHERE id=$1 AND company_id=$2 AND employment_status NOT IN ('terminated','inactive') FOR UPDATE",[employeeId,m.companyId]);
+        if(!employee.rows.length)throw new NotFoundException('Active employee not found in this company.');
+        if(assignmentId){const a=await c.query("SELECT id FROM employee_assignments WHERE id=$1 AND company_id=$2 AND employee_id=$3 AND status='active' AND start_date<=$4::date AND (end_date IS NULL OR end_date >= $4::date)",[assignmentId,m.companyId,employeeId,at.toISOString().slice(0,10)]);if(!a.rows.length)throw new BadRequestException('Assignment is not active for this employee at punch time.');}
+        const last=await c.query('SELECT punch_type,punched_at FROM attendance_records WHERE company_id=$1 AND employee_id=$2 ORDER BY punched_at DESC,id DESC LIMIT 1',[m.companyId,employeeId]);
+        if(last.rows.length) {
+          const lastAt = new Date(last.rows[0].punched_at as string | Date).getTime();
+          if (at.getTime() <= lastAt) throw new BadRequestException('Punch timestamp must be later than the employee’s latest attendance event.');
+          if(last.rows[0].punch_type===type) throw new ConflictException(type==='in'?'Employee is already clocked in.':'Employee is already clocked out.');
+        }
+        return (await c.query('INSERT INTO attendance_records(company_id,employee_id,assignment_id,punch_type,punched_at,source,note,external_reference,recorded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[m.companyId,employeeId,assignmentId,type,at,source,typeof d.note==='string'?d.note.trim()||null:null,ref,u.userId])).rows[0];
+      });
+      await this.audit.log({userId:u.userId,companyId:m.companyId,branchId:m.branchId,action:'workforce.attendance.punch',entityType:'attendance_record',entityId:String(row.id),oldValues:null,newValues:{employeeId,punchType:type,punchedAt:at.toISOString(),assignmentId},ipAddress:null});return row;
+    } catch(e) { if((e as {code?:string}).code==='23505')throw new ConflictException('Attendance event already recorded.');throw e; }
+  }
+}
++params.length+'::date';}
     if(to){params.push(this.date(to,'to'));sql+=' AND a.punched_at < ($'+params.length+'::date + INTERVAL \'1 day\')';}
     if(employeeId){params.push(employeeId);sql+=' AND a.employee_id=$'+params.length;}
     sql+=' ORDER BY a.punched_at DESC LIMIT 1000'; return (await this.db.query(sql,params)).rows;
