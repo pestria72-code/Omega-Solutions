@@ -19,7 +19,7 @@ on:
 permissions:
   contents: read
 
-# Keep authenticated development ERP end-to-end checks available after API changes.
+# Keep authenticated development ERP end-to-end checks available after API changes, including CRM lifecycle coverage.
 
 jobs:
   live-purchasing-smoke:
