@@ -193,6 +193,65 @@ export class InventoryService {
     return result.rows[0];
   }
 
+  async reconciliation(user: AuthenticatedUser) {
+    const { companyId } = await this.resolveMembership(user);
+    const [ledger, legacy, valuation] = await Promise.all([
+      this.db.query<{ mismatch_count: string | number; absolute_quantity_variance: string | number }>(
+        `WITH movement_totals AS (
+           SELECT company_id,warehouse_id,product_id,SUM(quantity) AS quantity
+           FROM inventory_stock_movements WHERE company_id=$1 GROUP BY company_id,warehouse_id,product_id
+         ), compared AS (
+           SELECT COALESCE(s.company_id,m.company_id) AS company_id,
+             COALESCE(s.warehouse_id,m.warehouse_id) AS warehouse_id,
+             COALESCE(s.product_id,m.product_id) AS product_id,
+             COALESCE(s.quantity,0)-COALESCE(m.quantity,0) AS variance
+           FROM inventory_stock_levels s
+           FULL OUTER JOIN movement_totals m
+             ON m.company_id=s.company_id AND m.warehouse_id=s.warehouse_id AND m.product_id=s.product_id
+           WHERE COALESCE(s.company_id,m.company_id)=$1
+         )
+         SELECT COUNT(*) FILTER(WHERE ABS(variance)>0.0005)::int AS mismatch_count,
+           COALESCE(SUM(ABS(variance)),0)::numeric(16,3) AS absolute_quantity_variance
+         FROM compared`, [companyId],
+      ),
+      this.db.query<{ mismatch_count: string | number; absolute_quantity_variance: string | number }>(
+        `SELECT COUNT(*) FILTER(WHERE ABS(COALESCE(p.stock_quantity,0)-COALESCE(s.quantity,0))>0.0005)::int AS mismatch_count,
+           COALESCE(SUM(ABS(COALESCE(p.stock_quantity,0)-COALESCE(s.quantity,0))),0)::numeric(16,3) AS absolute_quantity_variance
+         FROM products p
+         LEFT JOIN (SELECT company_id,product_id,SUM(quantity) AS quantity
+           FROM inventory_stock_levels WHERE company_id=$1 GROUP BY company_id,product_id) s
+           ON s.company_id=p.company_id AND s.product_id=p.id
+         WHERE p.company_id=$1 AND p.is_service=false`, [companyId],
+      ),
+      this.db.query<{ stock_cost_value: string | number; inventory_account_balance: string | number }>(
+        `SELECT
+           COALESCE((SELECT SUM(s.quantity*p.cost_price)
+             FROM inventory_stock_levels s JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
+             WHERE s.company_id=$1 AND p.is_service=false),0)::numeric(16,2) AS stock_cost_value,
+           COALESCE((SELECT SUM(l.debit-l.credit)
+             FROM chart_of_accounts a
+             JOIN journal_entry_lines l ON l.account_id=a.id AND l.company_id=a.company_id
+             JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id
+             WHERE a.company_id=$1 AND a.system_code='inventory' AND j.status='posted'),0)::numeric(16,2) AS inventory_account_balance`,
+        [companyId],
+      ),
+    ]);
+    const ledgerRow=ledger.rows[0];
+    const legacyRow=legacy.rows[0];
+    const stockCostValue=Number(valuation.rows[0]?.stock_cost_value ?? 0);
+    const inventoryAccountBalance=Number(valuation.rows[0]?.inventory_account_balance ?? 0);
+    const valuationVariance=Math.round((stockCostValue-inventoryAccountBalance)*100)/100;
+    const movementMismatchCount=Number(ledgerRow?.mismatch_count ?? 0);
+    const legacyMismatchCount=Number(legacyRow?.mismatch_count ?? 0);
+    return {
+      companyId,
+      checkedAt:new Date().toISOString(),
+      stockLedger:{mismatchCount:movementMismatchCount,absoluteQuantityVariance:Number(ledgerRow?.absolute_quantity_variance ?? 0),reconciled:movementMismatchCount===0},
+      legacyProductQuantities:{mismatchCount:legacyMismatchCount,absoluteQuantityVariance:Number(legacyRow?.absolute_quantity_variance ?? 0),reconciled:legacyMismatchCount===0},
+      valuation:{stockCostValue,inventoryAccountBalance,variance:valuationVariance,reconciled:Math.abs(valuationVariance)<=0.01},
+    };
+  }
+
   receive(user: AuthenticatedUser, dto: CreateStockMovementDto) {
     return this.postSingleMovement(user,dto,'receipt',dto.quantity);
   }
