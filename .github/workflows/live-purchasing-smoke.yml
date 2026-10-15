@@ -60,21 +60,39 @@ jobs:
           OMEGA_PAYROLL_SMOKE_CONFIRM_DEVELOPMENT: YES
         run: node api/scripts/live-payroll-smoke.mjs
 
+  cleanup-test-tenants:
+    name: Clean up development smoke-test tenants
+    needs: live-purchasing-smoke
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OMEGA_DEVELOPMENT_DATABASE_URL: ${{ secrets.OMEGA_DEVELOPMENT_DATABASE_URL }}
+    steps:
+      - name: Checkout development
+        if: ${{ env.OMEGA_DEVELOPMENT_DATABASE_URL != '' }}
+        uses: actions/checkout@v4
+        with:
+          ref: development
+
+      - name: Set up Node.js
+        if: ${{ env.OMEGA_DEVELOPMENT_DATABASE_URL != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Install cleanup script dependency
-        if: ${{ always() && env.OMEGA_DEVELOPMENT_DATABASE_URL != '' }}
+        if: ${{ env.OMEGA_DEVELOPMENT_DATABASE_URL != '' }}
         working-directory: api
-        env:
-          OMEGA_DEVELOPMENT_DATABASE_URL: ${{ secrets.OMEGA_DEVELOPMENT_DATABASE_URL }}
         run: npm ci --ignore-scripts
 
       - name: Clean up automated test tenants on the approved Neon development branch
-        if: ${{ always() && env.OMEGA_DEVELOPMENT_DATABASE_URL != '' }}
+        if: ${{ env.OMEGA_DEVELOPMENT_DATABASE_URL != '' }}
         env:
-          OMEGA_DEVELOPMENT_DATABASE_URL: ${{ secrets.OMEGA_DEVELOPMENT_DATABASE_URL }}
           OMEGA_DEVELOPMENT_DATABASE_BRANCH: omega-migration-smoke-test-live
           OMEGA_CLEANUP_TEST_TENANTS_CONFIRM: YES
         run: node api/scripts/cleanup-live-smoke-tenants.mjs
 
       - name: Report cleanup not configured
-        if: ${{ always() && env.OMEGA_DEVELOPMENT_DATABASE_URL == '' }}
-        run: echo "::warning::Automated tenant cleanup skipped. Configure the GitHub Actions secret OMEGA_DEVELOPMENT_DATABASE_URL with the existing omega-migration-smoke-test-live branch connection string."
+        if: ${{ env.OMEGA_DEVELOPMENT_DATABASE_URL == '' }}
+        run: echo "::warning::Automated tenant cleanup skipped. Configure the GitHub Actions secret OMEGA_DEVELOPMENT_DATABASE_URL with the connection string for the existing omega-migration-smoke-test-live branch."
