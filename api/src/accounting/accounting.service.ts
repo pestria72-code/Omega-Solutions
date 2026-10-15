@@ -54,7 +54,7 @@ export class AccountingService {
  async payablesReconciliation(user:AuthenticatedUser){
   const {companyId}=await this.companyFor(user);await this.ensureDefaults(companyId);
   const [control,subledger,aging]=await Promise.all([
-   this.db.query(`SELECT COALESCE(SUM(CASE WHEN a.normal_side='debit' THEN l.debit-l.credit ELSE l.credit-l.debit END),0)::numeric(14,2) AS balance
+   this.db.query(`SELECT COALESCE(SUM(CASE WHEN a.normal_side='debit' THEN l.debit-l.credit ELSE l.credit-l.debit END) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS balance
     FROM chart_of_accounts a LEFT JOIN journal_entry_lines l ON l.account_id=a.id AND l.company_id=a.company_id
     LEFT JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id AND j.status='posted'
     WHERE a.company_id=$1 AND a.system_code='accounts_payable' GROUP BY a.id`,[companyId]),
