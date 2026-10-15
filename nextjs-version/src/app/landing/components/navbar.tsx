@@ -166,14 +166,14 @@ export function LandingNavbar() {
             variant="ghost"
             className="cursor-pointer"
             nativeButton={false}
-            render={<Link href="/auth/sign-in" />}
+            render={<Link href="/sign-in" />}
           >
             Sign In
           </Button>
           <Button
             className="cursor-pointer"
             nativeButton={false}
-            render={<Link href="/auth/sign-up" />}
+            render={<Link href="/sign-up" />}
           >
             Get Started
           </Button>
@@ -342,7 +342,7 @@ export function LandingNavbar() {
                       size="lg"
                       className="cursor-pointer"
                       nativeButton={false}
-                      render={<Link href="/auth/sign-in" />}
+                      render={<Link href="/sign-in" />}
                     >
                       Sign In
                     </Button>
@@ -350,7 +350,7 @@ export function LandingNavbar() {
                       size="lg"
                       className="cursor-pointer"
                       nativeButton={false}
-                      render={<Link href="/auth/sign-up" />}
+                      render={<Link href="/sign-up" />}
                     >
                       Get Started
                     </Button>
