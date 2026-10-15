@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateBomLineDto {
@@ -22,4 +22,11 @@ export class CreateProductionOrderDto {
  @IsDateString() @IsOptional() plannedStartDate?: string;
  @IsDateString() @IsOptional() plannedEndDate?: string;
  @IsString() @IsOptional() @MaxLength(2000) notes?: string;
+}
+export class CreateProductionCostDto {
+ @IsIn(['labour','overhead']) costType!: 'labour'|'overhead';
+ @IsString() @MaxLength(240) description!: string;
+ @Type(() => Number) @IsNumber({maxDecimalPlaces:2}) @Min(0.01) amount!: number;
+ @IsUUID() sourceAccountId!: string;
+ @IsDateString() @IsOptional() incurredOn?: string;
 }
