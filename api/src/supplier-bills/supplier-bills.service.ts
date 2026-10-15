@@ -48,8 +48,11 @@ export class SupplierBillsService {
       for(const item of dto.items){
         if(item.purchaseOrderItemId){
           if(!dto.purchaseOrderId)throw new BadRequestException('A purchase order item requires a linked purchase order.');
-          const poItem=await client.query<{id:string;product_name:string;unit_cost:string|number;purchase_order_id:string}>('SELECT id,product_name,unit_cost,purchase_order_id FROM purchase_order_items WHERE id=$1 AND company_id=$2 AND purchase_order_id=$3',[item.purchaseOrderItemId,companyId,dto.purchaseOrderId]);
+          const poItem=await client.query<{id:string;product_name:string;unit_cost:string|number;purchase_order_id:string;quantity:string|number;received_quantity:string|number}>('SELECT id,product_name,unit_cost,purchase_order_id,quantity,received_quantity FROM purchase_order_items WHERE id=$1 AND company_id=$2 AND purchase_order_id=$3',[item.purchaseOrderItemId,companyId,dto.purchaseOrderId]);
           if(!poItem.rows[0])throw new NotFoundException('Linked purchase order item not found.');
+          const billed=await client.query<{quantity:string|number}>("SELECT COALESCE(SUM(i.quantity),0) AS quantity FROM supplier_bill_items i JOIN supplier_bills b ON b.id=i.supplier_bill_id AND b.company_id=i.company_id WHERE i.company_id=$1 AND i.purchase_order_item_id=$2 AND b.status<>'void'",[companyId,item.purchaseOrderItemId]);
+          const available=Number(poItem.rows[0].received_quantity)-Number(billed.rows[0].quantity);
+          if(item.quantity>available+0.0000001)throw new BadRequestException(`Bill quantity exceeds received, not-yet-billed quantity for "${poItem.rows[0].product_name}" (available: ${Math.max(0,available)}).`);
         }
         const sub=Math.round(item.quantity*item.unitCost*100)/100;
         const tax=Math.round(sub*(item.taxRate??0))/100;
