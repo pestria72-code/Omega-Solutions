@@ -18,28 +18,6 @@ import { QuotationsModule } from './quotations/quotations.module.js';
 import { SalesOrdersModule } from './sales-orders/sales-orders.module.js';
 import { CrmModule } from './crm/crm.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    DatabaseModule,
-    CommonModule,
-    AuditModule,
-    AuthModule,
-    RbacModule,
-    MembershipsModule,
-    CompaniesModule,
-    BranchesModule,
-    CustomersModule,
-    SuppliersModule,
-    ProductsModule,
-    InvoicesModule,
-    QuotationsModule,
-    SalesOrdersModule,
-    CrmModule,
-    InventoryModule,
-  ],
-  controllers: [AppController],
-  providers: [AppService],
-})
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module.js';
+@Module({imports:[ConfigModule.forRoot({isGlobal:true}),DatabaseModule,CommonModule,AuditModule,AuthModule,RbacModule,MembershipsModule,CompaniesModule,BranchesModule,CustomersModule,SuppliersModule,ProductsModule,InvoicesModule,QuotationsModule,SalesOrdersModule,CrmModule,InventoryModule,PurchaseOrdersModule],controllers:[AppController],providers:[AppService]})
 export class AppModule {}

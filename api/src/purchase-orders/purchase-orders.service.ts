@@ -1,0 +1,90 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { DatabaseService } from '../database.service.js';
+import { MembershipsService } from '../memberships/memberships.service.js';
+import { AuditService } from '../audit/audit.service.js';
+import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import type { CreatePurchaseOrderDto, ReceivePurchaseOrderDto, UpdatePurchaseOrderStatusDto } from './dto/purchase-order.dto.js';
+
+@Injectable()
+export class PurchaseOrdersService {
+  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService) {}
+  private companyFor(user: AuthenticatedUser) {
+    return user.companyId ? this.memberships.getMembershipForCompany(user.userId,user.companyId) : this.memberships.getMembership(user.userId);
+  }
+  async list(user: AuthenticatedUser) {
+    const {companyId}=await this.companyFor(user);
+    return (await this.db.query(
+      `SELECT po.id,po.company_id,po.supplier_id,s.name AS supplier_name,po.order_number,po.order_date,po.expected_date,po.status,po.currency,po.subtotal,po.tax_amount,po.total,po.notes,po.created_at,po.updated_at,COUNT(i.id)::int AS item_count,COALESCE(SUM(i.quantity),0) AS ordered_quantity,COALESCE(SUM(i.received_quantity),0) AS received_quantity
+       FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id AND s.company_id=po.company_id
+       LEFT JOIN purchase_order_items i ON i.purchase_order_id=po.id AND i.company_id=po.company_id
+       WHERE po.company_id=$1 GROUP BY po.id,s.name ORDER BY po.created_at DESC`,[companyId])).rows;
+  }
+  async getById(user: AuthenticatedUser,id: string) {
+    const {companyId}=await this.companyFor(user);
+    const result=await this.db.query(`SELECT po.*,s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id AND s.company_id=po.company_id WHERE po.company_id=$1 AND po.id=$2`,[companyId,id]);
+    if(!result.rows[0]) throw new NotFoundException('Purchase order not found.');
+    const items=await this.db.query('SELECT * FROM purchase_order_items WHERE company_id=$1 AND purchase_order_id=$2 ORDER BY created_at,id',[companyId,id]);
+    return {...result.rows[0],items:items.rows};
+  }
+  async create(user: AuthenticatedUser,dto: CreatePurchaseOrderDto) {
+    const membership=await this.companyFor(user); const companyId=membership.companyId;
+    const id=await this.db.transaction(async client=>{
+      const supplier=await client.query("SELECT id FROM suppliers WHERE id=$1 AND company_id=$2 AND is_active=true AND status='active'",[dto.supplierId,companyId]);
+      if(!supplier.rows[0]) throw new NotFoundException('Active supplier not found in this company.');
+      const year=new Date().getFullYear();
+      const seq=await client.query<{next_number:number}>(`INSERT INTO purchase_order_sequences(company_id,order_year,next_number) VALUES($1,$2,1) ON CONFLICT(company_id,order_year) DO UPDATE SET next_number=purchase_order_sequences.next_number+1 RETURNING next_number`,[companyId,year]);
+      const number=`PO-${year}-${String(seq.rows[0].next_number).padStart(5,'0')}`;
+      let subtotal=0,taxAmount=0;
+      const lines:Array<{productId:string;name:string;sku:string;qty:number;cost:number;rate:number;sub:number;tax:number;total:number}>=[];
+      for(const item of dto.items){
+        const res=await client.query<{id:string;name:string;sku:string;is_service:boolean;is_active:boolean}>('SELECT id,name,sku,is_service,is_active FROM products WHERE id=$1 AND company_id=$2 FOR SHARE',[item.productId,companyId]);
+        const p=res.rows[0]; if(!p||!p.is_active) throw new NotFoundException('A selected product is missing or inactive in this company.');
+        if(p.is_service) throw new BadRequestException(`Service item "${p.name}" cannot be received into inventory.`);
+        const sub=Math.round(item.quantity*item.unitCost*100)/100; const tax=Math.round(sub*(item.taxRate??0))/100;
+        subtotal+=sub;taxAmount+=tax;lines.push({productId:p.id,name:p.name,sku:p.sku,qty:item.quantity,cost:item.unitCost,rate:item.taxRate??0,sub,tax,total:sub+tax});
+      }
+      const inserted=await client.query<{id:string}>(`INSERT INTO purchase_orders(company_id,supplier_id,order_number,expected_date,status,subtotal,tax_amount,total,notes,created_by) VALUES($1,$2,$3,$4,'draft',$5,$6,$7,$8,$9) RETURNING id`,[companyId,dto.supplierId,number,dto.expectedDate??null,subtotal,taxAmount,subtotal+taxAmount,dto.notes??null,user.userId]);
+      for(const l of lines) await client.query(`INSERT INTO purchase_order_items(company_id,purchase_order_id,product_id,product_name,sku,quantity,unit_cost,tax_rate,line_subtotal,tax_amount,line_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[companyId,inserted.rows[0].id,l.productId,l.name,l.sku,l.qty,l.cost,l.rate,l.sub,l.tax,l.total]);
+      return inserted.rows[0].id;
+    });
+    await this.audit.log({userId:user.userId,companyId,branchId:null,action:'purchase_order.create',entityType:'purchase_order',entityId:id,oldValues:null,newValues:{supplierId:dto.supplierId},ipAddress:null});
+    return this.getById(user,id);
+  }
+  async updateStatus(user: AuthenticatedUser,id:string,dto:UpdatePurchaseOrderStatusDto) {
+    const m=await this.companyFor(user);
+    const state=await this.db.transaction(async client=>{
+      const res=await client.query<{status:string}>('SELECT status FROM purchase_orders WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,m.companyId]);
+      const row=res.rows[0];if(!row)throw new NotFoundException('Purchase order not found.');
+      if(dto.status==='ordered'&&row.status==='draft') await client.query("UPDATE purchase_orders SET status='ordered',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
+      else if(dto.status==='cancelled'&&['draft','ordered'].includes(row.status)) await client.query("UPDATE purchase_orders SET status='cancelled',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
+      else throw new BadRequestException(`Cannot change purchase order status from ${row.status} to ${dto.status}.`);
+      return row.status;
+    });
+    await this.audit.log({userId:user.userId,companyId:m.companyId,branchId:null,action:'purchase_order.status_change',entityType:'purchase_order',entityId:id,oldValues:{status:state},newValues:{status:dto.status},ipAddress:null});
+    return this.getById(user,id);
+  }
+  async receive(user:AuthenticatedUser,id:string,dto:ReceivePurchaseOrderDto) {
+    const m=await this.companyFor(user);
+    await this.db.transaction(async client=>{
+      const res=await client.query<{id:string;order_number:string;status:string}>('SELECT id,order_number,status FROM purchase_orders WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,m.companyId]);
+      const po=res.rows[0];if(!po)throw new NotFoundException('Purchase order not found.');
+      if(!['ordered','partially_received'].includes(po.status))throw new BadRequestException('Only ordered purchase orders can receive stock.');
+      const wh=await client.query('SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',[dto.warehouseId,m.companyId]);
+      if(!wh.rows[0])throw new NotFoundException('Active warehouse not found in this company.');
+      for(const r of dto.items){
+        const lineRes=await client.query<{id:string;product_id:string;quantity:string|number;received_quantity:string|number;unit_cost:string|number;product_name:string}>('SELECT id,product_id,quantity,received_quantity,unit_cost,product_name FROM purchase_order_items WHERE id=$1 AND purchase_order_id=$2 AND company_id=$3 FOR UPDATE',[r.itemId,id,m.companyId]);
+        const line=lineRes.rows[0];if(!line)throw new NotFoundException('Purchase order line not found.');
+        if(r.quantity>Number(line.quantity)-Number(line.received_quantity)+0.0000001)throw new BadRequestException(`Receipt exceeds remaining quantity for "${line.product_name}".`);
+        await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) SELECT $1,$2,$3,$4,0,p.reorder_level FROM products p WHERE p.id=$3 AND p.company_id=$1 ON CONFLICT(warehouse_id,product_id) DO UPDATE SET quantity=inventory_stock_levels.quantity+EXCLUDED.quantity,updated_at=NOW()`,[m.companyId,dto.warehouseId,line.product_id,r.quantity]);
+        await client.query(`INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by) VALUES($1,$2,$3,'receipt',$4,$5,$6,$7,$8)`,[m.companyId,line.product_id,dto.warehouseId,r.quantity,Number(line.unit_cost),dto.reference??po.order_number,dto.notes??`Received against purchase order ${po.order_number}`,user.userId]);
+        await client.query('UPDATE purchase_order_items SET received_quantity=received_quantity+$1 WHERE id=$2 AND company_id=$3',[r.quantity,line.id,m.companyId]);
+        await client.query('UPDATE products SET stock_quantity=(SELECT COALESCE(SUM(quantity),0) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),updated_at=NOW() WHERE id=$2 AND company_id=$1',[m.companyId,line.product_id]);
+      }
+      const sums=await client.query<{ordered:string|number;received:string|number}>('SELECT COALESCE(SUM(quantity),0) ordered,COALESCE(SUM(received_quantity),0) received FROM purchase_order_items WHERE purchase_order_id=$1 AND company_id=$2',[id,m.companyId]);
+      const done=Number(sums.rows[0].ordered)>0&&Number(sums.rows[0].received)+0.0000001>=Number(sums.rows[0].ordered);
+      await client.query('UPDATE purchase_orders SET status=$1,updated_at=NOW() WHERE id=$2 AND company_id=$3',[done?'received':'partially_received',id,m.companyId]);
+    });
+    await this.audit.log({userId:user.userId,companyId:m.companyId,branchId:null,action:'purchase_order.receive',entityType:'purchase_order',entityId:id,oldValues:null,newValues:{warehouseId:dto.warehouseId,itemCount:dto.items.length},ipAddress:null});
+    return this.getById(user,id);
+  }
+}
