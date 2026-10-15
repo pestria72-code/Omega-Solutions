@@ -59,7 +59,7 @@ export class AccountingService {
   if(fromDate&&!validDate(fromDate))throw new BadRequestException('fromDate must be a valid YYYY-MM-DD date.');
   if(toDate&&!validDate(toDate))throw new BadRequestException('toDate must be a valid YYYY-MM-DD date.');
   if(fromDate&&toDate&&fromDate>toDate)throw new BadRequestException('fromDate must be on or before toDate.');
-  const result=await this.db.query(`SELECT a.id,a.code,a.name,a.account_type,a.normal_side,
+  const result=await this.db.query<{id:string;code:string;name:string;account_type:string;normal_side:string;total_debits:string|number;total_credits:string|number;debit_balance:string|number;credit_balance:string|number}>(`SELECT a.id,a.code,a.name,a.account_type,a.normal_side,
     COALESCE(SUM(l.debit) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS total_debits,
     COALESCE(SUM(l.credit) FILTER (WHERE j.status='posted'),0)::numeric(14,2) AS total_credits,
     GREATEST(COALESCE(SUM(l.debit-l.credit) FILTER (WHERE j.status='posted'),0),0)::numeric(14,2) AS debit_balance,
@@ -72,7 +72,7 @@ export class AccountingService {
     WHERE a.company_id=$1
     GROUP BY a.id
     ORDER BY a.code`,[companyId,fromDate??null,toDate??null]);
-  const accounts=result.rows.map((row:{total_debits:string|number;total_credits:string|number;debit_balance:string|number;credit_balance:string|number;[key:string]:unknown})=>({...row,total_debits:Number(row.total_debits),total_credits:Number(row.total_credits),debit_balance:Number(row.debit_balance),credit_balance:Number(row.credit_balance)}));
+  const accounts=result.rows.map(row=>({...row,total_debits:Number(row.total_debits),total_credits:Number(row.total_credits),debit_balance:Number(row.debit_balance),credit_balance:Number(row.credit_balance)}));
   const totalDebits=Math.round(accounts.reduce((sum,row)=>sum+row.debit_balance,0)*100)/100;
   const totalCredits=Math.round(accounts.reduce((sum,row)=>sum+row.credit_balance,0)*100)/100;
   const variance=Math.round((totalDebits-totalCredits)*100)/100;
