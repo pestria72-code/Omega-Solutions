@@ -55,7 +55,7 @@ export default function SupplierBillsPage(){
   try{
    const po=await api.get<PO>(`/purchase-orders/${id}`);
    setSupplierId(po.supplier_id);
-   const received=(po.items??[]).filter(i=>Number(i.received_quantity)>0).map(i=>({description:i.product_name,quantity:String(i.received_quantity),unitCost:String(i.unit_cost),taxRate:"0",purchaseOrderItemId:i.id}));
+   const received=(po.items??[]).filter(i=>Number(i.received_quantity)>0).map(i=>({description:i.product_name,quantity:String(i.received_quantity),unitCost:String(i.unit_cost),taxRate:String(i.tax_rate??0),purchaseOrderItemId:i.id}));
    if(!received.length){setError("This order has no received quantities available to bill yet.");setLines([{description:"",quantity:"1",unitCost:"0",taxRate:"16"}]);return}
    setLines(received);
   }catch(e){setError(messageOf(e))}
