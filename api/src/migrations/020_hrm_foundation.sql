@@ -1,5 +1,7 @@
 -- 020_hrm_foundation.sql
 -- Tenant-scoped HR records and leave workflow; no seeded employee or payroll data.
+-- A composite unique index lets employee branch references enforce tenant consistency at the database layer.
+CREATE UNIQUE INDEX IF NOT EXISTS branches_id_company_unique_idx ON branches(id,company_id);
 CREATE TABLE IF NOT EXISTS employees (
  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
