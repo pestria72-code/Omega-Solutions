@@ -53,7 +53,7 @@ const socialLinks = [
   { name: "Twitter", href: "#", icon: Twitter },
   {
     name: "GitHub",
-    href: "https://github.com/shadcnstore/shadcn-dashboard-landing-template",
+    href: "https://github.com/pestria72-code/Omega-Solutions",
     icon: Github,
   },
   { name: "LinkedIn", href: "#", icon: Linkedin },
@@ -123,12 +123,12 @@ export function LandingFooter() {
           <div className="col-span-4 lg:col-span-2 max-w-2xl">
             <div className="flex items-center gap-2 mb-4 max-lg:justify-center">
               <a
-                href="https://shadcnstore.com"
+                href="/"
                 target="_blank"
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <Logo size={32} />
-                <span className="font-bold text-xl">ShadcnStore</span>
+                <span className="font-bold text-xl">Omega Solutions</span>
               </a>
             </div>
             <p className="text-muted-foreground mb-6 max-lg:text-center max-lg:flex max-lg:justify-center">
@@ -234,11 +234,11 @@ export function LandingFooter() {
               <Heart className="size-4 text-destructive fill-current" />
               <span>by</span>
               <a
-                href="https://shadcnstore.com"
+                href="/"
                 target="_blank"
                 className="font-semibold text-foreground hover:text-primary transition-colors cursor-pointer"
               >
-                ShadcnStore
+                Omega Solutions
               </a>
             </div>
             <span className="hidden sm:inline">•</span>
