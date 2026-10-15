@@ -107,7 +107,7 @@ export class PosService {
         return inserted.rows[0];
       });
     } catch (error) {
-      if ((error as { code?: string }).code === '23505') throw new ConflictException('This register already has an open cashier shift.');
+      if ((error as { code?: string }).code === '23505') throw new ConflictException('This cashier or register already has an open shift.');
       throw error;
     }
     await this.audit.log({
