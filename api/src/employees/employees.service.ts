@@ -13,7 +13,7 @@ export class EmployeesService {
   }
   async list(user: AuthenticatedUser) {
     const {companyId}=await this.membershipFor(user);
-    return (await this.db.query(`SELECT e.id,e.company_id,e.branch_id,b.name AS branch_name,e.employee_number,e.first_name,e.last_name,e.work_email,e.phone,e.job_title,e.department,e.employment_status,e.hire_date,e.created_at,e.updated_at
+    return (await this.db.query(`SELECT e.id,e.company_id,e.branch_id,b.name AS branch_name,e.employee_number,e.first_name,e.last_name,e.work_email,e.phone,e.job_title,e.department,e.employment_status,e.hire_date,e.created_at,e.updated_at,(e.kra_pin IS NOT NULL) AS has_kra_pin,(e.nssf_number IS NOT NULL) AS has_nssf_number,(e.sha_number IS NOT NULL) AS has_sha_number,(e.nhif_number IS NOT NULL) AS has_nhif_number
       FROM employees e LEFT JOIN branches b ON b.id=e.branch_id AND b.company_id=e.company_id
       WHERE e.company_id=$1 ORDER BY e.last_name,e.first_name`,[companyId])).rows;
   }
@@ -25,13 +25,20 @@ export class EmployeesService {
     }
     const nationalId=dto.nationalId?.trim().replace(/[^0-9]/g,'')||null;
     if(nationalId && !/^\d{5,12}$/.test(nationalId)) throw new BadRequestException('National ID must contain 5 to 12 digits.');
+    const kraPin=dto.kraPin?.trim().toUpperCase().replace(/\s+/g,'')||null;
+    if(kraPin && !/^[A-Z]\d{9}[A-Z]$/.test(kraPin)) throw new BadRequestException('KRA PIN must be in the format A123456789Z.');
+    const normalizeMembershipNumber=(value:string|undefined,label:string)=>{const normalized=value?.trim().toUpperCase().replace(/[\s-]/g,'')||null;if(normalized&&!/^[A-Z0-9/]{4,30}$/.test(normalized))throw new BadRequestException(`${label} must contain 4 to 30 letters or digits.`);return normalized;};
+    const nssfNumber=normalizeMembershipNumber(dto.nssfNumber,'NSSF number');
+    const shaNumber=normalizeMembershipNumber(dto.shaNumber,'SHA/SHIF number');
+    const nhifNumber=normalizeMembershipNumber(dto.nhifNumber,'Legacy NHIF number');
     try {
-      const result=await this.db.query(`INSERT INTO employees(company_id,branch_id,employee_number,national_id,first_name,last_name,work_email,phone,job_title,department,hire_date,created_by)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::date,$12)
-        RETURNING id,company_id,branch_id,employee_number,first_name,last_name,work_email,phone,job_title,department,employment_status,hire_date,created_at,updated_at`,
-      [membership.companyId,dto.branchId??null,dto.employeeNumber.trim(),nationalId,dto.firstName.trim(),dto.lastName.trim(),dto.workEmail?.trim().toLowerCase()??null,dto.phone?.trim()??null,dto.jobTitle?.trim()??null,dto.department?.trim()??null,dto.hireDate??null,user.userId]);
+      const result=await this.db.query(`INSERT INTO employees(company_id,branch_id,employee_number,national_id,kra_pin,nssf_number,sha_number,nhif_number,first_name,last_name,work_email,phone,job_title,department,hire_date,created_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::date,$16)
+        RETURNING id,company_id,branch_id,employee_number,first_name,last_name,work_email,phone,job_title,department,employment_status,hire_date,created_at,updated_at,
+          (kra_pin IS NOT NULL) AS has_kra_pin,(nssf_number IS NOT NULL) AS has_nssf_number,(sha_number IS NOT NULL) AS has_sha_number,(nhif_number IS NOT NULL) AS has_nhif_number`,
+      [membership.companyId,dto.branchId??null,dto.employeeNumber.trim(),nationalId,kraPin,nssfNumber,shaNumber,nhifNumber,dto.firstName.trim(),dto.lastName.trim(),dto.workEmail?.trim().toLowerCase()??null,dto.phone?.trim()??null,dto.jobTitle?.trim()??null,dto.department?.trim()??null,dto.hireDate??null,user.userId]);
       const employee=result.rows[0];
-      await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'employees.create',entityType:'employee',entityId:String(employee.id),oldValues:null,newValues:{employeeNumber:employee.employee_number},ipAddress:null});
+      await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'employees.create',entityType:'employee',entityId:String(employee.id),oldValues:null,newValues:{employeeNumber:employee.employee_number,nationalIdLast4:nationalId?.slice(-4)??null,kraPinLast4:kraPin?.slice(-4)??null,nssfNumberLast4:nssfNumber?.slice(-4)??null,shaNumberLast4:shaNumber?.slice(-4)??null,nhifNumberLast4:nhifNumber?.slice(-4)??null},ipAddress:null});
       return employee;
     } catch(error) {
       if((error as {code?:string}).code==='23505') throw new ConflictException('An employee with this number or national ID already exists in this company.');
