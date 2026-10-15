@@ -72,6 +72,38 @@ describe('InventoryService', () => {
     expect(db.query.mock.calls[0][0]).not.toContain('INSERT INTO');
   });
 
+  it('reconciles stock levels against movement history, legacy totals, and the inventory control account without writes', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ mismatch_count: 1, absolute_quantity_variance: '2.000' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ mismatch_count: 0, absolute_quantity_variance: '0.000' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ stock_cost_value: '120.00', inventory_account_balance: '100.00' }], rowCount: 1 });
+
+    const result = await service.reconciliation(user);
+
+    expect(result.stockLedger).toEqual({ mismatchCount: 1, absoluteQuantityVariance: 2, reconciled: false });
+    expect(result.legacyProductQuantities).toEqual({ mismatchCount: 0, absoluteQuantityVariance: 0, reconciled: true });
+    expect(result.valuation).toEqual({ stockCostValue: 120, inventoryAccountBalance: 100, variance: 20, reconciled: false });
+    expect(db.query).toHaveBeenCalledTimes(3);
+    expect(db.query.mock.calls[0][0]).toContain('FULL OUTER JOIN movement_totals');
+    expect(db.query.mock.calls[1][0]).toContain('products p');
+    expect(db.query.mock.calls[2][0]).toContain("a.system_code='inventory'");
+    for (const [sql] of db.query.mock.calls) expect(sql).not.toContain('INSERT INTO');
+  });
+
+  it('reports a clean reconciliation when all inventory quantities and values agree', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ mismatch_count: 0, absolute_quantity_variance: '0.000' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ mismatch_count: 0, absolute_quantity_variance: '0.000' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ stock_cost_value: '100.00', inventory_account_balance: '100.00' }], rowCount: 1 });
+
+    const result = await service.reconciliation(user);
+
+    expect(result.stockLedger.reconciled).toBe(true);
+    expect(result.legacyProductQuantities.reconciled).toBe(true);
+    expect(result.valuation.reconciled).toBe(true);
+    expect(db.query.mock.calls.every(([sql]) => !String(sql).includes('INSERT INTO'))).toBe(true);
+  });
+
   it('rejects a blank warehouse code before writing to the database', async () => {
     await expect(service.createWarehouse(user, { code: '   ', name: 'Main' })).rejects.toThrow(BadRequestException);
     expect(db.query).not.toHaveBeenCalled();
