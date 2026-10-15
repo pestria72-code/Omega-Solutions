@@ -202,6 +202,10 @@ export class ManufacturingService {
    const order=await client.query<{id:string;status:string;warehouse_id:string}>(`SELECT id,status,warehouse_id FROM manufacturing_production_orders WHERE company_id=$1 AND id=$2 FOR UPDATE`,[companyId,id]);
    if(!order.rows[0])throw new NotFoundException('Production order not found.');
    if(order.rows[0].status!=='planned'&&order.rows[0].status!=='in_progress')throw new ConflictException('Only planned or in-progress orders can be cancelled.');
+   if(order.rows[0].status==='in_progress'){
+    const costs=await client.query<{count:string|number}>(`SELECT COUNT(*)::int AS count FROM manufacturing_order_costs WHERE company_id=$1 AND production_order_id=$2`,[companyId,id]);
+    if(Number(costs.rows[0]?.count??0)>0)throw new ConflictException('This order has capitalised labour or overhead costs. Complete production or reverse those costs before cancellation.');
+   }
    previousStatus=order.rows[0].status;
    const materials=await client.query<{material_product_id:string;reserved_quantity:string|number}>(`SELECT material_product_id,reserved_quantity FROM manufacturing_order_materials WHERE company_id=$1 AND production_order_id=$2 ORDER BY material_product_id FOR UPDATE`,[companyId,id]);
    if(order.rows[0].status==='in_progress'){
