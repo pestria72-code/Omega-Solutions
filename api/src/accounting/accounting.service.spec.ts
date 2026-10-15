@@ -46,7 +46,8 @@ describe('AccountingService receivables reconciliation', () => {
     expect(result.ageing).toEqual({ current: 30, days1to30: 20, days31to60: 20, days61plus: 10 });
     expect(db.query).toHaveBeenCalledTimes(3);
     expect(db.query.mock.calls[1][0]).toContain("i.status NOT IN ('draft','cancelled')");
-    expect(db.query.mock.calls.every((call: unknown[]) => call[1]?.[0] === 'company-active')).toBe(true);
+    const calls = db.query.mock.calls as unknown as [string, unknown[]][];
+    expect(calls.every((call) => call[1]?.[0] === 'company-active')).toBe(true);
   });
 
   it('marks the receivables ledger reconciled when the variance is within one cent', async () => {
