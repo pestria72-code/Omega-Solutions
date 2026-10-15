@@ -133,15 +133,8 @@ export class PosService {
       if (!existing) throw new NotFoundException('POS shift not found.');
       if (existing.status !== 'open') throw new ConflictException('This shift is already closed.');
       if (existing.opened_by !== user.userId) throw new ConflictException('Only the cashier who opened this shift may close it.');
-      const cash = await client.query<{total:string|number}>(
-        `SELECT COALESCE(SUM(p.amount),0) AS total
-         FROM invoice_payments p JOIN invoices i ON i.id=p.invoice_id AND i.company_id=p.company_id
-         WHERE p.company_id=$1 AND p.status='confirmed' AND p.method='cash'
-           AND p.created_by=$2 AND p.created_at >= (SELECT opened_at FROM pos_shifts WHERE id=$3)
-           AND p.created_at <= NOW()`,
-        [companyId,user.userId,shiftId],
-      );
-      const expectedCash = Math.round((Number(existing.opening_float)+Number(cash.rows[0]?.total ?? 0))*100)/100;
+      // Checkout does not yet persist shift-linked payments. Do not count unrelated invoice receipts.
+      const expectedCash = Math.round(Number(existing.opening_float) * 100) / 100;
       const difference = Math.round((countedCash-expectedCash)*100)/100;
       const updated = await client.query(
         `UPDATE pos_shifts SET status='closed',closed_by=$3,closed_at=NOW(),
