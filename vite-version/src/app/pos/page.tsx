@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Banknote, Clock3, Plus, RefreshCw, ShoppingCart, Trash2, Store, ReceiptText } from "lucide-react"
+import { Banknote, Clock3, Plus, RefreshCw, Trash2, Store, ReceiptText } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
