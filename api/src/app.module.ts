@@ -20,5 +20,6 @@ import { CrmModule } from './crm/crm.module.js';
 import { InventoryModule } from './inventory/inventory.module.js';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module.js';
 import { SupplierBillsModule } from './supplier-bills/supplier-bills.module.js';
-@Module({imports:[ConfigModule.forRoot({isGlobal:true}),DatabaseModule,CommonModule,AuditModule,AuthModule,RbacModule,MembershipsModule,CompaniesModule,BranchesModule,CustomersModule,SuppliersModule,ProductsModule,InvoicesModule,QuotationsModule,SalesOrdersModule,CrmModule,InventoryModule,PurchaseOrdersModule,SupplierBillsModule],controllers:[AppController],providers:[AppService]})
+import { AccountingModule } from './accounting/accounting.module.js';
+@Module({imports:[ConfigModule.forRoot({isGlobal:true}),DatabaseModule,CommonModule,AuditModule,AuthModule,RbacModule,MembershipsModule,CompaniesModule,BranchesModule,CustomersModule,SuppliersModule,ProductsModule,InvoicesModule,QuotationsModule,SalesOrdersModule,CrmModule,InventoryModule,PurchaseOrdersModule,SupplierBillsModule,AccountingModule],controllers:[AppController],providers:[AppService]})
 export class AppModule {}
