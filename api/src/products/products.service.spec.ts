@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import { ProductsService } from './products.service.js';
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -12,6 +13,7 @@ describe('ProductsService initial stock', () => {
   let db: { query: Mock; transaction: Mock };
   let memberships: { getMembership: Mock };
   let audit: { log: Mock };
+  let accounting: { ensureDefaults: Mock };
   let client: { query: Mock };
 
   const user = { userId: 'user-1' } as any;
@@ -46,6 +48,9 @@ describe('ProductsService initial stock', () => {
         if (sql.includes('SELECT id FROM warehouses')) {
           return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
         }
+        if (sql.includes('INSERT INTO journal_entry_sequences')) return { rows: [{ next_number: 1 }], rowCount: 1 };
+        if (sql.includes('INSERT INTO journal_entries')) return { rows: [{ id: 'journal-1' }], rowCount: 1 };
+        if (sql.includes('SELECT id,system_code FROM chart_of_accounts')) return { rows: [{ id: 'account-inventory', system_code: 'inventory' }, { id: 'account-equity', system_code: 'equity' }], rowCount: 2 };
         if (sql.includes('INSERT INTO inventory_stock_movements')) {
           return { rows: [{ id: 'movement-1' }], rowCount: 1 };
         }
@@ -60,6 +65,7 @@ describe('ProductsService initial stock', () => {
       getMembership: vi.fn().mockResolvedValue({ companyId: 'company-1', branchId: null, role: 'owner' }),
     };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
+    accounting = { ensureDefaults: vi.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -67,6 +73,7 @@ describe('ProductsService initial stock', () => {
         { provide: DatabaseService, useValue: db },
         { provide: MembershipsService, useValue: memberships },
         { provide: AuditService, useValue: audit },
+        { provide: AccountingService, useValue: accounting },
       ],
     }).compile();
     service = module.get(ProductsService);
@@ -75,6 +82,7 @@ describe('ProductsService initial stock', () => {
   it('records positive initial stock in the stock ledger and opening-balance movement in one transaction', async () => {
     await service.create(user, dto as any);
 
+    expect(accounting.ensureDefaults).toHaveBeenCalledWith('company-1');
     expect(db.transaction).toHaveBeenCalledTimes(1);
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO inventory_stock_levels'),
@@ -83,6 +91,10 @@ describe('ProductsService initial stock', () => {
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining("'opening_balance'"),
       ['company-1', 'product-1', 'warehouse-1', 5, 80, 'Initial stock entered when the product was created.', 'user-1'],
+    );
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO journal_entry_lines'),
+      ['company-1', 'journal-1', 'account-inventory', 'Opening inventory value', 400, 'account-equity', 'Opening stock funded by opening equity'],
     );
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
       action: 'product.create',
@@ -102,5 +114,6 @@ describe('ProductsService initial stock', () => {
 
     expect(client.query.mock.calls.some(([sql]) => String(sql).includes('inventory_stock_levels'))).toBe(false);
     expect(client.query.mock.calls.some(([sql]) => String(sql).includes('inventory_stock_movements'))).toBe(false);
+    expect(accounting.ensureDefaults).not.toHaveBeenCalled();
   });
 });
