@@ -31,6 +31,11 @@ describe('EmployeesService',()=>{
   await expect(service.updateNationalId(user,'employee-1','abc')).rejects.toThrow(BadRequestException);
   expect(db.query).not.toHaveBeenCalled();
  });
+ it('rejects malformed KRA PIN before writing an employee record',async()=>{
+  await expect(service.create(user,{employeeNumber:'EMP-2',firstName:'Amina',lastName:'Otieno',kraPin:'not-a-pin'})).rejects.toThrow(BadRequestException);
+  expect(db.query).not.toHaveBeenCalled();
+  expect(audit.log).not.toHaveBeenCalled();
+ });
  it('lists employees only within the active company',async()=>{
   db.query.mockResolvedValue({rows:[],rowCount:0});
   await service.list(user);
