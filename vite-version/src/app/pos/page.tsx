@@ -71,16 +71,41 @@ export default function PosPage() {
   const paymentTotal=payments.length===1&&payments[0].amount===""?total:Math.round(paidEntered*100)/100
 
   function addProduct(product:Product){
-    if(!product.is_service&&Number(product.available_quantity)<=0){setError("This product has no available stock in the selected warehouse.");return}
+    const available=Number(product.available_quantity)
+    const existing=cart.find(line=>line.product.id===product.id)
+    if(!product.is_service&&(!Number.isFinite(available)||available-(existing?.quantity??0)<1)){
+      setError("There is not enough available stock to add another unit of "+product.name+".")
+      return
+    }
     setError(null)
     setCart(old=>{
-      const existing=old.find(line=>line.product.id===product.id)
-      if(existing)return old.map(line=>line.product.id===product.id?{...line,quantity:line.quantity+1}:line)
+      const current=old.find(line=>line.product.id===product.id)
+      if(current)return old.map(line=>line.product.id===product.id?{...line,quantity:current.quantity+1}:line)
       return [...old,{product,quantity:1,unitPrice:Number(product.selling_price),taxRate:0}]
     })
   }
   function updateLine(id:string,patch:Partial<Pick<CartLine,"quantity"|"unitPrice"|"taxRate">>){
-    setCart(old=>old.map(line=>line.product.id===id?{...line,...patch}:line))
+    const current=cart.find(line=>line.product.id===id)
+    if(!current)return
+    const next={...current,...patch}
+    if(!Number.isFinite(next.quantity)||next.quantity<=0||Math.round(next.quantity*1000)!==next.quantity*1000){
+      setError("Quantity must be positive and use no more than three decimal places.")
+      return
+    }
+    if(!current.product.is_service&&next.quantity>Number(current.product.available_quantity)){
+      setError("Quantity exceeds available stock for "+current.product.name+".")
+      return
+    }
+    if(!Number.isFinite(next.unitPrice)||next.unitPrice<0||Math.round(next.unitPrice*100)!==next.unitPrice*100){
+      setError("Unit price must be non-negative and limited to two decimal places.")
+      return
+    }
+    if(!Number.isFinite(next.taxRate)||next.taxRate<0||next.taxRate>100||Math.round(next.taxRate*100)!==next.taxRate*100){
+      setError("Tax rate must be between 0 and 100 with up to two decimal places.")
+      return
+    }
+    setError(null)
+    setCart(old=>old.map(line=>line.product.id===id?next:line))
   }
   async function createRegister(event:React.FormEvent<HTMLFormElement>){
     event.preventDefault();setSaving(true);setError(null)
