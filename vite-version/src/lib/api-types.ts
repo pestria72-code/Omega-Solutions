@@ -125,6 +125,7 @@ export interface InvoicePaymentApiRow {
   status: 'pending' | 'confirmed' | 'rejected' | 'reconciled';
   verified_at: string | null;
   reconciled_at: string | null;
+  reconciliation_reference: string | null;
 }
 
 export interface InvoiceApiRow {
