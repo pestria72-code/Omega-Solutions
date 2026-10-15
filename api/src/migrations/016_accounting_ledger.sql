@@ -56,3 +56,20 @@ CREATE INDEX IF NOT EXISTS idx_journal_lines_company_account ON journal_entry_li
 ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE journal_entry_lines ENABLE ROW LEVEL SECURITY;
+
+INSERT INTO permissions(permission,description,category) VALUES
+ ('accounting:read','View chart of accounts and general ledger','accounting'),
+ ('accounting:write','Manage chart of accounts','accounting')
+ON CONFLICT(permission) DO NOTHING;
+INSERT INTO role_permissions(role,permission_id)
+SELECT 'owner',id FROM permissions WHERE permission IN ('accounting:read','accounting:write')
+ON CONFLICT(role,permission_id) DO NOTHING;
+INSERT INTO role_permissions(role,permission_id)
+SELECT 'admin',id FROM permissions WHERE permission IN ('accounting:read','accounting:write')
+ON CONFLICT(role,permission_id) DO NOTHING;
+INSERT INTO role_permissions(role,permission_id)
+SELECT 'manager',id FROM permissions WHERE permission='accounting:read'
+ON CONFLICT(role,permission_id) DO NOTHING;
+INSERT INTO role_permissions(role,permission_id)
+SELECT 'viewer',id FROM permissions WHERE permission='accounting:read'
+ON CONFLICT(role,permission_id) DO NOTHING;
