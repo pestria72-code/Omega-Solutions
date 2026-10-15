@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AccountingService } from './accounting.service.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -11,6 +11,7 @@ export class AccountingController {
  constructor(private readonly accounting:AccountingService){}
  @Get('accounts') @RequirePermissions('accounting:read') accounts(@Req() req:{user:AuthenticatedUser}){return this.accounting.listAccounts(req.user);}
  @Post('accounts') @RequirePermissions('accounting:write') createAccount(@Req() req:{user:AuthenticatedUser},@Body() dto:CreateAccountDto){return this.accounting.createAccount(req.user,dto);}
+ @Get('reports/trial-balance') @RequirePermissions('accounting:read') trialBalance(@Req() req:{user:AuthenticatedUser},@Query('fromDate') fromDate?:string,@Query('toDate') toDate?:string){return this.accounting.trialBalance(req.user,fromDate,toDate);}
  @Get('reconciliation/payables') @RequirePermissions('accounting:read') payablesReconciliation(@Req() req:{user:AuthenticatedUser}){return this.accounting.payablesReconciliation(req.user);}
  @Get('reconciliation/receivables') @RequirePermissions('accounting:read') receivablesReconciliation(@Req() req:{user:AuthenticatedUser}){return this.accounting.receivablesReconciliation(req.user);}
  @Get('journals') @RequirePermissions('accounting:read') journals(@Req() req:{user:AuthenticatedUser}){return this.accounting.listJournals(req.user);}
