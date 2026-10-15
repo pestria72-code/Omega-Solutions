@@ -7,6 +7,10 @@ on:
       - development
     paths:
       - "api/scripts/live-purchasing-smoke.mjs"
+      - "api/src/supplier-bills/**"
+      - "api/src/accounting/**"
+      - "api/src/purchase-orders/**"
+      - "api/src/inventory/**"
       - ".github/workflows/live-purchasing-smoke.yml"
 
 permissions:
