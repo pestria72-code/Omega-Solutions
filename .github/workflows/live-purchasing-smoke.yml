@@ -3,20 +3,18 @@ name: Authenticated purchasing live smoke test
 on:
   workflow_dispatch:
   push:
-        - "api/scripts/live-payroll-smoke.mjs"
-      - "api/src/payroll/**"
     branches:
       - development
     paths:
-          - "api/scripts/live-payroll-smoke.mjs"
-      - "api/src/payroll/**"
       - "api/scripts/live-purchasing-smoke.mjs"
       - "api/scripts/live-hrm-expenses-smoke.mjs"
+      - "api/scripts/live-payroll-smoke.mjs"
       - "api/src/supplier-bills/**"
       - "api/src/accounting/**"
       - "api/src/purchase-orders/**"
       - "api/src/inventory/**"
       - "api/src/employees/**"
+      - "api/src/payroll/**"
       - "api/src/expenses/**"
       - "api/src/crm/**"
       - ".github/workflows/live-purchasing-smoke.yml"
@@ -24,12 +22,12 @@ on:
 permissions:
   contents: read
 
-# Keep authenticated development ERP end-to-end checks available after API changes, including CRM lifecycle coverage.
+# Keep authenticated development ERP end-to-end checks available after API changes, including CRM and payroll coverage.
 
 jobs:
   live-purchasing-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout development
         uses: actions/checkout@v4
@@ -45,7 +43,8 @@ jobs:
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
         run: node api/scripts/live-hrm-expenses-smoke.mjs
-              - name: Verify employee statutory privacy and draft payroll calculations
+
+      - name: Verify employee statutory privacy and draft payroll calculations
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
           OMEGA_PAYROLL_SMOKE_CONFIRM_DEVELOPMENT: YES
