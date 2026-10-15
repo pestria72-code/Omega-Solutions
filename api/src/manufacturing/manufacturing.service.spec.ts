@@ -37,6 +37,17 @@ describe('ManufacturingService',()=>{
   expect(audit.log).not.toHaveBeenCalled();
  });
 
+ it('blocks cancellation when posted labour or overhead costs remain in WIP',async()=>{
+  const client={query:vi.fn().mockImplementation(async(sql:string)=>{
+   if(sql.includes('SELECT id,status,warehouse_id FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1'}],rowCount:1};
+   if(sql.includes('SELECT COUNT(*)::int AS count FROM manufacturing_order_costs'))return {rows:[{count:1}],rowCount:1};
+   return {rows:[],rowCount:1};
+  })};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
+  await expect(service.cancelOrder(user,'order-1')).rejects.toThrow('has capitalised labour or overhead costs');
+  expect(client.query).toHaveBeenCalledTimes(2);
+  expect(audit.log).not.toHaveBeenCalled();
+ });
  it('releases reserved components atomically when an in-progress order is cancelled',async()=>{
   const client={query:vi.fn().mockImplementation(async(sql:string)=>{
    if(sql.includes('SELECT id,status,warehouse_id FROM manufacturing_production_orders'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1'}],rowCount:1};
