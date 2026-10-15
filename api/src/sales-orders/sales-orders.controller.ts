@@ -32,6 +32,6 @@ export class SalesOrdersController {
   @Patch(':id/status')
   @RequirePermissions('sales:write')
   updateStatus(@Req() req: { user: AuthenticatedUser }, @Param('id') id: string, @Body() dto: UpdateSalesOrderStatusDto) {
-    return this.orders.updateStatus(req.user, id, dto.status);
+    return this.orders.updateStatus(req.user, id, dto.status, dto.warehouseId);
   }
 }

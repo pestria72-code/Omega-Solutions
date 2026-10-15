@@ -100,29 +100,97 @@ export class SalesOrdersService {
     return this.getById(user, orderId);
   }
 
-  async updateStatus(user: AuthenticatedUser, id: string, next: string): Promise<SalesOrderRow> {
+  async updateStatus(user: AuthenticatedUser, id: string, next: string, warehouseId?: string): Promise<SalesOrderRow> {
     const membership = await this.memberships.getMembership(user.userId);
-    const current = await this.db.query<{ id: string; status: string }>(
-      'SELECT id, status FROM sales_orders WHERE id = $1 AND company_id = $2',
-      [id, membership.companyId],
-    );
-    const order = current.rows[0];
-    if (!order) throw new NotFoundException('Sales order not found.');
-    const transitions: Record<SalesOrderStatus, SalesOrderStatus[]> = {
-      confirmed: ['processing', 'cancelled'],
-      processing: ['fulfilled', 'cancelled'],
-      fulfilled: [],
-      cancelled: [],
-    };
-    const from = order.status as SalesOrderStatus;
-    if (!this.isStatus(next) || !transitions[from]?.includes(next as SalesOrderStatus)) {
-      throw new BadRequestException(`Cannot change sales order status from ${from} to ${next}.`);
-    }
-    await this.db.query('UPDATE sales_orders SET status = $1, updated_at = NOW() WHERE id = $2 AND company_id = $3', [next, id, membership.companyId]);
+    let fromStatus: SalesOrderStatus = 'confirmed';
+    const transition = await this.db.transaction(async (client) => {
+      const current = await client.query<{ id: string; status: string; order_number: string }>(
+        'SELECT id, status, order_number FROM sales_orders WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        [id, membership.companyId],
+      );
+      const order = current.rows[0];
+      if (!order) throw new NotFoundException('Sales order not found.');
+      const transitions: Record<SalesOrderStatus, SalesOrderStatus[]> = {
+        confirmed: ['processing', 'cancelled'],
+        processing: ['fulfilled', 'cancelled'],
+        fulfilled: [],
+        cancelled: [],
+      };
+      const from = order.status as SalesOrderStatus;
+      fromStatus = from;
+      if (!this.isStatus(next) || !transitions[from]?.includes(next as SalesOrderStatus)) {
+        throw new BadRequestException(`Cannot change sales order status from ${from} to ${next}.`);
+      }
+
+      if (next === 'fulfilled') {
+        if (!warehouseId) throw new BadRequestException('Choose a warehouse before fulfilling this order.');
+        const warehouse = await client.query<{ id: string }>(
+          'SELECT id FROM warehouses WHERE id = $1 AND company_id = $2 AND is_active = true',
+          [warehouseId, membership.companyId],
+        );
+        if (!warehouse.rows[0]) throw new NotFoundException('Active warehouse not found in this company.');
+        const items = await client.query<{
+          product_id: string | null; quantity: string | number; is_service: boolean | null;
+          is_active: boolean | null; cost_price: string | number | null; product_name: string;
+        }>(
+          `SELECT soi.product_id, soi.quantity, p.is_service, p.is_active, p.cost_price, soi.product_name
+           FROM sales_order_items soi
+           LEFT JOIN products p ON p.id = soi.product_id AND p.company_id = soi.company_id
+           WHERE soi.company_id = $1 AND soi.sales_order_id = $2
+           ORDER BY soi.created_at, soi.id`,
+          [membership.companyId, id],
+        );
+        if (!items.rows.length) throw new BadRequestException('This sales order has no line items to fulfil.');
+        for (const item of items.rows) {
+          if (!item.product_id) continue;
+          if (item.is_service === null || item.is_active === null) {
+            throw new BadRequestException(`Product for order line "${item.product_name}" no longer exists in this company.`);
+          }
+          if (item.is_service) continue;
+          if (!item.is_active) throw new BadRequestException(`Product "${item.product_name}" is inactive and cannot be fulfilled.`);
+
+          const stock = await client.query<{ quantity: string | number; reserved_quantity: string | number }>(
+            'SELECT quantity, reserved_quantity FROM inventory_stock_levels WHERE company_id = $1 AND warehouse_id = $2 AND product_id = $3 FOR UPDATE',
+            [membership.companyId, warehouseId, item.product_id],
+          );
+          const available = stock.rows[0] ? Number(stock.rows[0].quantity) - Number(stock.rows[0].reserved_quantity) : 0;
+          const quantity = Number(item.quantity);
+          if (!stock.rows[0] || available + 0.0000001 < quantity) {
+            throw new BadRequestException(`Insufficient available stock for "${item.product_name}" in the selected warehouse.`);
+          }
+          await client.query(
+            'UPDATE inventory_stock_levels SET quantity = quantity - $1, updated_at = NOW() WHERE company_id = $2 AND warehouse_id = $3 AND product_id = $4',
+            [quantity, membership.companyId, warehouseId, item.product_id],
+          );
+          await client.query(
+            `INSERT INTO inventory_stock_movements
+              (company_id, product_id, warehouse_id, movement_type, quantity, unit_cost, reference, notes, created_by)
+             VALUES ($1, $2, $3, 'issue', $4, $5, $6, $7, $8)`,
+            [membership.companyId, item.product_id, warehouseId, -quantity, Number(item.cost_price ?? 0), order.order_number, `Sales order fulfilment ${order.order_number}`, user.userId],
+          );
+          await client.query(
+            `UPDATE products SET stock_quantity = COALESCE(
+               (SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id = $1 AND product_id = $2), 0
+             ), updated_at = NOW() WHERE company_id = $1 AND id = $2`,
+            [membership.companyId, item.product_id],
+          );
+        }
+      }
+
+      await client.query(
+        'UPDATE sales_orders SET status = $1, updated_at = NOW() WHERE id = $2 AND company_id = $3',
+        [next, id, membership.companyId],
+      );
+      return { from, to: next as SalesOrderStatus };
+    });
+
     await this.audit.log({
       userId: user.userId, companyId: membership.companyId, branchId: null,
-      action: 'sales_order.status.update', entityType: 'sales_order', entityId: id,
-      oldValues: { status: from }, newValues: { status: next }, ipAddress: null,
+      action: transition.to === 'fulfilled' ? 'sales_order.fulfilled' : 'sales_order.status.update',
+      entityType: 'sales_order', entityId: id,
+      oldValues: { status: fromStatus },
+      newValues: { status: transition.to, ...(transition.to === 'fulfilled' ? { warehouseId } : {}) },
+      ipAddress: null,
     });
     return this.getById(user, id);
   }
