@@ -187,6 +187,7 @@ export class PosService {
       }
       const totalCents=subtotalCents+taxCents;
       const total=totalCents/100;
+      if(totalCents<=0) throw new BadRequestException('A POS sale total must be greater than zero.');
       const payments=dto.payments.map(p=>({...p,cents:Math.round(Number(p.amount)*100)}));
       if(payments.some(p=>!Number.isFinite(p.cents)||p.cents<=0||Math.round(Number(p.amount)*100)!==Number(p.amount)*100)) throw new BadRequestException('Payment amounts must be positive and limited to two decimal places.');
       if(payments.reduce((sum,p)=>sum+p.cents,0)!==totalCents) throw new BadRequestException('Payment split must equal the exact checkout total.');
