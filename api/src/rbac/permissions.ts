@@ -17,6 +17,8 @@ export type Permission =
   | 'settings:read' | 'settings:write'
   | 'audit:read'
   | 'accounting:read' | 'accounting:write'
-  | 'manufacturing:read' | 'manufacturing:write';
+  | 'manufacturing:read' | 'manufacturing:write'
+  | 'attendance:read' | 'attendance:write'
+  | 'assignments:read' | 'assignments:write';
 
 export type RoleName = 'owner' | 'admin' | 'manager' | 'staff' | 'viewer';
