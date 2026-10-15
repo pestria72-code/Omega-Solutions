@@ -9,6 +9,8 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { CreateInvoiceDto, CreateInvoicePaymentDto } from './dto/invoice.dto.js';
 import type { InvoiceItemRow, InvoicePaymentRow, InvoiceRow, InvoiceStatus } from './invoice.types.js';
+import type { PoolClient } from 'pg';
+import { AccountingService } from '../accounting/accounting.service.js';
 
 const INVOICE_SELECT = `
   SELECT i.id, i.company_id, i.customer_id, c.name AS customer_name,
@@ -27,7 +29,46 @@ export class InvoicesService {
     private readonly db: DatabaseService,
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
+    private readonly accounting: AccountingService,
   ) {}
+
+
+  private async postJournal(client: PoolClient, input: {
+    companyId: string; date: string | null; description: string; sourceType: string;
+    sourceId: string; userId: string;
+    lines: Array<{ systemCode: string; debit: number; credit: number; description: string }>;
+  }) {
+    const year = input.date ? Number(input.date.slice(0, 4)) : new Date().getFullYear();
+    const seq = await client.query<{ next_number: number }>(
+      `INSERT INTO journal_entry_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
+       ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=journal_entry_sequences.next_number+1
+       RETURNING next_number`, [input.companyId, year],
+    );
+    const entryNumber = `JE-${year}-${String(seq.rows[0].next_number).padStart(6, '0')}`;
+    const entry = await client.query<{ id: string }>(
+      `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+       VALUES($1,$2,COALESCE($3::date,CURRENT_DATE),$4,$5,$6,'posted',NOW(),$7) RETURNING id`,
+      [input.companyId, entryNumber, input.date, input.description, input.sourceType, input.sourceId, input.userId],
+    );
+    let debits = 0;
+    let credits = 0;
+    for (const line of input.lines) {
+      if (line.debit <= 0 && line.credit <= 0) continue;
+      const account = await client.query<{ id: string }>(
+        'SELECT id FROM chart_of_accounts WHERE company_id=$1 AND system_code=$2 AND is_active=true',
+        [input.companyId, line.systemCode],
+      );
+      if (!account.rows[0]) throw new BadRequestException(`Required accounting account "${line.systemCode}" is missing or inactive.`);
+      await client.query(
+        'INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit) VALUES($1,$2,$3,$4,$5,$6)',
+        [input.companyId, entry.rows[0].id, account.rows[0].id, line.description, line.debit, line.credit],
+      );
+      debits += line.debit;
+      credits += line.credit;
+    }
+    if (Math.abs(debits - credits) > 0.005 || debits <= 0) throw new BadRequestException('Journal entry is not balanced.');
+    return entry.rows[0].id;
+  }
 
   async list(user: AuthenticatedUser, search?: string, status?: string): Promise<InvoiceRow[]> {
     const membership = await this.memberships.getMembership(user.userId);
@@ -185,6 +226,7 @@ export class InvoicesService {
     dto: CreateInvoicePaymentDto,
   ): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
+    await this.accounting.ensureDefaults(membership.companyId);
     const paymentAmount = Math.round(dto.amount * 100) / 100;
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
       throw new BadRequestException('Payment amount must be greater than zero.');
@@ -194,10 +236,13 @@ export class InvoicesService {
       const result = await client.query<{
         status: InvoiceStatus;
         customer_id: string;
+        issue_date: string;
+        subtotal: string | number;
+        tax_amount: string | number;
         total: string | number;
         amount_paid: string | number;
       }>(
-        'SELECT status, customer_id, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        'SELECT status, customer_id, issue_date, subtotal, tax_amount, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
         [invoiceId, membership.companyId],
       );
       const invoice = result.rows[0];
@@ -222,6 +267,15 @@ export class InvoicesService {
         ],
       );
 
+      const cashAccount = dto.method === 'cash' ? 'cash' : dto.method === 'mpesa' ? 'mpesa' : 'bank';
+      await this.postJournal(client, {
+        companyId: membership.companyId, date: null, description: `Receipt against invoice ${invoiceId}`,
+        sourceType: 'invoice_payment', sourceId: inserted.rows[0].id, userId: user.userId,
+        lines: [
+          { systemCode: cashAccount, debit: paymentAmount, credit: 0, description: 'Customer receipt' },
+          { systemCode: 'accounts_receivable', debit: 0, credit: paymentAmount, description: 'Reduce customer receivable' },
+        ],
+      });
       const newPaidCents = Math.round(Number(invoice.amount_paid) * 100) + paymentCents;
       const totalCents = Math.round(Number(invoice.total) * 100);
       const newStatus: InvoiceStatus = newPaidCents >= totalCents ? 'paid' : 'partially_paid';
@@ -248,6 +302,7 @@ export class InvoicesService {
 
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
+    await this.accounting.ensureDefaults(membership.companyId);
     if (!this.isInvoiceStatus(status)) throw new BadRequestException('Invalid invoice status.');
     if (status !== 'sent' && status !== 'cancelled') {
       throw new BadRequestException('Only draft invoices can be sent, and unpaid invoices can be cancelled.');
@@ -277,12 +332,31 @@ export class InvoicesService {
       if (invoice.status === status) return invoice.status;
 
       if (status === 'sent' && invoice.status === 'draft') {
+        await this.postJournal(client, {
+          companyId: membership.companyId, date: invoice.issue_date, description: `Sales invoice ${invoiceId}`,
+          sourceType: 'invoice', sourceId: invoiceId, userId: user.userId,
+          lines: [
+            { systemCode: 'accounts_receivable', debit: Number(invoice.total), credit: 0, description: 'Customer receivable' },
+            { systemCode: 'sales_revenue', debit: 0, credit: Number(invoice.subtotal), description: 'Sales revenue' },
+            { systemCode: 'output_tax', debit: 0, credit: Number(invoice.tax_amount), description: 'Output tax payable' },
+          ],
+        });
         await client.query(
           'UPDATE customers SET outstanding_balance = outstanding_balance + $1, updated_at = NOW() WHERE id = $2 AND company_id = $3',
           [invoice.total, invoice.customer_id, membership.companyId],
         );
       }
       if (status === 'cancelled' && (invoice.status === 'sent' || invoice.status === 'overdue')) {
+        await this.postJournal(client, {
+          companyId: membership.companyId, date: null, description: `Reversal of cancelled invoice ${invoiceId}`,
+          sourceType: 'invoice_cancellation', sourceId: invoiceId, userId: user.userId,
+          lines: [
+            { systemCode: 'sales_revenue', debit: Number(invoice.subtotal), credit: 0, description: 'Reverse sales revenue' },
+            { systemCode: 'output_tax', debit: Number(invoice.tax_amount), credit: 0, description: 'Reverse output tax' },
+            { systemCode: 'accounts_receivable', debit: 0, credit: Number(invoice.total), description: 'Reverse customer receivable' },
+          ],
+        });
+        await client.query("UPDATE journal_entries SET status='reversed' WHERE company_id=$1 AND source_type='invoice' AND source_id=$2 AND status='posted'", [membership.companyId, invoiceId]);
         const remaining = Math.max(0, Number(invoice.total) - Number(invoice.amount_paid));
         await client.query(
           'UPDATE customers SET outstanding_balance = GREATEST(0, outstanding_balance - $1), updated_at = NOW() WHERE id = $2 AND company_id = $3',
