@@ -40,6 +40,7 @@ export default function PosPage() {
   const [cart,setCart]=React.useState<CartLine[]>([])
   const [payments,setPayments]=React.useState<PaymentLine[]>([{method:"cash",amount:"",reference:""}])
   const [lastSale,setLastSale]=React.useState<{saleNumber:string;total:number;status:string}|null>(null)
+  const [requestId,setRequestId]=React.useState(()=>crypto.randomUUID())
 
   const load=React.useCallback(async()=>{
     setLoading(true);setError(null)
@@ -64,7 +65,7 @@ export default function PosPage() {
   },[search,warehouseId])
 
   const subtotal=cart.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice*100)/100,0)
-  const tax=cart.reduce((sum,line)=>sum+Math.round(line.quantity*line.unitPrice*100*line.taxRate/100)/100,0)
+  const tax=cart.reduce((sum,line)=>sum+Math.round(Math.round(line.quantity*line.unitPrice*100)*line.taxRate/100)/100,0)
   const total=Math.round((subtotal+tax)*100)/100
   const paidEntered=payments.reduce((sum,p)=>sum+(p.amount===""?0:Number(p.amount)||0),0)
   const paymentTotal=payments.length===1&&payments[0].amount===""?total:Math.round(paidEntered*100)/100
@@ -112,11 +113,11 @@ export default function PosPage() {
     setSaving(true);setError(null);setNotice(null)
     try{
       const result=await api.post<{saleNumber:string;total:number;status:string}>("/pos/checkout",{
-        shiftId:shift.id,warehouseId,customerId:customerId||undefined,
+        requestId,shiftId:shift.id,warehouseId,customerId:customerId||undefined,
         items:cart.map(line=>({productId:line.product.id,quantity:line.quantity,unitPrice:line.unitPrice,taxRate:line.taxRate})),
         payments:normalized.map(p=>({method:p.method,amount:Number(p.amount),reference:p.reference.trim()||undefined}))
       })
-      setLastSale(result);setNotice("Sale "+result.saleNumber+" recorded successfully.");setCart([]);setPayments([{method:"cash",amount:"",reference:""}]);await load()
+      setLastSale(result);setNotice("Sale "+result.saleNumber+" recorded successfully.");setRequestId(crypto.randomUUID());setCart([]);setPayments([{method:"cash",amount:"",reference:""}]);await load()
     }catch(e){setError((e as {message?:string}).message??"Checkout failed. No sale should be recorded if validation failed.")}
     finally{setSaving(false)}
   }
