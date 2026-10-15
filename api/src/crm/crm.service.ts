@@ -378,7 +378,7 @@ export class CrmService {
     const assignedUserId = dto.assignedUserId ?? user.userId;
     const assigned = await this.db.query('SELECT user_id FROM company_memberships WHERE user_id=$1 AND company_id=$2 AND is_active=TRUE',[assignedUserId,membership.companyId]);
     if (!assigned.rows.length) throw new BadRequestException('The assigned user must be an active member of this company.');
-    const result = await this.db.query("INSERT INTO crm_support_tickets(company_id,customer_id,lead_id,subject,description,status,priority,assigned_user_id,created_by,due_at,resolved_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CASE WHEN $6 IN ('resolved','closed') THEN NOW() ELSE NULL END) RETURNING *", [membership.companyId,dto.customerId ?? null,dto.leadId ?? null,dto.subject.trim(),dto.description ?? null,dto.status ?? 'open',dto.priority ?? 'normal',assignedUserId,user.userId,dto.dueAt ?? null]);
+    const result = await this.db.query("INSERT INTO crm_support_tickets(company_id,customer_id,lead_id,subject,description,status,priority,assigned_user_id,created_by,due_at,resolved_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CASE WHEN $6::varchar IN ('resolved','closed') THEN NOW() ELSE NULL END) RETURNING *", [membership.companyId,dto.customerId ?? null,dto.leadId ?? null,dto.subject.trim(),dto.description ?? null,dto.status ?? 'open',dto.priority ?? 'normal',assignedUserId,user.userId,dto.dueAt ?? null]);
     const ticket = result.rows[0];
     await this.auditChange(user,'crm.ticket.create','crm_support_ticket',String(ticket.id),{subject:dto.subject,priority:ticket.priority});
     return ticket;
