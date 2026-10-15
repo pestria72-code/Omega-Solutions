@@ -359,6 +359,12 @@ export class InvoicesService {
         [newPaidCents / 100, newStatus, invoiceId, membership.companyId],
       );
       await client.query(
+        `UPDATE pos_sales SET amount_confirmed=$1,
+          status=CASE WHEN $1 >= total THEN 'completed' ELSE 'awaiting_payment_confirmation' END
+         WHERE company_id=$2 AND invoice_id=$3`,
+        [newPaidCents / 100, membership.companyId, invoiceId],
+      );
+      await client.query(
         'UPDATE customers SET outstanding_balance=GREATEST(0,outstanding_balance-$1),updated_at=NOW() WHERE id=$2 AND company_id=$3',
         [paymentAmount, invoice.customer_id, membership.companyId],
       );
