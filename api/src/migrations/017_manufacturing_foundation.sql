@@ -67,6 +67,12 @@ CREATE TABLE IF NOT EXISTS manufacturing_order_materials (
  UNIQUE(production_order_id,material_product_id),
  CHECK(consumed_quantity<=required_quantity)
 );
+CREATE TABLE IF NOT EXISTS manufacturing_order_sequences (
+ company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+ entry_year INTEGER NOT NULL CHECK(entry_year BETWEEN 2000 AND 9999),
+ next_number INTEGER NOT NULL DEFAULT 1 CHECK(next_number>0),
+ PRIMARY KEY(company_id,entry_year)
+);
 CREATE INDEX IF NOT EXISTS idx_manufacturing_boms_company_status ON manufacturing_boms(company_id,status,name);
 CREATE INDEX IF NOT EXISTS idx_manufacturing_bom_lines_company_bom ON manufacturing_bom_lines(company_id,bom_id);
 CREATE INDEX IF NOT EXISTS idx_manufacturing_orders_company_status ON manufacturing_production_orders(company_id,status,created_at DESC);
