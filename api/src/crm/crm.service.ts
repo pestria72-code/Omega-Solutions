@@ -17,12 +17,18 @@ export class CrmService {
     private readonly audit: AuditService,
   ) {}
 
+  private async membershipFor(user: AuthenticatedUser) {
+    return user.companyId
+      ? this.memberships.getMembershipForCompany(user.userId, user.companyId)
+      : this.memberships.getMembership(user.userId);
+  }
+
   private async companyId(user: AuthenticatedUser) {
-    return (await this.memberships.getMembership(user.userId)).companyId;
+    return (await this.membershipFor(user)).companyId;
   }
 
   private async auditChange(user: AuthenticatedUser, action: string, entityType: string, entityId: string, newValues: Record<string, unknown>) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     await this.audit.log({
       userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
       action, entityType, entityId, oldValues: null, newValues, ipAddress: null,
@@ -52,7 +58,7 @@ export class CrmService {
   }
 
   async createLead(user: AuthenticatedUser, dto: CreateLeadDto) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query(
       `INSERT INTO crm_leads (company_id, owner_user_id, contact_name, organization_name, email, phone, source, estimated_value, currency, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
@@ -125,7 +131,7 @@ export class CrmService {
   }
 
   async createOpportunity(user: AuthenticatedUser, dto: CreateOpportunityDto) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     if (!dto.leadId && !dto.customerId) throw new BadRequestException('An opportunity must be linked to a lead or customer.');
     if (dto.leadId) await this.getLead(user, dto.leadId);
     if (dto.customerId) {
@@ -189,7 +195,7 @@ export class CrmService {
   }
 
   async createActivity(user: AuthenticatedUser, dto: CreateActivityDto) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     if (!dto.leadId && !dto.opportunityId && !dto.customerId) throw new BadRequestException('Link the activity to a lead, opportunity or customer.');
     if (dto.leadId) await this.getLead(user, dto.leadId);
     if (dto.opportunityId) await this.getOpportunity(user, dto.opportunityId);
@@ -227,7 +233,7 @@ export class CrmService {
   }
 
   async convertLeadToCustomer(user: AuthenticatedUser, leadId: string) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const converted = await this.db.transaction(async (client) => {
       const leadResult = await client.query(
         `SELECT id, company_id, contact_name, organization_name, email, phone, status, converted_customer_id
@@ -270,7 +276,7 @@ export class CrmService {
   }
 
   async createCampaign(user: AuthenticatedUser, dto: CreateCampaignDto) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query("INSERT INTO crm_campaigns (company_id,name,campaign_type,status,start_date,end_date,budget,actual_cost,target_leads,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *", [membership.companyId,dto.name.trim(),dto.campaignType ?? 'other',dto.status ?? 'planned',dto.startDate ?? null,dto.endDate ?? null,dto.budget ?? 0,dto.actualCost ?? 0,dto.targetLeads ?? 0,dto.notes ?? null,user.userId]);
     const campaign = result.rows[0];
     await this.auditChange(user,'crm.campaign.create','crm_campaign',String(campaign.id),{name:dto.name,status:campaign.status});
@@ -329,7 +335,7 @@ export class CrmService {
   }
 
   async createSegment(user: AuthenticatedUser, dto: CreateSegmentDto) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const criteria = dto.criteria ?? {};
     if (dto.isDynamic && Object.keys(criteria).some(key => !['leadStatus','source'].includes(key))) throw new BadRequestException('Dynamic segments support only leadStatus and source criteria.');
     if (dto.isDynamic && criteria.leadStatus && !['new','qualified','unqualified','converted'].includes(String(criteria.leadStatus))) throw new BadRequestException('Invalid dynamic segment leadStatus.');
@@ -362,7 +368,7 @@ export class CrmService {
   }
 
   async createTicket(user: AuthenticatedUser, dto: CreateTicketDto) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     if (!dto.customerId && !dto.leadId) throw new BadRequestException('Link the ticket to a customer or lead.');
     if (dto.customerId) {
       const customer = await this.db.query('SELECT id FROM customers WHERE id=$1 AND company_id=$2',[dto.customerId,membership.companyId]);
