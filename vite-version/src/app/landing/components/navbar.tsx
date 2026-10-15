@@ -33,10 +33,8 @@ import { cn } from "@/lib/utils"
 
 const navigationItems = [
   { name: "Home", href: "#hero" },
+  { name: "About", href: "#about" },
   { name: "Features", href: "#features" },
-  { name: "Solutions", href: "#features", hasMegaMenu: true },
-  { name: "Team", href: "#team" },
-  { name: "Pricing", href: "#pricing" },
   { name: "FAQ", href: "#faq" },
   { name: "Contact", href: "#contact" },
 ]
@@ -84,13 +82,13 @@ export function LandingNavbar() {
         {/* Logo */}
         <div className="flex items-center gap-2">
           <a
-            href="https://shadcnstore.com"
+            href="/"
             className="flex items-center gap-2 cursor-pointer"
             target="_blank"
             rel="noopener noreferrer"
           >
             <Logo size={32} />
-            <span className="font-bold">ShadcnStore</span>
+            <span className="font-bold">Omega Solutions</span>
           </a>
         </div>
 
@@ -138,7 +136,7 @@ export function LandingNavbar() {
             nativeButton={false}
             render={
               <a
-                href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                href="https://github.com/pestria72-code/Omega-Solutions"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="GitHub Repository"
@@ -166,14 +164,14 @@ export function LandingNavbar() {
             variant="ghost"
             className="cursor-pointer"
             nativeButton={false}
-            render={<a href={getAppUrl("/auth/sign-in")} />}
+            render={<a href={getAppUrl("/login")} />}
           >
             Sign In
           </Button>
           <Button
             className="cursor-pointer"
             nativeButton={false}
-            render={<a href={getAppUrl("/auth/sign-up")} />}
+            render={<a href={getAppUrl("/login")} />}
           >
             Get Started
           </Button>
@@ -203,7 +201,7 @@ export function LandingNavbar() {
                     <Logo size={16} />
                   </div>
                   <SheetTitle className="text-lg font-semibold">
-                    ShadcnStore
+                    Omega Solutions
                   </SheetTitle>
                   <div className="ml-auto flex items-center gap-2">
                     <Button
@@ -230,7 +228,7 @@ export function LandingNavbar() {
                       nativeButton={false}
                       render={
                         <a
-                          href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                          href="https://github.com/pestria72-code/Omega-Solutions"
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="GitHub Repository"
