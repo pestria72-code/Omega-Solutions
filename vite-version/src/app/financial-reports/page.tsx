@@ -11,19 +11,18 @@ import { api } from "@/lib/api-client";
 import { formatKES } from "@/lib/format";
 
 type TrialBalanceAccount={id:string;code:string;name:string;account_type:string;total_debits:number;total_credits:number;debit_balance:number;credit_balance:number};
-type TrialBalance={fromDate:string|null;toDate:string|null;accounts:TrialBalanceAccount[];totalDebits:number;totalCredits:number;variance:number;balanced:boolean};
+type TrialBalance={asOfDate:string;accounts:TrialBalanceAccount[];totalDebits:number;totalCredits:number;variance:number;balanced:boolean};
 const message=(e:unknown)=>e&&typeof e==="object"&&"message" in e?String((e as {message:unknown}).message):"The request failed. Please try again.";
 
 export default function FinancialReportsPage(){
- const [fromDate,setFromDate]=React.useState("");const [toDate,setToDate]=React.useState("");
+ const [asOfDate,setAsOfDate]=React.useState(new Date().toISOString().slice(0,10));
  const [report,setReport]=React.useState<TrialBalance|null>(null);const [loading,setLoading]=React.useState(true);const [error,setError]=React.useState<string|null>(null);
- const load=React.useCallback(async()=>{setLoading(true);setError(null);try{const q=new URLSearchParams();if(fromDate)q.set("fromDate",fromDate);if(toDate)q.set("toDate",toDate);setReport(await api.get<TrialBalance>("/accounting/reports/trial-balance"+(q.size?"?"+q.toString():"")));}catch(e){setError(message(e));}finally{setLoading(false);}},[fromDate,toDate]);
+ const load=React.useCallback(async()=>{setLoading(true);setError(null);try{const q=new URLSearchParams();if(asOfDate)q.set("asOfDate",asOfDate);setReport(await api.get<TrialBalance>("/accounting/reports/trial-balance?"+q.toString()));}catch(e){setError(message(e));}finally{setLoading(false);}},[asOfDate]);
  React.useEffect(()=>{void load();},[load]);
  return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6">
-  <PageHeader title="Financial Reports" description="Review posted-ledger balances. Trial balance is live; additional statements will be enabled as their controls are completed."/>
+  <PageHeader title="Financial Reports" description="Review cumulative balances from posted journal entries. Additional financial statements will be enabled as their controls are completed."/>
   <Card><CardContent className="flex flex-wrap items-end gap-3 p-4">
-   <div className="grid gap-2"><label className="text-sm font-medium">From date</label><Input type="date" value={fromDate} max={toDate||undefined} onChange={e=>setFromDate(e.target.value)}/></div>
-   <div className="grid gap-2"><label className="text-sm font-medium">To date</label><Input type="date" value={toDate} min={fromDate||undefined} onChange={e=>setToDate(e.target.value)}/></div>
+   <div className="grid gap-2"><label className="text-sm font-medium">Trial balance as of</label><Input type="date" value={asOfDate} onChange={e=>setAsOfDate(e.target.value)}/></div>
    <Button variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh report</Button>
   </CardContent></Card>
   <Card><CardContent className="p-0">
