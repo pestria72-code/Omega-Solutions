@@ -448,6 +448,46 @@ export class InvoicesService {
     return Math.round(costTotal * 100) / 100;
   }
 
+  async reconcilePayment(
+    user: AuthenticatedUser,
+    invoiceId: string,
+    paymentId: string,
+    statementReference: string,
+  ): Promise<InvoiceRow> {
+    const membership = await this.memberships.getMembership(user.userId);
+    const reference = statementReference.trim();
+    if (!reference) throw new BadRequestException('Bank statement reference is required.');
+    const payment = await this.db.transaction(async (client) => {
+      const result = await client.query<InvoicePaymentRow>(
+        `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at, reconciliation_reference
+         FROM invoice_payments
+         WHERE id=$1 AND invoice_id=$2 AND company_id=$3
+         FOR UPDATE`,
+        [paymentId, invoiceId, membership.companyId],
+      );
+      const row = result.rows[0];
+      if (!row) throw new NotFoundException('Payment record not found.');
+      if (row.status !== 'confirmed') {
+        throw new BadRequestException('Only confirmed payments can be reconciled.');
+      }
+      await client.query(
+        `UPDATE invoice_payments
+         SET status='reconciled', reconciliation_reference=$1, reconciled_at=NOW(), reconciled_by=$2
+         WHERE id=$3 AND invoice_id=$4 AND company_id=$5 AND status='confirmed'`,
+        [reference, user.userId, paymentId, invoiceId, membership.companyId],
+      );
+      return row;
+    });
+    await this.audit.log({
+      userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
+      action: 'invoice.payment.reconcile', entityType: 'invoice_payment', entityId: payment.id,
+      oldValues: { status: 'confirmed' },
+      newValues: { invoiceId, statementReference: reference, status: 'reconciled' },
+      ipAddress: null,
+    });
+    return this.getById(user, invoiceId);
+  }
+
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
     await this.accounting.ensureDefaults(membership.companyId);
