@@ -67,7 +67,7 @@ export class ManufacturingService {
    const nowYear=new Date().getFullYear();
    const seq=await client.query<{next_number:number}>(`INSERT INTO manufacturing_order_sequences(company_id,entry_year,next_number) VALUES($1,$2,1)
     ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=manufacturing_order_sequences.next_number+1 RETURNING next_number`,[companyId,nowYear]);
-   const orderNumber=`MO-\${nowYear}-\${String(seq.rows[0].next_number).padStart(6,'0')}`;
+   const orderNumber=`MO-${nowYear}-${String(seq.rows[0].next_number).padStart(6,'0')}`;
    const created=await client.query<{id:string}>(`INSERT INTO manufacturing_production_orders(company_id,order_number,bom_id,warehouse_id,planned_quantity,planned_start_date,planned_end_date,notes,created_by)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,[companyId,orderNumber,dto.bomId,dto.warehouseId,dto.plannedQuantity,dto.plannedStartDate??null,dto.plannedEndDate??null,dto.notes?.trim()||null,user.userId]);
    const lines=await client.query<{material_product_id:string;quantity:string|number;waste_percent:string|number}>(`SELECT material_product_id,quantity,waste_percent FROM manufacturing_bom_lines WHERE company_id=$1 AND bom_id=$2 ORDER BY id`,[companyId,dto.bomId]);
