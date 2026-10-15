@@ -114,7 +114,7 @@ export class InvoicesService {
     );
     invoice.items = items.rows;
     const payments = await this.db.query<InvoicePaymentRow>(
-      `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at
+      `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at
        FROM invoice_payments WHERE company_id = $1 AND invoice_id = $2
        ORDER BY paid_at DESC, created_at DESC`,
       [membership.companyId, invoiceId],
@@ -226,7 +226,6 @@ export class InvoicesService {
     dto: CreateInvoicePaymentDto,
   ): Promise<InvoiceRow> {
     const membership = await this.memberships.getMembership(user.userId);
-    await this.accounting.ensureDefaults(membership.companyId);
     const paymentAmount = Math.round(dto.amount * 100) / 100;
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
       throw new BadRequestException('Payment amount must be greater than zero.');
@@ -235,66 +234,118 @@ export class InvoicesService {
     const payment = await this.db.transaction(async (client) => {
       const result = await client.query<{
         status: InvoiceStatus;
-        customer_id: string;
-        issue_date: string;
-        subtotal: string | number;
-        tax_amount: string | number;
         total: string | number;
         amount_paid: string | number;
       }>(
-        'SELECT status, customer_id, issue_date, subtotal, tax_amount, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        'SELECT status, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
         [invoiceId, membership.companyId],
       );
       const invoice = result.rows[0];
       if (!invoice) throw new NotFoundException('Invoice not found.');
       if (invoice.status === 'draft' || invoice.status === 'cancelled') {
-        throw new BadRequestException('Only sent invoices can receive payments.');
+        throw new BadRequestException('Only sent invoices can receive payment reports.');
       }
+      const pending = await client.query<{ amount: string | number }>(
+        "SELECT COALESCE(SUM(amount),0) AS amount FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2 AND status='pending'",
+        [membership.companyId, invoiceId],
+      );
       const outstandingCents = Math.round((Number(invoice.total) - Number(invoice.amount_paid)) * 100);
+      const alreadyReportedCents = Math.round(Number(pending.rows[0].amount) * 100);
       const paymentCents = Math.round(paymentAmount * 100);
-      if (paymentCents > outstandingCents) {
-        throw new BadRequestException('Payment exceeds the outstanding invoice balance.');
+      if (paymentCents + alreadyReportedCents > outstandingCents) {
+        throw new BadRequestException('This report would exceed the remaining balance after other pending payment reports.');
       }
 
       const inserted = await client.query<InvoicePaymentRow>(
         `INSERT INTO invoice_payments
-          (company_id, invoice_id, amount, method, reference, notes, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, invoice_id, amount, method, reference, paid_at, notes, created_at`,
+          (company_id, invoice_id, amount, method, reference, notes, created_by, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+         RETURNING id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at`,
         [
           membership.companyId, invoiceId, paymentAmount, dto.method,
           dto.reference?.trim() || null, dto.notes?.trim() || null, user.userId,
         ],
-      );
-
-      const cashAccount = dto.method === 'cash' ? 'cash' : dto.method === 'mpesa' ? 'mpesa' : 'bank';
-      await this.postJournal(client, {
-        companyId: membership.companyId, date: null, description: `Receipt against invoice ${invoiceId}`,
-        sourceType: 'invoice_payment', sourceId: inserted.rows[0].id, userId: user.userId,
-        lines: [
-          { systemCode: cashAccount, debit: paymentAmount, credit: 0, description: 'Customer receipt' },
-          { systemCode: 'accounts_receivable', debit: 0, credit: paymentAmount, description: 'Reduce customer receivable' },
-        ],
-      });
-      const newPaidCents = Math.round(Number(invoice.amount_paid) * 100) + paymentCents;
-      const totalCents = Math.round(Number(invoice.total) * 100);
-      const newStatus: InvoiceStatus = newPaidCents >= totalCents ? 'paid' : 'partially_paid';
-      await client.query(
-        'UPDATE invoices SET amount_paid = $1, status = $2::invoice_status, updated_at = NOW() WHERE id = $3 AND company_id = $4',
-        [newPaidCents / 100, newStatus, invoiceId, membership.companyId],
-      );
-      await client.query(
-        'UPDATE customers SET outstanding_balance = GREATEST(0, outstanding_balance - $1), updated_at = NOW() WHERE id = $2 AND company_id = $3',
-        [paymentAmount, invoice.customer_id, membership.companyId],
       );
       return inserted.rows[0];
     });
 
     await this.audit.log({
       userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
-      action: 'invoice.payment.record', entityType: 'invoice_payment', entityId: payment.id,
+      action: 'invoice.payment.report', entityType: 'invoice_payment', entityId: payment.id,
       oldValues: null,
-      newValues: { invoiceId, amount: payment.amount, method: payment.method, reference: payment.reference },
+      newValues: { invoiceId, amount: payment.amount, method: payment.method, reference: payment.reference, status: 'pending' },
+      ipAddress: null,
+    });
+    return this.getById(user, invoiceId);
+  }
+
+  async confirmPayment(
+    user: AuthenticatedUser,
+    invoiceId: string,
+    paymentId: string,
+  ): Promise<InvoiceRow> {
+    const membership = await this.memberships.getMembership(user.userId);
+    await this.accounting.ensureDefaults(membership.companyId);
+    const confirmed = await this.db.transaction(async (client) => {
+      const paymentResult = await client.query<InvoicePaymentRow>(
+        `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at
+         FROM invoice_payments
+         WHERE id=$1 AND invoice_id=$2 AND company_id=$3
+         FOR UPDATE`,
+        [paymentId, invoiceId, membership.companyId],
+      );
+      const payment = paymentResult.rows[0];
+      if (!payment) throw new NotFoundException('Payment report not found.');
+      if (payment.status !== 'pending') {
+        throw new BadRequestException('Only pending payment reports can be confirmed.');
+      }
+      const invoiceResult = await client.query<{
+        status: InvoiceStatus; customer_id: string; total: string | number; amount_paid: string | number;
+      }>(
+        'SELECT status, customer_id, total, amount_paid FROM invoices WHERE id=$1 AND company_id=$2 FOR UPDATE',
+        [invoiceId, membership.companyId],
+      );
+      const invoice = invoiceResult.rows[0];
+      if (!invoice || invoice.status === 'draft' || invoice.status === 'cancelled') {
+        throw new BadRequestException('The invoice is unavailable for payment confirmation.');
+      }
+      const paymentAmount = Number(payment.amount);
+      const paymentCents = Math.round(paymentAmount * 100);
+      const newPaidCents = Math.round(Number(invoice.amount_paid) * 100) + paymentCents;
+      const totalCents = Math.round(Number(invoice.total) * 100);
+      if (newPaidCents > totalCents) {
+        throw new BadRequestException('The confirmed amount would exceed the invoice balance.');
+      }
+      const cashAccount = payment.method === 'cash' ? 'cash' : payment.method === 'mpesa' ? 'mpesa' : 'bank';
+      await this.postJournal(client, {
+        companyId: membership.companyId, date: null, description: `Confirmed receipt against invoice ${invoiceId}`,
+        sourceType: 'invoice_payment', sourceId: payment.id, userId: user.userId,
+        lines: [
+          { systemCode: cashAccount, debit: paymentAmount, credit: 0, description: 'Confirmed customer receipt' },
+          { systemCode: 'accounts_receivable', debit: 0, credit: paymentAmount, description: 'Reduce customer receivable' },
+        ],
+      });
+      const newStatus: InvoiceStatus = newPaidCents >= totalCents ? 'paid' : 'partially_paid';
+      await client.query(
+        `UPDATE invoice_payments SET status='confirmed', verified_at=NOW(), verified_by=$1, paid_at=NOW()
+         WHERE id=$2 AND company_id=$3 AND status='pending'`,
+        [user.userId, payment.id, membership.companyId],
+      );
+      await client.query(
+        'UPDATE invoices SET amount_paid=$1, status=$2::invoice_status, updated_at=NOW() WHERE id=$3 AND company_id=$4',
+        [newPaidCents / 100, newStatus, invoiceId, membership.companyId],
+      );
+      await client.query(
+        'UPDATE customers SET outstanding_balance=GREATEST(0,outstanding_balance-$1),updated_at=NOW() WHERE id=$2 AND company_id=$3',
+        [paymentAmount, invoice.customer_id, membership.companyId],
+      );
+      return payment;
+    });
+    await this.audit.log({
+      userId: user.userId, companyId: membership.companyId, branchId: membership.branchId,
+      action: 'invoice.payment.confirm', entityType: 'invoice_payment', entityId: confirmed.id,
+      oldValues: { status: 'pending' },
+      newValues: { invoiceId, amount: confirmed.amount, method: confirmed.method, status: 'confirmed' },
       ipAddress: null,
     });
     return this.getById(user, invoiceId);
