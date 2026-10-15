@@ -64,12 +64,16 @@ export class PayrollService {
  async createRun(user:AuthenticatedUser,dto:{periodStart:string;periodEnd:string}){
   const membership=await this.membershipFor(user);
   if(!validDate(dto.periodStart)||!validDate(dto.periodEnd)||dto.periodEnd<dto.periodStart)throw new BadRequestException('Provide a valid periodStart and periodEnd (YYYY-MM-DD), with the end on or after the start.');
+  const periodYear=Number(dto.periodStart.slice(0,4)),periodMonth=Number(dto.periodStart.slice(5,7));
+  const expectedStart=`${dto.periodStart.slice(0,7)}-01`;
+  const expectedEnd=new Date(Date.UTC(periodYear,periodMonth,0)).toISOString().slice(0,10);
+  if(dto.periodStart!==expectedStart||dto.periodEnd!==expectedEnd||dto.periodStart.slice(0,7)!==dto.periodEnd.slice(0,7))throw new BadRequestException('Payroll periods must cover one complete calendar month, from its first through its last day.');
   const employees=await this.db.query<PayEmployee>(`SELECT e.id,e.employee_number,e.first_name,e.last_name,
     s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,
     s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes
     FROM employees e JOIN LATERAL (SELECT s.* FROM employee_pay_settings s WHERE s.employee_id=e.id AND s.company_id=e.company_id AND s.effective_from <= $2::date ORDER BY s.effective_from DESC LIMIT 1) s ON TRUE
     WHERE e.company_id=$1 AND e.employment_status='active'
-    ORDER BY e.employee_number`,[membership.companyId,dto.periodEnd]);
+    ORDER BY e.employee_number`,[membership.companyId,dto.periodStart]);
   if(!employees.rows.length)throw new BadRequestException('No active employees have effective pay settings. Configure employee pay before preparing a payroll run.');
   const calculated=employees.rows.map(employee=>{
     const grossCashPay=amount(employee.monthly_basic_salary)+amount(employee.monthly_taxable_allowances);
