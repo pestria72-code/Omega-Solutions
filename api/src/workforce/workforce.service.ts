@@ -47,7 +47,7 @@ export class WorkforceService {
     const row=await this.db.transaction(async c=>{
       const old=await c.query("SELECT * FROM employee_assignments WHERE id=$1 AND company_id=$2 AND status='active' FOR UPDATE",[id,m.companyId]);
       if (!old.rows.length) throw new NotFoundException('Active assignment not found.');
-      const start=String(old.rows[0].start_date).slice(0,10); if (effective<start) throw new BadRequestException('Transfer date precedes assignment start.');
+      const start=String(old.rows[0].start_date).slice(0,10); if (effective<start) throw new BadRequestException('Transfer date precedes assignment start.'); const scheduledEnd=old.rows[0].end_date ? String(old.rows[0].end_date).slice(0,10) : null; if (scheduledEnd && effective>scheduledEnd) throw new BadRequestException('Transfer date is after the assignment end date.');
       const site=await c.query('SELECT id FROM client_sites WHERE id=$1 AND company_id=$2 AND is_active=true',[siteId,m.companyId]);
       if (!site.rows.length) throw new NotFoundException('Active destination site not found.');
       const end=new Date(Date.parse(effective+'T00:00:00Z')-86400000).toISOString().slice(0,10);
