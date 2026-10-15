@@ -12,7 +12,8 @@ describe('EmployeesService',()=>{
  let audit:{log:ReturnType<typeof vi.fn>};
  let service:EmployeesService;
  beforeEach(()=>{
-  db={query:vi.fn(),transaction:vi.fn(async(callback:(client:unknown)=>Promise<unknown>)=>callback({query:db.query}))};
+  db={query:vi.fn(),transaction:vi.fn()};
+  db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback({query:db.query}));
   const membership={companyId:'company-1',branchId:null,role:'owner'};
   memberships={getMembership:vi.fn().mockResolvedValue(membership),getMembershipForCompany:vi.fn().mockResolvedValue(membership)};
   audit={log:vi.fn().mockResolvedValue(undefined)};
