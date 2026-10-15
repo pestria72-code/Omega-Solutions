@@ -76,7 +76,7 @@ export function CTASection() {
                   nativeButton={false}
                   render={
                     <a
-                      href="https://github.com/shadcnstore/shadcn-dashboard-landing-template"
+                      href="#features"
                       target="_blank"
                       rel="noopener noreferrer"
                     />
