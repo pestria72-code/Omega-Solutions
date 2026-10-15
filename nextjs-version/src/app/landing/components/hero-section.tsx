@@ -35,7 +35,7 @@ export function HeroSection() {
             Run Your Business
             <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               {" "}
-              with Confidence{" "}
+              with Confidence
             </span>
             
           </h1>
@@ -51,7 +51,7 @@ export function HeroSection() {
               size="lg"
               className="text-base cursor-pointer"
               nativeButton={false}
-              render={<Link href="/auth/sign-in" />}
+              render={<Link href="/sign-in" />}
             >
               Open Your Workspace
               <ArrowRight data-icon="inline-end" />
