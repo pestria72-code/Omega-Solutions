@@ -10,7 +10,7 @@ export interface KenyaPayrollInput {
 export interface KenyaPayrollCalculation {
  grossCashPay:number; taxableBenefits:number; grossTaxableEmploymentIncome:number;
  nssfEmployee:number;nssfEmployer:number;shifEmployee:number;housingLevyEmployee:number;housingLevyEmployer:number;
- employeePensionContribution:number;pensionDeductionAllowed:number;postRetirementMedicalDeduction:number;mortgageInterestDeduction:number;
+ employeePensionContribution:number;pensionDeductionAllowed:number;postRetirementMedicalContribution:number;postRetirementMedicalDeduction:number;mortgageInterestDeduction:number;
  taxableIncome:number;payeBeforeReliefs:number;personalRelief:number;insuranceRelief:number;paye:number;
  employeeDeductions:number;netPay:number;employerStatutoryCost:number;
 }
@@ -50,5 +50,5 @@ export function calculateKenyaMonthlyPayroll(input:KenyaPayrollInput):KenyaPayro
  const employeeDeductions=roundKes(nssfEmployee+shifEmployee+housingLevyEmployee+paye+employeePensionContribution+postRetirementMedicalContribution);
  const netPay=roundKes(grossCashPay-employeeDeductions);
  const employerStatutoryCost=roundKes(nssfEmployer+housingLevyEmployer);
- return {grossCashPay,taxableBenefits,grossTaxableEmploymentIncome,nssfEmployee,nssfEmployer,shifEmployee,housingLevyEmployee,housingLevyEmployer,employeePensionContribution,pensionDeductionAllowed,postRetirementMedicalDeduction,mortgageInterestDeduction,taxableIncome,payeBeforeReliefs,personalRelief,insuranceRelief,paye,employeeDeductions,netPay,employerStatutoryCost};
+ return {grossCashPay,taxableBenefits,grossTaxableEmploymentIncome,nssfEmployee,nssfEmployer,shifEmployee,housingLevyEmployee,housingLevyEmployer,employeePensionContribution,pensionDeductionAllowed,postRetirementMedicalContribution,postRetirementMedicalDeduction,mortgageInterestDeduction,taxableIncome,payeBeforeReliefs,personalRelief,insuranceRelief,paye,employeeDeductions,netPay,employerStatutoryCost};
 }

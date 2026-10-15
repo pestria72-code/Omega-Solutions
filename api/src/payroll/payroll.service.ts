@@ -23,7 +23,7 @@ export class PayrollService {
   const {companyId}=await this.membershipFor(user);
   const result=await this.db.query(`SELECT s.id,s.company_id,s.employee_id,s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes,s.effective_from,s.created_at,s.updated_at
    FROM employee_pay_settings s JOIN employees e ON e.id=s.employee_id AND e.company_id=s.company_id
-   WHERE s.employee_id=$1 AND s.company_id=$2 ORDER BY s.effective_from DESC LIMIT 1`,[employeeId,companyId]);
+   WHERE s.employee_id=$1 AND s.company_id=$2 AND s.effective_from<=CURRENT_DATE ORDER BY s.effective_from DESC LIMIT 1`,[employeeId,companyId]);
   if(!result.rows.length)throw new NotFoundException('Pay settings not found for this employee in this company.');
   return result.rows[0];
  }
@@ -99,7 +99,7 @@ export class PayrollService {
     for(const {employee,snapshot,grossCashPay} of calculated){
       await client.query(`INSERT INTO payroll_items(company_id,payroll_run_id,employee_id,employee_number,employee_name,gross_cash_pay,taxable_benefits,nssf_employee,nssf_employer,shif_employee,housing_levy_employee,housing_levy_employer,paye,pension_employee,prmf_employee,employee_deductions,net_pay,employer_statutory_cost,calculation_snapshot)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb)`,
-      [membership.companyId,run.id,employee.id,employee.employee_number,`${employee.first_name} ${employee.last_name}`,grossCashPay,snapshot.taxableBenefits,snapshot.nssfEmployee,snapshot.nssfEmployer,snapshot.shifEmployee,snapshot.housingLevyEmployee,snapshot.housingLevyEmployer,snapshot.paye,snapshot.employeePensionContribution,snapshot.postRetirementMedicalDeduction,snapshot.employeeDeductions,snapshot.netPay,snapshot.employerStatutoryCost,JSON.stringify(snapshot)]);
+      [membership.companyId,run.id,employee.id,employee.employee_number,`${employee.first_name} ${employee.last_name}`,grossCashPay,snapshot.taxableBenefits,snapshot.nssfEmployee,snapshot.nssfEmployer,snapshot.shifEmployee,snapshot.housingLevyEmployee,snapshot.housingLevyEmployer,snapshot.paye,snapshot.employeePensionContribution,snapshot.postRetirementMedicalContribution,snapshot.employeeDeductions,snapshot.netPay,snapshot.employerStatutoryCost,JSON.stringify(snapshot)]);
     }
     return run;
    });

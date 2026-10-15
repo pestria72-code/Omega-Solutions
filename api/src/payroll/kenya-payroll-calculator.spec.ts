@@ -49,7 +49,9 @@ describe('Kenyan monthly payroll rules', () => {
       qualifyingMortgageInterest: 40_000,
     });
     expect(result.pensionDeductionAllowed).toBe(30_000);
+    expect(result.postRetirementMedicalContribution).toBe(20_000);
     expect(result.postRetirementMedicalDeduction).toBe(15_000);
+    expect(result.employeeDeductions).toBeGreaterThanOrEqual(20_000);
     expect(result.mortgageInterestDeduction).toBe(30_000);
   });
 
