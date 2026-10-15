@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { AdjustStockDto, CreateStockMovementDto, CreateWarehouseDto, TransferStockDto } from './inventory.dto.js';
