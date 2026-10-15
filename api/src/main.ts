@@ -21,7 +21,7 @@ async function bootstrap() {
     /^https:\/\/omega-solutions-[a-z0-9-]+-pestria72-2760\.vercel\.app$/.test(origin);
 
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Requests without an Origin header are server-to-server/non-browser calls.
       if (!origin || corsOrigins.has(origin) || isTrustedVercelOrigin(origin)) {
         callback(null, true);
