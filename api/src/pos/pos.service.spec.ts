@@ -3,7 +3,7 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AccountingService } from '../accounting/accounting.service.js';
-import { PosService } from './pos.service.js';
+import { PosService, buildCogsJournalLines } from './pos.service.js';
 
 type Mock = ReturnType<typeof vi.fn>;
 
@@ -88,6 +88,25 @@ describe('PosService', () => {
     expect(result).toMatchObject({ saleId: 'sale-1', saleNumber: 'POS-2026-00001', total: 125, idempotent: true });
     expect(client.query).toHaveBeenCalledTimes(2);
     expect(audit.log).not.toHaveBeenCalled();
+  });
+
+
+  it('posts balanced POS cost-of-goods journal lines against inventory', () => {
+    const lines = buildCogsJournalLines(12345);
+    expect(lines).toEqual([
+      { systemCode: 'purchases_expense', debit: 123.45, credit: 0, description: 'Cost of goods sold' },
+      { systemCode: 'inventory', debit: 0, credit: 123.45, description: 'Reduce inventory asset' },
+    ]);
+    expect(lines.reduce((sum, line) => sum + line.debit, 0)).toBe(lines.reduce((sum, line) => sum + line.credit, 0));
+  });
+
+  it('does not post a zero-value POS cost-of-goods journal', () => {
+    expect(buildCogsJournalLines(0)).toEqual([]);
+  });
+
+  it('rejects invalid cost-of-goods cents before posting', () => {
+    expect(() => buildCogsJournalLines(-1)).toThrow();
+    expect(() => buildCogsJournalLines(12.5)).toThrow();
   });
 
   it('rejects a negative opening float before any database write', async () => {
