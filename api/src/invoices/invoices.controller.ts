@@ -61,6 +61,16 @@ export class InvoicesController {
     return this.invoices.confirmPayment(req.user, id, paymentId);
   }
 
+  @Post(':id/payments/:paymentId/reject')
+  @RequirePermissions('payments:verify')
+  rejectPayment(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    return this.invoices.rejectPayment(req.user, id, paymentId);
+  }
+
   @Post(':id/payments/:paymentId/reconcile')
   @RequirePermissions('payments:reconcile')
   reconcilePayment(
