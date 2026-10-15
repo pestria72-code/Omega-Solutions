@@ -45,6 +45,8 @@ try {
  await req("POST","/supplier-bills",{supplierId:supplier.id,purchaseOrderId:po.id,items:[{purchaseOrderItemId:line.id,description:line.product_name,quantity:1,unitCost:100,taxRate:16}]},token,[400]);ok(true,"duplicate billing quantity rejected");
  const p1=(await req("POST",`/supplier-bills/${bill.id}/payments`,{amount:100,method:"mpesa",reference:`E2E-PAY-${stamp}`},token,[201])).data;
  ok(p1.status==="partially_paid"&&Number(p1.balance)===132,"partial payment balance");
+ const billDetailAfterPartial=(await req("GET","/supplier-bills/"+bill.id,undefined,token)).data;
+ ok(billDetailAfterPartial.payments?.length===1&&Math.abs(Number(billDetailAfterPartial.payments[0].amount)-100)<0.005,"bill detail records partial payment history");
  const paymentOneId=p1.payments?.[0]?.id;
  const journalsAfterPayment=(await req("GET","/accounting/journals",undefined,token)).data;
  const paymentJournal=journalsAfterPayment.find(x=>x.source_type==="supplier_bill_payment"&&x.source_id===paymentOneId);
