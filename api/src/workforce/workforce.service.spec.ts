@@ -65,6 +65,17 @@ describe('WorkforceService validation and attendance', () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  it('requires a clock-in before the first clock-out event', async () => {
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'employee-a' }] })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+    db.transaction.mockImplementation(async (work: (connection: { query: ReturnType<typeof vi.fn> }) => Promise<unknown>) => work(client));
+    await expect(service.punch(user, { employeeId: 'employee-a', punchType: 'out' })).rejects.toThrow(BadRequestException);
+    expect(client.query).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects a timestamp too far in the future before opening a transaction', async () => {
     await expect(service.punch(user, { employeeId: 'employee-a', punchType: 'in', punchedAt: '2099-01-01T00:00:00Z' })).rejects.toThrow(BadRequestException);
     expect(db.transaction).not.toHaveBeenCalled();
