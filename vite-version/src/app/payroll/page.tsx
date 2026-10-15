@@ -1,20 +1,9 @@
-import { Banknote } from "lucide-react"
-import { ModulePlaceholder } from "@/components/module-placeholder"
+import { Banknote } from "lucide-react";
+import { BaseLayout } from "@/components/layouts/base-layout";
+import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
+import { Card, CardContent } from "@/components/ui/card";
 
-export default function PayrollPage() {
-  return (
-    <ModulePlaceholder
-      title="Payroll"
-      description="Process and track employee salary payments"
-      icon={Banknote}
-      tableHeaders={["Employee", "Position", "Gross Salary", "Deductions", "Net Pay"]}
-      tableRows={[
-        ["James Mwangi", "Managing Director", "KSh 450,000", "KSh 67,500", "KSh 382,500"],
-        ["Aisha Hassan", "Branch Manager", "KSh 280,000", "KSh 42,000", "KSh 238,000"],
-        ["Grace Wanjiku", "Finance Manager", "KSh 250,000", "KSh 37,500", "KSh 212,500"],
-        ["Peter Kamau", "Sales Officer", "KSh 85,000", "KSh 12,750", "KSh 72,250"],
-        ["Mary Atieno", "Warehouse Supervisor", "KSh 95,000", "KSh 14,250", "KSh 80,750"],
-      ]}
-    />
-  )
+export default function PayrollPage(){
+ return <BaseLayout><div className="flex flex-col gap-6 px-4 lg:px-6"><PageHeader title="Payroll" description="Payroll processing is not enabled yet. No sample salaries or deductions are shown."/><Card><CardContent><EmptyState icon={Banknote} title="Payroll is not configured" description="Employee records and leave management are being connected first. Payroll calculations and statutory deductions will be added only with verified Kenyan payroll rules and audit controls."/></CardContent></Card></div></BaseLayout>;
 }
