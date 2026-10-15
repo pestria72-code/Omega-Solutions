@@ -1,0 +1,29 @@
+name: Live development API health smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - development
+    paths:
+      - "api/scripts/live-health-smoke.mjs"
+      - ".github/workflows/live-health-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify live API and database health
+        env:
+          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+        run: node api/scripts/live-health-smoke.mjs
