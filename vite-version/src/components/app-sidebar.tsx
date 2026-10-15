@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   LayoutDashboard,
+  ChartNoAxesCombined,
   Users,
   FileText,
   ShoppingCart,
@@ -47,6 +48,7 @@ const navGroups = [
     label: "Overview",
     items: [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      { title: "Sales Dashboard", url: "/sales-dashboard", icon: ChartNoAxesCombined },
     ],
   },
   {
