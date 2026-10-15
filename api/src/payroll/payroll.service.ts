@@ -5,6 +5,7 @@ import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js
 import { calculateKenyaMonthlyPayroll } from './kenya-payroll-calculator.js';
 
 interface PayEmployee {
+ [key:string]:unknown;
  id:string;employee_number:string;first_name:string;last_name:string;
  monthly_basic_salary:string|number;monthly_taxable_allowances:string|number;monthly_taxable_benefits:string|number;
  employee_pension_contribution:string|number;post_retirement_medical_contribution:string|number;
