@@ -7,8 +7,11 @@ on:
       - development
     paths:
       - "api/scripts/live-purchasing-smoke.mjs"
+      - "api/scripts/live-payment-regression-smoke.mjs"
       - "api/scripts/live-hrm-expenses-smoke.mjs"
       - "api/scripts/live-payroll-smoke.mjs"
+      - "api/src/pos/**"
+      - "api/src/invoices/**"
       - "api/src/supplier-bills/**"
       - "api/src/accounting/**"
       - "api/src/purchase-orders/**"
@@ -22,12 +25,13 @@ on:
 permissions:
   contents: read
 
-# Keep authenticated development ERP end-to-end checks available after API changes, including CRM and payroll coverage.
+# Authenticated development ERP end-to-end checks. These tests create isolated test tenants;
+# they must never target production or perform destructive cleanup outside their own tenant.
 
 jobs:
   live-purchasing-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout development
         uses: actions/checkout@v4
@@ -39,7 +43,12 @@ jobs:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
         run: node api/scripts/live-purchasing-smoke.mjs
 
-      - name: Verify live authenticated HRM, expenses and trial balance
+      - name: Verify live payment, reconciliation, POS and tenant-isolation workflow
+        env:
+          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+        run: node api/scripts/live-payment-regression-smoke.mjs
+
+      - name: Verify live authenticated HRM, expenses, CRM and trial balance
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
         run: node api/scripts/live-hrm-expenses-smoke.mjs
