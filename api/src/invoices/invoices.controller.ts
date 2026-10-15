@@ -23,6 +23,12 @@ export class InvoicesController {
     return this.invoices.list(req.user, search, status);
   }
 
+  @Get('team-summary')
+  @RequirePermissions('sales:team-read')
+  teamSummary(@Req() req: { user: AuthenticatedUser }) {
+    return this.invoices.getSalesTeamSummary(req.user);
+  }
+
   @Get(':id')
   @RequirePermissions('sales:read')
   getById(@Req() req: { user: AuthenticatedUser }, @Param('id') id: string) {
