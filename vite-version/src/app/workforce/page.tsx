@@ -31,6 +31,8 @@ export default function WorkforcePage() {
   const [siteForm, setSiteForm] = React.useState({ siteCode: "", siteName: "", clientName: "", address: "" });
   const [assignmentForm, setAssignmentForm] = React.useState({ employeeId: "", siteId: "", assignmentTitle: "", payBasis: "monthly", payRate: "", currency: "KES", startDate: today(), endDate: "" });
   const [punchForm, setPunchForm] = React.useState({ employeeId: "", punchType: "in" as "in" | "out", note: "" });
+  const [transferForm, setTransferForm] = React.useState({ assignmentId: "", siteId: "", effectiveDate: today(), payBasis: "monthly", payRate: "" });
+  const [savingTransfer, setSavingTransfer] = React.useState(false);
   const [from, setFrom] = React.useState("");
   const [to, setTo] = React.useState("");
 
@@ -74,6 +76,15 @@ export default function WorkforcePage() {
       setAssignmentForm({ employeeId: "", siteId: "", assignmentTitle: "", payBasis: "monthly", payRate: "", currency: "KES", startDate: today(), endDate: "" });
       await load();
     } catch (e) { setFormError(errorMessage(e)); } finally { setSavingAssignment(false); }
+  }
+
+  async function transferAssignment(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setSavingTransfer(true); setFormError(null);
+    try {
+      await api.post(`/employee-assignments/${transferForm.assignmentId}/transfer`, { siteId: transferForm.siteId, effectiveDate: transferForm.effectiveDate, payBasis: transferForm.payBasis, payRate: Number(transferForm.payRate) });
+      setTransferForm({ assignmentId: "", siteId: "", effectiveDate: today(), payBasis: "monthly", payRate: "" });
+      await load();
+    } catch (e) { setFormError(errorMessage(e)); } finally { setSavingTransfer(false); }
   }
 
   async function recordPunch(e: React.FormEvent<HTMLFormElement>) {
@@ -127,6 +138,18 @@ export default function WorkforcePage() {
             {(!activeEmployees.length || !activeSites.length) && <p className="sm:col-span-2 text-xs text-muted-foreground">An active employee and active client site are required before an assignment can be created.</p>}
           </form>
           <div className="mt-5 overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-y bg-muted/40 text-left"><th className="p-2">Employee</th><th className="p-2">Site</th><th className="p-2">Pay</th><th className="p-2">Dates / status</th></tr></thead><tbody>{assignments.map(a => <tr key={a.id} className="border-b last:border-0"><td className="p-2">{a.first_name} {a.last_name}<div className="text-xs text-muted-foreground">{a.employee_number}</div></td><td className="p-2">{a.site_name}<div className="text-xs text-muted-foreground">{a.client_name}</div></td><td className="p-2">{a.currency} {Number(a.pay_rate).toLocaleString()}<div className="text-xs text-muted-foreground">{a.pay_basis.replace("_", " ")}</div></td><td className="p-2"><span className="capitalize">{a.status}</span><div className="text-xs text-muted-foreground">{String(a.start_date).slice(0,10)} – {a.end_date ? String(a.end_date).slice(0,10) : "Open"}</div></td></tr>)}</tbody></table>{!assignments.length && <p className="p-4 text-sm text-muted-foreground">No employee assignments for this company yet.</p>}</div>
+          <div className="mt-6 rounded-lg border p-4">
+            <h3 className="mb-3 text-sm font-semibold">Transfer an active assignment</h3>
+            <form onSubmit={transferAssignment} className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-1.5 sm:col-span-2"><Label>Current assignment *</Label><select required className={fieldClass} value={transferForm.assignmentId} onChange={e => { const a = assignments.find(x => x.id === e.target.value); setTransferForm({ ...transferForm, assignmentId: e.target.value, payBasis: a?.pay_basis || "monthly", payRate: a ? String(a.pay_rate) : "" }); }}><option value="">Select an active assignment</option>{assignments.filter(a => a.status === "active").map(a => <option key={a.id} value={a.id}>{a.employee_number} · {a.first_name} {a.last_name} — {a.site_name}</option>)}</select></div>
+              <div className="grid gap-1.5"><Label>Destination site *</Label><select required className={fieldClass} value={transferForm.siteId} onChange={e => setTransferForm({ ...transferForm, siteId: e.target.value })}><option value="">Select a site</option>{activeSites.map(s => <option key={s.id} value={s.id}>{s.site_name} · {s.client_name}</option>)}</select></div>
+              <div className="grid gap-1.5"><Label>Effective date *</Label><Input required type="date" value={transferForm.effectiveDate} onChange={e => setTransferForm({ ...transferForm, effectiveDate: e.target.value })} /></div>
+              <div className="grid gap-1.5"><Label>New pay basis *</Label><select required className={fieldClass} value={transferForm.payBasis} onChange={e => setTransferForm({ ...transferForm, payBasis: e.target.value })}><option value="monthly">Monthly</option><option value="daily">Daily</option><option value="hourly">Hourly</option><option value="per_shift">Per shift</option></select></div>
+              <div className="grid gap-1.5"><Label>New pay rate *</Label><Input required type="number" min="0" step="0.01" value={transferForm.payRate} onChange={e => setTransferForm({ ...transferForm, payRate: e.target.value })} /></div>
+              <div className="sm:col-span-2"><Button type="submit" disabled={savingTransfer || !transferForm.assignmentId || !transferForm.siteId}>{savingTransfer && <Loader2 className="mr-2 size-4 animate-spin" />}Transfer assignment</Button></div>
+              {!assignments.some(a => a.status === "active") && <p className="sm:col-span-2 text-xs text-muted-foreground">There are no active assignments available to transfer.</p>}
+            </form>
+          </div>
         </CardContent></Card>
       </div>
       <Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock3 className="size-4" />Attendance</CardTitle></CardHeader><CardContent>
