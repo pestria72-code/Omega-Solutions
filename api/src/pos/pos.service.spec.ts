@@ -70,6 +70,26 @@ describe('PosService', () => {
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'pos.shift.close', entityId: 'shift-1' }));
   });
 
+  it('returns the original sale for a retry by the same cashier without creating another sale', async () => {
+    const client = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id,sale_number,total,subtotal,tax_amount,amount_confirmed,status,invoice_id,created_by FROM pos_sales')) {
+        return { rows: [{ id: 'sale-1', sale_number: 'POS-2026-00001', total: '125.00', subtotal: '125.00', tax_amount: '0.00', amount_confirmed: '125.00', status: 'completed', invoice_id: 'invoice-1', created_by: 'cashier-1' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+    const result = await service.checkout(user, {
+      requestId: '11111111-1111-4111-8111-111111111111',
+      shiftId: '22222222-2222-4222-8222-222222222222',
+      warehouseId: '33333333-3333-4333-8333-333333333333',
+      items: [{ productId: '44444444-4444-4444-8444-444444444444', quantity: 1 }],
+      payments: [{ method: 'cash', amount: 125 }],
+    } as any);
+    expect(result).toMatchObject({ saleId: 'sale-1', saleNumber: 'POS-2026-00001', total: 125, idempotent: true });
+    expect(client.query).toHaveBeenCalledTimes(2);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
   it('rejects a negative opening float before any database write', async () => {
     await expect(service.openShift(user, { registerId: 'register-1', openingFloat: -1 })).rejects.toThrow();
     expect(db.transaction).not.toHaveBeenCalled();
