@@ -42,6 +42,7 @@ try {
       OR (c.name ~ '^Payment Regression other [0-9]{13}$' AND u.email = 'pay-regression-other-' || substring(c.name from '([0-9]{13})$') || '@example.com')
     )
     AND (SELECT COUNT(*) FROM company_memberships mx WHERE mx.user_id = u.id) = 1
+    AND (SELECT COUNT(*) FROM company_memberships mm WHERE mm.company_id = c.id) = 1
   `);
   if (candidates.rowCount > 300) throw new Error(`Refusing cleanup: ${candidates.rowCount} candidates exceeds the 300-tenant safety ceiling.`);
 
