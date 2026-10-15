@@ -82,7 +82,7 @@ describe('InventoryService', () => {
 
     expect(result.stockLedger).toEqual({ mismatchCount: 1, absoluteQuantityVariance: 2, reconciled: false });
     expect(result.legacyProductQuantities).toEqual({ mismatchCount: 0, absoluteQuantityVariance: 0, reconciled: true });
-    expect(result.valuation).toEqual({ stockCostValue: 120, inventoryAccountBalance: 100, variance: 20, reconciled: false });
+    expect(result.valuation).toEqual({ basis: 'current_product_cost_price', stockCostValue: 120, inventoryAccountBalance: 100, variance: 20, reconciled: false });
     expect(db.query).toHaveBeenCalledTimes(3);
     expect(db.query.mock.calls[0][0]).toContain('FULL OUTER JOIN movement_totals');
     expect(db.query.mock.calls[1][0]).toContain('products p');
