@@ -90,8 +90,12 @@ export class SupplierBillsService {
       for(const line of lines)await client.query(`INSERT INTO supplier_bill_items(company_id,supplier_bill_id,purchase_order_item_id,description,quantity,unit_cost,tax_rate,line_subtotal,tax_amount,line_total)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[companyId,inserted.rows[0].id,line.poItemId,line.description,line.qty,line.cost,line.rate,line.sub,line.tax,line.total]);
       const billId=inserted.rows[0].id;
+      // Goods received through a purchase order increase inventory; standalone bills remain expense-coded.
+      const inventorySubtotal=lines.filter(line=>line.poItemId!==null).reduce((sum,line)=>sum+line.sub,0);
+      const expenseSubtotal=subtotal-inventorySubtotal;
       const journalLines:Array<{systemCode:string;debit:number;credit:number;description:string}>=[];
-      if(subtotal>0)journalLines.push({systemCode:'purchases_expense',debit:subtotal,credit:0,description:'Supplier bill subtotal'});
+      if(inventorySubtotal>0)journalLines.push({systemCode:'inventory',debit:inventorySubtotal,credit:0,description:'Received goods added to inventory'});
+      if(expenseSubtotal>0)journalLines.push({systemCode:'purchases_expense',debit:expenseSubtotal,credit:0,description:'Standalone supplier bill expense'});
       if(taxAmount>0)journalLines.push({systemCode:'input_tax',debit:taxAmount,credit:0,description:'Recoverable input tax'});
       journalLines.push({systemCode:'accounts_payable',debit:0,credit:subtotal+taxAmount,description:'Supplier payable'});
       await this.postJournal(client,{companyId,date:dto.billDate??null,description:`Supplier bill ${number}`,sourceType:'supplier_bill',sourceId:billId,userId:user.userId,lines:journalLines});
