@@ -26,5 +26,18 @@ import { EmployeesModule } from './employees/employees.module.js';
 import { ExpensesModule } from './expenses/expenses.module.js';
 import { PayrollModule } from './payroll/payroll.module.js';
 import { WorkforceModule } from './workforce/workforce.module.js';
-@Module({imports:[ConfigModule.forRoot({isGlobal:true}),DatabaseModule,CommonModule,AuditModule,AuthModule,RbacModule,MembershipsModule,CompaniesModule,BranchesModule,CustomersModule,SuppliersModule,ProductsModule,InvoicesModule,QuotationsModule,SalesOrdersModule,CrmModule,InventoryModule,PurchaseOrdersModule,SupplierBillsModule,AccountingModule,ManufacturingModule,EmployeesModule,ExpensesModule,PayrollModule,WorkforceModule],controllers:[AppController],providers:[AppService]})
+import { PosModule } from './pos/pos.module.js';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }), DatabaseModule, CommonModule, AuditModule,
+    AuthModule, RbacModule, MembershipsModule, CompaniesModule, BranchesModule,
+    CustomersModule, SuppliersModule, ProductsModule, InvoicesModule, QuotationsModule,
+    SalesOrdersModule, CrmModule, InventoryModule, PurchaseOrdersModule, SupplierBillsModule,
+    AccountingModule, ManufacturingModule, EmployeesModule, ExpensesModule, PayrollModule,
+    WorkforceModule, PosModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
 export class AppModule {}
