@@ -89,6 +89,8 @@ describe('ManufacturingService',()=>{
   db.transaction.mockImplementation(async(callback:(client:unknown)=>Promise<unknown>)=>callback(client));
   const result=await service.completeOrder(user,'order-1');
   expect(result.status).toBe('completed');
+  expect(client.query).toHaveBeenCalledWith(expect.stringContaining('SET average_unit_cost=CASE WHEN quantity+$1>0'),expect.any(Array));
+  expect(client.query).toHaveBeenCalledWith(expect.stringContaining('SET stock_quantity=COALESCE((SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0),cost_price=$3'),expect.any(Array));
   const journalEntries=client.query.mock.calls.filter((call:[string,unknown[]])=>call[0].includes('INSERT INTO journal_entries'));
   expect(journalEntries).toHaveLength(2);
   expect(journalEntries[0][1][3]).toBe('manufacturing_material_consumption');
