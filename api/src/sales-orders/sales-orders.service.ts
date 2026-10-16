@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { AccountingService } from '../accounting/accounting.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { SalesOrderItemRow, SalesOrderRow, SalesOrderStatus } from './sales-order.types.js';
 
@@ -19,7 +20,7 @@ const SELECT_ORDERS = `
 
 @Injectable()
 export class SalesOrdersService {
-  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService) {}
+  constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService, private readonly accounting: AccountingService) {}
 
   private async membershipFor(user: AuthenticatedUser) {
     return user.companyId
@@ -109,6 +110,8 @@ export class SalesOrdersService {
   async updateStatus(user: AuthenticatedUser, id: string, next: string, warehouseId?: string): Promise<SalesOrderRow> {
     const membership = await this.membershipFor(user);
     let fromStatus: SalesOrderStatus = 'confirmed';
+    let costOfGoods = 0;
+    if (next === 'fulfilled') await this.accounting.ensureDefaults(membership.companyId);
     const transition = await this.db.transaction(async (client) => {
       const current = await client.query<{ id: string; status: string; order_number: string }>(
         'SELECT id, status, order_number FROM sales_orders WHERE id = $1 AND company_id = $2 FOR UPDATE',
@@ -164,6 +167,8 @@ export class SalesOrdersService {
           if (!stock.rows[0] || available + 0.0000001 < quantity) {
             throw new BadRequestException(`Insufficient available stock for "${item.product_name}" in the selected warehouse.`);
           }
+          const issueCost = Number(stock.rows[0].average_unit_cost ?? item.cost_price ?? 0);
+          costOfGoods += quantity * issueCost;
           await client.query(
             'UPDATE inventory_stock_levels SET quantity = quantity - $1, updated_at = NOW() WHERE company_id = $2 AND warehouse_id = $3 AND product_id = $4',
             [quantity, membership.companyId, warehouseId, item.product_id],
@@ -172,7 +177,7 @@ export class SalesOrdersService {
             `INSERT INTO inventory_stock_movements
               (company_id, product_id, warehouse_id, movement_type, quantity, unit_cost, reference, notes, created_by)
              VALUES ($1, $2, $3, 'issue', $4, $5, $6, $7, $8)`,
-            [membership.companyId, item.product_id, warehouseId, -quantity, Number(stock.rows[0].average_unit_cost ?? item.cost_price ?? 0), order.order_number, `Sales order fulfilment ${order.order_number}`, user.userId],
+            [membership.companyId, item.product_id, warehouseId, -quantity, issueCost, order.order_number, `Sales order fulfilment ${order.order_number}`, user.userId],
           );
           await client.query(
             `UPDATE products SET stock_quantity = COALESCE(
@@ -181,6 +186,37 @@ export class SalesOrdersService {
             [membership.companyId, item.product_id],
           );
         }
+      }
+
+      if (next === 'fulfilled' && costOfGoods > 0) {
+        const year = new Date().getFullYear();
+        const seq = await client.query<{ next_number: number }>(
+          `INSERT INTO journal_entry_sequences(company_id,entry_year,next_number)
+           VALUES($1,$2,1)
+           ON CONFLICT(company_id,entry_year) DO UPDATE
+           SET next_number=journal_entry_sequences.next_number+1
+           RETURNING next_number`,
+          [membership.companyId, year],
+        );
+        const entryNumber = `JE-${year}-${String(seq.rows[0].next_number).padStart(6, '0')}`;
+        const entry = await client.query<{ id: string }>(
+          `INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
+           VALUES($1,$2,CURRENT_DATE,$3,'sales_order_cogs',$4,'posted',NOW(),$5) RETURNING id`,
+          [membership.companyId, entryNumber, `Cost of goods sold for ${order.order_number}`, id, user.userId],
+        );
+        const accounts = await client.query<{ id: string; system_code: string }>(
+          `SELECT id,system_code FROM chart_of_accounts
+           WHERE company_id=$1 AND system_code IN ('inventory','purchases_expense') AND is_active=true`,
+          [membership.companyId],
+        );
+        const inventory = accounts.rows.find(account => account.system_code === 'inventory');
+        const cogs = accounts.rows.find(account => account.system_code === 'purchases_expense');
+        if (!inventory || !cogs) throw new BadRequestException('Inventory and cost-of-goods accounts must be active.');
+        await client.query(
+          `INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit)
+           VALUES($1,$2,$3,'Cost of goods sold',$4,0),($1,$2,$5,'Inventory relieved on sale',0,$4)`,
+          [membership.companyId, entry.rows[0].id, cogs.id, Math.round(costOfGoods * 100) / 100, inventory.id],
+        );
       }
 
       await client.query(
