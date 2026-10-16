@@ -57,7 +57,7 @@ try {
     employeeNumber: `PAYE2E-${stamp}`,
     firstName: "Test",
     lastName: "Payroll",
-    nationalId: "12345678",
+    nationalId: String((stamp % 90000000) + 10000000),
     kraPin: "A123456789Z",
     nssfNumber: `NSSF${stamp}`,
     shaNumber: `SHA${stamp}`,
