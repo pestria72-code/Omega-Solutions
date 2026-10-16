@@ -213,14 +213,15 @@ export class AuthService {
         secret: process.env.JWT_REFRESH_SECRET,
       });
 
-      const membership = await this.getUserMembership(payload.sub);
+      // Re-check the account and active company membership whenever a refresh token is used.
+      const profile = await this.getUserProfile(payload.sub);
 
       const newPayload: JwtPayload = {
-        sub: payload.sub,
-        email: payload.email,
-        companyId: membership.companyId,
-        branchId: membership.branchId,
-        role: membership.role,
+        sub: profile.userId,
+        email: profile.email,
+        companyId: profile.companyId,
+        branchId: profile.branchId,
+        role: profile.role,
       };
 
       return {
@@ -237,11 +238,15 @@ export class AuthService {
       id: string;
       email: string;
       full_name: string;
-    }>('SELECT id, email, full_name FROM users WHERE id = $1', [userId]);
+      is_active: boolean;
+    }>('SELECT id, email, full_name, is_active FROM users WHERE id = $1', [userId]);
 
     const user = result.rows[0];
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    if (!user.is_active) {
+      throw new UnauthorizedException('Account is deactivated');
     }
 
     const membership = await this.getUserMembership(user.id);
@@ -274,7 +279,7 @@ export class AuthService {
     );
 
     if (result.rows.length === 0) {
-      return { companyId: null, branchId: null, role: 'viewer' };
+      throw new UnauthorizedException('This account has no active company membership. Contact your administrator.');
     }
 
     const m = result.rows[0];
