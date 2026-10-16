@@ -29,11 +29,17 @@ async function request(method, path, body, token, expected = [200]) {
 async function login(email, password, label) {
   let result;
   const neonAuthBase = (process.env.NEON_AUTH_BASE_URL || "https://ep-fragrant-bird-b4hie5sp.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth").replace(/\/$/, "");
+  const trustedOrigin = (process.env.OMEGA_SECURITY_TEST_ORIGIN || "https://omega-solutions-git-development-pestria72-2760.vercel.app").replace(/\/$/, "");
   if (neonAuthBase) {
-    // Current Neon Auth-created users may not have a usable local Omega password hash.
+    // Neon Auth requires an allowed browser Origin even for this server-side smoke test.
+    // Use the existing trusted development preview; never send credentials without an Origin.
     const response = await fetch(`${neonAuthBase}/sign-in/email`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        origin: trustedOrigin,
+        referer: `${trustedOrigin}/login`,
+      },
       body: JSON.stringify({ email, password }),
     });
     const raw = await response.text();
