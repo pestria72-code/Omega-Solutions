@@ -74,14 +74,14 @@ export class AuthService {
     const neonUserResult = await this.db.query<{
       id: string;
       email: string;
-      email_verified: boolean;
+      emailVerified: boolean;
       name: string | null;
     }>(
-      'SELECT id, email, email_verified, name FROM neon_auth."user" WHERE id = $1 LIMIT 1',
+      'SELECT id, email, "emailVerified" AS "emailVerified", name FROM neon_auth."user" WHERE id = $1 LIMIT 1',
       [identity.sub],
     );
     const neonUser = neonUserResult.rows[0];
-    if (!neonUser || neonUser.email_verified !== true || !neonUser.email) {
+    if (!neonUser || neonUser.emailVerified !== true || !neonUser.email) {
       throw new UnauthorizedException('Verify your email address before accessing Omega.');
     }
     const email = neonUser.email.trim().toLowerCase();
