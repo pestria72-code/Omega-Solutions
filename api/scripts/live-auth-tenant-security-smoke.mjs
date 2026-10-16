@@ -83,7 +83,7 @@ async function login(email, password, label) {
       if (typeof identityToken !== "string" || identityToken.split(".").length !== 3) {
         throw new Error(label + ": Neon Auth JWT endpoint did not return a JWT in data.token; no tenant checks were run.");
       }
-      result = await request("POST", "/auth/neon/exchange", { token: identityToken }, undefined, [200]);
+      result = await request("POST", "/auth/neon/exchange", { token: identityToken }, undefined, [200, 201]);
       assert(true, `${label}: authenticated through Neon Auth identity exchange`);
     }
   } else {
