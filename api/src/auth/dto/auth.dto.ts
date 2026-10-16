@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, MaxLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength, IsOptional, IsUUID } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
@@ -61,4 +61,10 @@ export class NeonExchangeDto {
   @MaxLength(200)
   @IsOptional()
   companyName?: string;
+}
+
+
+export class SwitchCompanyDto {
+  @IsUUID()
+  companyId!: string;
 }
