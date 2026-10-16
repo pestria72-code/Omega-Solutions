@@ -139,7 +139,7 @@ describe('InventoryService', () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
       if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: params?.[0] }], rowCount: 1 };
-      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '2' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '2' }], rowCount: 1 };
       if (sql.includes('INSERT INTO inventory_stock_movements')) {
         return { rows: [{ id: params?.[3] === 'transfer_out' ? 'movement-out' : 'movement-in', movement_type: params?.[3], quantity: params?.[4], transfer_group_id: params?.[9] }], rowCount: 1 };
       }
@@ -182,7 +182,7 @@ describe('InventoryService', () => {
     const client = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
       if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse' }], rowCount: 1 };
-      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
     db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
@@ -214,7 +214,7 @@ describe('InventoryService', () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
       if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
-      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '3', reserved_quantity: '1', average_unit_cost: '10' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '3', reserved_quantity: '1', average_unit_cost: '10' }], rowCount: 1 };
       if (sql.includes('INSERT INTO inventory_stock_movements')) return { rows: [{ id: 'receipt-movement', movement_type: params?.[3], quantity: params?.[4] }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
@@ -252,7 +252,7 @@ describe('InventoryService', () => {
     const client = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
       if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
-      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
     db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
@@ -271,7 +271,7 @@ describe('InventoryService', () => {
     const client = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
       if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
-      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '8', reserved_quantity: '3' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '8', reserved_quantity: '3' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
     db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
