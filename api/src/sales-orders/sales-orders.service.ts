@@ -59,7 +59,7 @@ export class SalesOrdersService {
     let createdNewOrder = false;
     const orderId = await this.db.transaction(async (client) => {
       const result = await client.query<Record<string, unknown>>(
-        `SELECT id, company_id, customer_id, quotation_number, issue_date, status, currency, subtotal, tax_amount, total, notes
+        `SELECT id, company_id, customer_id, quotation_number, issue_date, EXTRACT(YEAR FROM issue_date)::int AS issue_year, status, currency, subtotal, tax_amount, total, notes
          FROM quotations WHERE id = $1 AND company_id = $2 FOR UPDATE`,
         [quotationId, membership.companyId],
       );
@@ -72,7 +72,7 @@ export class SalesOrdersService {
       if (existing.rows[0]) return existing.rows[0].id;
       if (quote.status !== 'accepted') throw new BadRequestException('Only accepted quotations can be converted to a sales order.');
 
-      const year = Number(String(quote.issue_date).slice(0, 4));
+      const year = Number(quote.issue_year);
       const seq = await client.query<{ next_number: number }>(
         `INSERT INTO sales_order_sequences (company_id, order_year, next_number) VALUES ($1, $2, 1)
          ON CONFLICT (company_id, order_year) DO UPDATE SET next_number = sales_order_sequences.next_number + 1 RETURNING next_number`,
