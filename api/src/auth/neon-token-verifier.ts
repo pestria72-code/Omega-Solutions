@@ -19,8 +19,11 @@ export async function verifyNeonIdentityToken(token: string): Promise<{ sub: str
       remoteJwks = createRemoteJWKSet(new URL(jwksUrl), { timeoutDuration: 5000 });
       remoteJwksUrl = jwksUrl;
     }
+    // Managed Neon Auth JWTs use the origin as their issuer; the Auth endpoint
+    // itself can include a path such as /neondb/auth.
+    const issuer = new URL(baseUrl).origin;
     const { payload } = await jwtVerify(token, remoteJwks, {
-      issuer: baseUrl,
+      issuer,
       algorithms: ['EdDSA'],
       clockTolerance: 5,
     });
