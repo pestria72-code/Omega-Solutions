@@ -24,8 +24,14 @@ export class CompaniesService {
     private readonly audit: AuditService,
   ) {}
 
+  private async membershipFor(user: AuthenticatedUser) {
+    return user.companyId
+      ? this.memberships.getMembershipForCompany(user.userId, user.companyId)
+      : this.memberships.getMembership(user.userId);
+  }
+
   async getMyCompany(user: AuthenticatedUser): Promise<CompanyRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
 
     return this.getById(membership.companyId);
   }
