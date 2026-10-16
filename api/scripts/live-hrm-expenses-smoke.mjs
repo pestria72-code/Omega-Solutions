@@ -40,7 +40,7 @@ try {
     workEmail: `employee-${stamp}@example.com`, jobTitle: "QA Test", department: "Validation",
     hireDate: new Date().toISOString().slice(0, 10),
   }, token, [201])).data;
-  ok(!!employee.id && employee.company_id === registration.companyId, "create company-scoped employee");
+  ok(!!employee.id && employee.company_id === identity.companyId, "create company-scoped employee");
   const employeeList = (await req("GET", "/employees", undefined, token)).data;
   ok(Array.isArray(employeeList) && employeeList.some(row => row.id === employee.id), "employee appears in company list");
 
@@ -75,7 +75,7 @@ try {
     contactName: `E2E CRM Contact ${stamp}`, organizationName: `E2E CRM Org ${stamp}`,
     email: `crm-contact-${stamp}@example.com`, source: "automated_test", estimatedValue: 50000, currency: "KES",
   }, token, [201])).data;
-  ok(!!lead.id && lead.company_id === registration.companyId, "create company-scoped CRM lead");
+  ok(!!lead.id && lead.company_id === identity.companyId, "create company-scoped CRM lead");
   const qualifiedLead = (await req("PATCH", `/crm/leads/${lead.id}`, { status: "qualified" }, token, [200])).data;
   ok(qualifiedLead.status === "qualified", "qualify CRM lead");
   const opportunity = (await req("POST", "/crm/opportunities", {
@@ -118,12 +118,12 @@ try {
   ok(trialBalance.balanced === true && Math.abs(Number(trialBalance.variance)) <= 0.01, "trial balance debit/credit totals reconcile");
   ok(Math.abs(Number(trialBalance.totalDebits) - Number(trialBalance.totalCredits)) <= 0.01, "trial balance total debits equal total credits");
   console.log(JSON.stringify({
-    ok: true, email, companyId: registration.companyId, employeeId: employee.id,
+    ok: true, email: login.email, companyId: identity.companyId, employeeId: employee.id,
     leaveRequestId: leave.id, expenseId: expense.id, journalEntryId: expense.journal_entry_id,
     trialBalance: { totalDebits: trialBalance.totalDebits, totalCredits: trialBalance.totalCredits, variance: trialBalance.variance },
     checks,
   }, null, 2));
 } catch (error) {
-  console.error(JSON.stringify({ ok: false, email, error: String(error), checks }, null, 2));
+  console.error(JSON.stringify({ ok: false, error: String(error), checks }, null, 2));
   process.exitCode = 1;
 }
