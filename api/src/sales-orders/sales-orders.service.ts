@@ -155,8 +155,8 @@ export class SalesOrdersService {
           if (item.is_service) continue;
           if (!item.is_active) throw new BadRequestException(`Product "${item.product_name}" is inactive and cannot be fulfilled.`);
 
-          const stock = await client.query<{ quantity: string | number; reserved_quantity: string | number }>(
-            'SELECT quantity, reserved_quantity FROM inventory_stock_levels WHERE company_id = $1 AND warehouse_id = $2 AND product_id = $3 FOR UPDATE',
+          const stock = await client.query<{ quantity: string | number; reserved_quantity: string | number; average_unit_cost: string | number }>(
+            'SELECT quantity, reserved_quantity, average_unit_cost FROM inventory_stock_levels WHERE company_id = $1 AND warehouse_id = $2 AND product_id = $3 FOR UPDATE',
             [membership.companyId, warehouseId, item.product_id],
           );
           const available = stock.rows[0] ? Number(stock.rows[0].quantity) - Number(stock.rows[0].reserved_quantity) : 0;
@@ -172,7 +172,7 @@ export class SalesOrdersService {
             `INSERT INTO inventory_stock_movements
               (company_id, product_id, warehouse_id, movement_type, quantity, unit_cost, reference, notes, created_by)
              VALUES ($1, $2, $3, 'issue', $4, $5, $6, $7, $8)`,
-            [membership.companyId, item.product_id, warehouseId, -quantity, Number(item.cost_price ?? 0), order.order_number, `Sales order fulfilment ${order.order_number}`, user.userId],
+            [membership.companyId, item.product_id, warehouseId, -quantity, Number(stock.rows[0].average_unit_cost ?? item.cost_price ?? 0), order.order_number, `Sales order fulfilment ${order.order_number}`, user.userId],
           );
           await client.query(
             `UPDATE products SET stock_quantity = COALESCE(
