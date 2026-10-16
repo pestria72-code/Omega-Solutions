@@ -266,7 +266,7 @@ export class InventoryService {
       await this.assertProduct(client,companyId,dto.productId);
       await this.assertWarehouse(client,companyId,dto.warehouseId);
       await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
-      const stock = await client.query<{quantity:string;reserved_quantity:string}>(
+      const stock = await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
         'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
         [companyId,dto.warehouseId,dto.productId],
       );
@@ -309,7 +309,7 @@ export class InventoryService {
         'SELECT quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
         [companyId,id,dto.productId],
       );
-      const source=await client.query<{quantity:string;reserved_quantity:string}>(
+      const source=await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
         'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3',
         [companyId,dto.sourceWarehouseId,dto.productId],
       );
@@ -339,7 +339,7 @@ export class InventoryService {
       await this.assertProduct(client,companyId,dto.productId);
       await this.assertWarehouse(client,companyId,dto.warehouseId);
       await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
-      const stock=await client.query<{quantity:string;reserved_quantity:string}>(
+      const stock=await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
         'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
         [companyId,dto.warehouseId,dto.productId],
       );
