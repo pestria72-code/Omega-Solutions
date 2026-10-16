@@ -27,7 +27,28 @@ async function request(method, path, body, token, expected = [200]) {
   return data;
 }
 async function login(email, password, label) {
-  const result = await request("POST", "/auth/login", { email, password }, undefined, [200]);
+  let result;
+  const neonAuthBase = (process.env.NEON_AUTH_BASE_URL || "").replace(/\/$/, "");
+  if (neonAuthBase) {
+    // Current Neon Auth-created users may not have a usable local Omega password hash.
+    const response = await fetch(`${neonAuthBase}/sign-in/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const raw = await response.text();
+    let authResult;
+    try { authResult = raw ? JSON.parse(raw) : null; } catch { authResult = raw; }
+    if (!response.ok) throw new Error(`${label}: Neon Auth sign-in returned HTTP ${response.status}; response=${JSON.stringify(authResult).slice(0, 250)}`);
+    const identityToken = authResult?.token ?? authResult?.data?.token;
+    if (typeof identityToken !== "string" || identityToken.length < 20) {
+      throw new Error(`${label}: Neon Auth sign-in did not return the JWT token required by /auth/neon/exchange; no tenant checks were run.`);
+    }
+    result = await request("POST", "/auth/neon/exchange", { token: identityToken }, undefined, [200]);
+    assert(true, `${label}: authenticated through Neon Auth identity exchange`);
+  } else {
+    result = await request("POST", "/auth/login", { email, password }, undefined, [200]);
+  }
   assert(typeof result.accessToken === "string" && typeof result.refreshToken === "string", `${label}: login returns access and refresh tokens`);
   assert(typeof result.user?.companyId === "string" && result.user.companyId.length > 0, `${label}: login selects an active company`);
   return { accessToken: result.accessToken, refreshToken: result.refreshToken, companyId: result.user.companyId };
