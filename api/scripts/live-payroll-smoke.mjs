@@ -1,4 +1,5 @@
 import { neonTestLogin } from "./neon-test-auth.mjs";
+import { randomInt, randomUUID } from "node:crypto";
 // Authenticated payroll smoke test for the Omega development API only.
 // This creates a dedicated test tenant, employee, pay settings and an unapproved draft run.
 // It never approves or posts payroll. The created records are intentionally retained for audit.
@@ -13,6 +14,8 @@ if (configuredBase !== expectedBase) {
 }
 const base = configuredBase;
 const stamp = Date.now();
+const testNationalId = String(randomInt(10000000, 99999999));
+const testEmployeeNumber = `PAYE2E-${stamp}-${randomUUID().slice(0, 8)}`;
 const checks = [];
 let companyId;
 let employeeId;
@@ -54,10 +57,10 @@ try {
   ok(typeof companyId === "string" && companyId.length > 0, "existing test account tenant identity verified");
 
   const emp = await req("POST", "/employees", {
-    employeeNumber: `PAYE2E-${stamp}`,
+    employeeNumber: testEmployeeNumber,
     firstName: "Test",
     lastName: "Payroll",
-    nationalId: String((stamp % 90000000) + 10000000),
+    nationalId: testNationalId,
     kraPin: "A123456789Z",
     nssfNumber: `NSSF${stamp}`,
     shaNumber: `SHA${stamp}`,
@@ -72,7 +75,7 @@ try {
   ok(emp.has_kra_pin === true && emp.has_nssf_number === true && emp.has_sha_number === true && emp.has_nhif_number === true,
     "statutory presence flags returned");
 
-  const sensitive = ["12345678", "A123456789Z", `NSSF${stamp}`, `SHA${stamp}`, `NHIF${stamp}`];
+  const sensitive = [testNationalId, "A123456789Z", `NSSF${stamp}`, `SHA${stamp}`, `NHIF${stamp}`];
   ok(sensitive.every(value => !JSON.stringify(emp).includes(value)), "employee create response does not expose statutory identifiers");
 
   const directory = await req("GET", "/employees", undefined, token);
