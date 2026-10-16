@@ -77,6 +77,24 @@ async function main() {
   assert(payables.reconciled === true && Math.abs(Number(payables.controlAccountBalance) - Number(payables.supplierBillsBalance)) < 0.005 && Math.abs(Number(payables.variance)) < 0.005, "payables control account reconciles to all supplier bills in the existing test company");
   const finalTrialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(finalTrialBalance.balanced === true && Math.abs(Number(finalTrialBalance.variance)) <= 0.01, "trial balance remains balanced after supplier payment");
+  // Reconcile and close only a prior shift created by this smoke test. Never close an operator\'s real shift.
+  const currentShift = await request("GET", "/pos/shifts/current", undefined, a.token);
+  if (currentShift?.id) {
+    assert(String(currentShift.register_name || "").startsWith("TEMP POS Register "), "any existing open shift belongs to a prior automated POS regression");
+    const existingSales = await request("GET", "/pos/sales?limit=100", undefined, a.token);
+    let confirmedCash = 0;
+    for (const sale of existingSales.filter(row => row.shift_id === currentShift.id)) {
+      const saleInvoice = await request("GET", `/invoices/${sale.invoice_id}`, undefined, a.token);
+      confirmedCash += (saleInvoice.payments || [])
+        .filter(payment => payment.method === "cash" && ["confirmed", "reconciled"].includes(payment.status))
+        .reduce((sum, payment) => sum + Number(payment.amount), 0);
+    }
+    const countedCash = Math.round((Number(currentShift.opening_float) + confirmedCash) * 100) / 100;
+    const closedShift = await request("POST", `/pos/shifts/${currentShift.id}/close`, {
+      countedCash, notes: "Closed during setup for automated POS regression; expected cash reconciled from confirmed cash payments."
+    }, a.token, [200, 201]);
+    assert(closedShift.status === "closed", "closed prior automated POS shift with reconciled cash");
+  }
   // POS regression: cash checkout, stock ledger, idempotency, payment confirmation, and tenant isolation.
   const warehouse = await request("POST", "/inventory/warehouses", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Warehouse ${stamp}`, location: "Automated regression", capacity: 100 }, a.token, [201]);
   assert(!!warehouse.id, "created temporary POS warehouse");
