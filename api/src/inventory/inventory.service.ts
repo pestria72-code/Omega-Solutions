@@ -248,7 +248,7 @@ export class InventoryService {
       checkedAt:new Date().toISOString(),
       stockLedger:{mismatchCount:movementMismatchCount,absoluteQuantityVariance:Number(ledgerRow?.absolute_quantity_variance ?? 0),reconciled:movementMismatchCount===0},
       legacyProductQuantities:{mismatchCount:legacyMismatchCount,absoluteQuantityVariance:Number(legacyRow?.absolute_quantity_variance ?? 0),reconciled:legacyMismatchCount===0},
-      valuation:{basis:'current_product_cost_price',stockCostValue,inventoryAccountBalance,variance:valuationVariance,reconciled:Math.abs(valuationVariance)<=0.01},
+      valuation:{basis:'weighted_average_cost',stockCostValue,inventoryAccountBalance,variance:valuationVariance,reconciled:Math.abs(valuationVariance)<=0.01},
     };
   }
 
@@ -274,8 +274,19 @@ export class InventoryService {
       const delta = Number(dto.newQuantity)-oldQuantity;
       if (Math.abs(delta)<0.00005) throw new BadRequestException('The adjusted quantity matches the current stock.');
       if (Number(dto.newQuantity)<Number(stock.rows[0].reserved_quantity)) throw new BadRequestException('Adjusted stock cannot be lower than reserved stock.');
-      await client.query('UPDATE inventory_stock_levels SET quantity=$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.newQuantity,companyId,dto.warehouseId,dto.productId]);
-      const movement = await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.warehouseId,type:'adjustment',quantity:delta,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId});
+      const adjustmentCost=delta>0 ? Number(dto.unitCost ?? stock.rows[0].average_unit_cost) : Number(stock.rows[0].average_unit_cost);
+      if(delta>0){
+        await client.query(
+          `UPDATE inventory_stock_levels
+           SET average_unit_cost=CASE WHEN quantity+$1>0 THEN ((quantity*average_unit_cost)+($1*$2))/(quantity+$1) ELSE $2 END,
+               quantity=$3,updated_at=NOW()
+           WHERE company_id=$4 AND warehouse_id=$5 AND product_id=$6`,
+          [delta,adjustmentCost,dto.newQuantity,companyId,dto.warehouseId,dto.productId],
+        );
+      } else {
+        await client.query('UPDATE inventory_stock_levels SET quantity=$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.newQuantity,companyId,dto.warehouseId,dto.productId]);
+      }
+      const movement = await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.warehouseId,type:'adjustment',quantity:delta,unitCost:adjustmentCost,reference:dto.reference,notes:dto.notes,userId:user.userId});
       await this.syncLegacyProductQuantity(client,companyId,dto.productId);
       return movement;
     });
