@@ -14,7 +14,7 @@ try {
  for(let attempt=0;attempt<12;attempt++){try{h=await req("GET","/health");if(h.data?.status==="ok"&&h.data?.database==="connected")break;h=null}catch(e){lastHealthError=e}await new Promise(resolve=>setTimeout(resolve,5000))}
  if(!h)throw Error(`API health/database did not recover: ${String(lastHealthError||"unexpected health response")}`);
  ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
- const login = await neonTestLogin(base, { slot: "A", companyName: `Omega E2E ${stamp}` });
+ const login = await neonTestLogin(base, { slot: "B", companyName: `Omega E2E ${stamp}` });
  const token = login.token;
  ok(!!token&&!!login.refreshToken,"verified Neon Auth identity exchanged for Omega tokens");
  const me=(await req("GET","/auth/me",undefined,token)).data;ok(me.userId===login.user.userId&&me.companyId===login.user.companyId,"authenticated /me and tenant identity");
