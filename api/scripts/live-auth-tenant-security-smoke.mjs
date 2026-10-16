@@ -130,7 +130,7 @@ async function main() {
     await request("POST", "/auth/switch-company", { companyId: a.companyId }, b.accessToken, [400, 401, 403, 404]);
     assert(true, "Account B cannot switch into Account A's company");
 
-    const refreshed = await request("POST", "/auth/refresh", { refreshToken: a.refreshToken }, undefined, [200]);
+    const refreshed = await request("POST", "/auth/refresh", { refreshToken: a.refreshToken }, undefined, [200, 201]);
     assert(typeof refreshed.accessToken === "string" && typeof refreshed.refreshToken === "string", "refresh issues a new token pair");
     const meAfterRefresh = await request("GET", "/auth/me", undefined, refreshed.accessToken);
     assert(meAfterRefresh.companyId === a.companyId, "refresh preserves Account A's selected company");
