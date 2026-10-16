@@ -99,6 +99,6 @@ try {
  ok(!!salesCogs&&Math.abs(Number(salesCogs.total_debits)-257.14)<0.015&&Math.abs(Number(salesCogs.total_credits)-257.14)<0.015,"sales-order COGS journal uses weighted-average cost and balances at KES 257.14");
  const inventoryReconciliation=(await req("GET","/inventory/reconciliation",undefined,token)).data;
  ok(inventoryReconciliation.stockLedger?.reconciled===true&&inventoryReconciliation.legacyProductQuantities?.reconciled===true,"inventory movement ledger and product quantities reconcile after fulfilment");
- ok(inventoryReconciliation.valuation?.basis==="weighted_average_cost"&&inventoryReconciliation.valuation?.reconciled===true,"weighted-average stock valuation reconciles to the inventory control account");
+ ok(inventoryReconciliation.valuation?.basis==="weighted_average_cost"&&inventoryReconciliation.valuation?.reconciled===true,`weighted-average stock valuation reconciles to the inventory control account: ${JSON.stringify(inventoryReconciliation.valuation)}`);
  console.log(JSON.stringify({ok:true,email:login.email,userId:login.user.userId,companyId:login.user.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,wacPurchaseOrderId:wacPo.id,salesOrderId:salesOrder.id,checks},null,2));
 } catch(e) { console.error(JSON.stringify({ok:false,error:String(e),checks},null,2));process.exitCode=1; }
