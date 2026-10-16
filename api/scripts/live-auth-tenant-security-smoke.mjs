@@ -28,7 +28,7 @@ async function request(method, path, body, token, expected = [200]) {
 }
 async function login(email, password, label) {
   let result;
-  const neonAuthBase = (process.env.NEON_AUTH_BASE_URL || "").replace(/\/$/, "");
+  const neonAuthBase = (process.env.NEON_AUTH_BASE_URL || "https://ep-fragrant-bird-b4hie5sp.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth").replace(/\/$/, "");
   if (neonAuthBase) {
     // Current Neon Auth-created users may not have a usable local Omega password hash.
     const response = await fetch(`${neonAuthBase}/sign-in/email`, {
