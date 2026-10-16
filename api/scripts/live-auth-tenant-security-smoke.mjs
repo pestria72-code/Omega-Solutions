@@ -49,19 +49,42 @@ async function main() {
   const forgedContext = await request("GET", `/auth/me?companyId=${encodeURIComponent(b.companyId)}`, undefined, a.accessToken);
   assert(forgedContext.companyId === a.companyId, "client-supplied companyId cannot override Account A's token context");
 
-  // A user must not switch into a company where they have no active membership.
-  await request("POST", "/auth/switch-company", { companyId: b.companyId }, a.accessToken, [400, 401, 403, 404]);
-  assert(true, "Account A cannot switch into Account B's company");
-  await request("POST", "/auth/switch-company", { companyId: a.companyId }, b.accessToken, [400, 401, 403, 404]);
-  assert(true, "Account B cannot switch into Account A's company");
+  // Prove row-level tenant isolation with one unique temporary record, and always try to clean it up.
+  let temporaryCustomerId;
+  try {
+    const marker = `OMEGA-TENANT-SECURITY-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const created = await request("POST", "/customers", { name: marker, email: `${marker.toLowerCase()}@example.com` }, a.accessToken, [201]);
+    temporaryCustomerId = created.id;
+    assert(typeof temporaryCustomerId === "string", "Account A created a unique temporary customer");
 
-  const refreshed = await request("POST", "/auth/refresh", { refreshToken: a.refreshToken }, undefined, [200]);
-  assert(typeof refreshed.accessToken === "string" && typeof refreshed.refreshToken === "string", "refresh issues a new token pair");
-  const meAfterRefresh = await request("GET", "/auth/me", undefined, refreshed.accessToken);
-  assert(meAfterRefresh.companyId === a.companyId, "refresh preserves Account A's selected company");
+    const aCustomersResponse = await request("GET", "/customers", undefined, a.accessToken);
+    const aCustomers = Array.isArray(aCustomersResponse) ? aCustomersResponse : (aCustomersResponse.items || aCustomersResponse.data || []);
+    assert(aCustomers.some(c => c.id === temporaryCustomerId), "Account A can see its own temporary customer");
 
-  await request("GET", "/auth/me", undefined, undefined, [401, 403]);
-  assert(true, "protected profile endpoint rejects unauthenticated requests");
+    await request("GET", `/customers/${temporaryCustomerId}`, undefined, b.accessToken, [403, 404]);
+    const bCustomersResponse = await request("GET", "/customers", undefined, b.accessToken);
+    const bCustomers = Array.isArray(bCustomersResponse) ? bCustomersResponse : (bCustomersResponse.items || bCustomersResponse.data || []);
+    assert(!bCustomers.some(c => c.id === temporaryCustomerId), "Account B cannot read or list Account A's customer");
+
+    // A user must not switch into a company where they have no active membership.
+    await request("POST", "/auth/switch-company", { companyId: b.companyId }, a.accessToken, [400, 401, 403, 404]);
+    assert(true, "Account A cannot switch into Account B's company");
+    await request("POST", "/auth/switch-company", { companyId: a.companyId }, b.accessToken, [400, 401, 403, 404]);
+    assert(true, "Account B cannot switch into Account A's company");
+
+    const refreshed = await request("POST", "/auth/refresh", { refreshToken: a.refreshToken }, undefined, [200]);
+    assert(typeof refreshed.accessToken === "string" && typeof refreshed.refreshToken === "string", "refresh issues a new token pair");
+    const meAfterRefresh = await request("GET", "/auth/me", undefined, refreshed.accessToken);
+    assert(meAfterRefresh.companyId === a.companyId, "refresh preserves Account A's selected company");
+
+    await request("GET", "/auth/me", undefined, undefined, [401, 403]);
+    assert(true, "protected profile endpoint rejects unauthenticated requests");
+  } finally {
+    if (temporaryCustomerId) {
+      await request("DELETE", `/customers/${temporaryCustomerId}`, undefined, a.accessToken, [200, 204]);
+      checks.push("temporary customer cleanup requested");
+    }
+  }
 
   console.log(JSON.stringify({ result: "PASS", api: base, checks }, null, 2));
 }
