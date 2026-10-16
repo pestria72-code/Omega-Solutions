@@ -296,11 +296,12 @@ export class AuthService {
       branch_id: string | null;
       role: string;
     }>(
-      `SELECT company_id, branch_id, role
-       FROM company_memberships
-       WHERE user_id = $1 AND is_active = true
-         AND ($2::uuid IS NULL OR company_id = $2::uuid)
-       ORDER BY company_id
+      `SELECT cm.company_id, cm.branch_id, cm.role
+       FROM company_memberships cm
+       JOIN companies c ON c.id = cm.company_id AND c.is_active = true
+       WHERE cm.user_id = $1 AND cm.is_active = true
+         AND ($2::uuid IS NULL OR cm.company_id = $2::uuid)
+       ORDER BY cm.company_id
        LIMIT 1`,
       [userId, companyId ?? null],
     );
