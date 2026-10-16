@@ -82,7 +82,7 @@ describe('InventoryService', () => {
 
     expect(result.stockLedger).toEqual({ mismatchCount: 1, absoluteQuantityVariance: 2, reconciled: false });
     expect(result.legacyProductQuantities).toEqual({ mismatchCount: 0, absoluteQuantityVariance: 0, reconciled: true });
-    expect(result.valuation).toEqual({ basis: 'current_product_cost_price', stockCostValue: 120, inventoryAccountBalance: 100, variance: 20, reconciled: false });
+    expect(result.valuation).toEqual({ basis: 'weighted_average_cost', stockCostValue: 120, inventoryAccountBalance: 100, variance: 20, reconciled: false });
     expect(db.query).toHaveBeenCalledTimes(3);
     expect(db.query.mock.calls[0][0]).toContain('FULL OUTER JOIN movement_totals');
     expect(db.query.mock.calls[1][0]).toContain('products p');
@@ -168,7 +168,7 @@ describe('InventoryService', () => {
     expect(locks[0][1]?.[1]).toBe('warehouse-a');
     expect(locks[1][1]?.[1]).toBe('warehouse-b');
     expect(calls.filter(([sql]) => sql.includes('UPDATE inventory_stock_levels SET quantity=quantity-'))).toHaveLength(1);
-    expect(calls.filter(([sql]) => sql.includes('UPDATE inventory_stock_levels SET quantity=quantity+'))).toHaveLength(1);
+    expect(calls.filter(([sql]) => sql.includes('UPDATE inventory_stock_levels') && sql.includes('quantity=quantity+$1'))).toHaveLength(1);
     expect(calls.filter(([sql]) => sql.includes('INSERT INTO inventory_stock_movements'))).toHaveLength(2);
     expect(calls.some(([sql, params]) => sql.includes('UPDATE products SET stock_quantity') && params?.[0] === 'company-1')).toBe(true);
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
@@ -214,7 +214,7 @@ describe('InventoryService', () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
       if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
-      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '3', reserved_quantity: '1' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels')) return { rows: [{ quantity: '3', reserved_quantity: '1', average_unit_cost: '10' }], rowCount: 1 };
       if (sql.includes('INSERT INTO inventory_stock_movements')) return { rows: [{ id: 'receipt-movement', movement_type: params?.[3], quantity: params?.[4] }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
@@ -226,10 +226,26 @@ describe('InventoryService', () => {
 
     expect(result.id).toBe('receipt-movement');
     const calls = client.query.mock.calls as unknown as [string, unknown[]?][];
-    expect(calls.some(([sql, params]) => sql.includes('UPDATE inventory_stock_levels SET quantity=quantity+$1') && params?.[0] === 4)).toBe(true);
+    expect(calls.some(([sql, params]) => sql.includes('UPDATE inventory_stock_levels') && sql.includes('average_unit_cost=CASE') && params?.[0] === 4 && params?.[1] === 15)).toBe(true);
     expect(calls.some(([sql, params]) => sql.includes('INSERT INTO inventory_stock_movements') && params?.[3] === 'receipt' && params?.[4] === 4 && params?.[5] === 15)).toBe(true);
     expect(calls.some(([sql, params]) => sql.includes('UPDATE products SET stock_quantity') && params?.[0] === 'company-1')).toBe(true);
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'inventory.stock.receipt', entityId: 'receipt-movement' }));
+  });
+
+  it('uses existing weighted-average cost for stock issues', async () => {
+    const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
+      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '1', average_unit_cost: '7.25' }], rowCount: 1 };
+      if (sql.includes('INSERT INTO inventory_stock_movements')) return { rows: [{ id: 'issue-movement', movement_type: params?.[3], quantity: params?.[4], unit_cost: params?.[5] }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+
+    await service.issue(user, { productId: 'product-1', warehouseId: 'warehouse-1', quantity: 2 });
+
+    const calls = client.query.mock.calls as unknown as [string, unknown[]?][];
+    expect(calls.some(([sql, params]) => sql.includes('INSERT INTO inventory_stock_movements') && params?.[3] === 'issue' && params?.[4] === -2 && params?.[5] === 7.25)).toBe(true);
   });
 
   it('rejects issuing stock that is reserved and leaves stock and ledger untouched', async () => {
