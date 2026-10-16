@@ -267,7 +267,7 @@ export class InventoryService {
       await this.assertWarehouse(client,companyId,dto.warehouseId);
       await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
       const stock = await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
-        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+        'SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
         [companyId,dto.warehouseId,dto.productId],
       );
       const oldQuantity = Number(stock.rows[0].quantity);
@@ -310,7 +310,7 @@ export class InventoryService {
         [companyId,id,dto.productId],
       );
       const source=await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
-        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3',
+        'SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3',
         [companyId,dto.sourceWarehouseId,dto.productId],
       );
       if (Number(source.rows[0].quantity)-Number(source.rows[0].reserved_quantity)<dto.quantity) throw new BadRequestException('Insufficient available stock in the source warehouse.');
@@ -340,7 +340,7 @@ export class InventoryService {
       await this.assertWarehouse(client,companyId,dto.warehouseId);
       await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
       const stock=await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
-        'SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
+        'SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
         [companyId,dto.warehouseId,dto.productId],
       );
       if (type==='issue' && Number(stock.rows[0].quantity)-Number(stock.rows[0].reserved_quantity)<dto.quantity) throw new BadRequestException('Insufficient available stock.');
