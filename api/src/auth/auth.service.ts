@@ -214,7 +214,7 @@ export class AuthService {
       });
 
       // Re-check the account and active company membership whenever a refresh token is used.
-      const profile = await this.getUserProfile(payload.sub);
+      const profile = await this.getUserProfile(payload.sub, payload.companyId);
 
       const newPayload: JwtPayload = {
         sub: profile.userId,
@@ -233,7 +233,31 @@ export class AuthService {
     }
   }
 
-  async getUserProfile(userId: string): Promise<AuthenticatedUser> {
+  async switchCompany(userId: string, companyId: string): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
+    // The target company is accepted only after an active membership check for this user.
+    const profile = await this.getUserProfile(userId, companyId);
+    const payload: JwtPayload = {
+      sub: profile.userId,
+      email: profile.email,
+      companyId: profile.companyId,
+      branchId: profile.branchId,
+      role: profile.role,
+    };
+    return {
+      accessToken: this.issueToken(payload, false),
+      refreshToken: this.issueToken(payload, true),
+      user: {
+        userId: profile.userId,
+        email: profile.email,
+        fullName: profile.fullName,
+        companyId: profile.companyId,
+        branchId: profile.branchId,
+        role: profile.role,
+      },
+    };
+  }
+
+  async getUserProfile(userId: string, companyId?: string | null): Promise<AuthenticatedUser> {
     const result = await this.db.query<{
       id: string;
       email: string;
@@ -249,7 +273,7 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    const membership = await this.getUserMembership(user.id);
+    const membership = await this.getUserMembership(user.id, companyId);
     const permissions = await this.getUserPermissions(membership.role, user.id);
 
     return {
@@ -265,6 +289,7 @@ export class AuthService {
 
   private async getUserMembership(
     userId: string,
+    companyId?: string | null,
   ): Promise<{ companyId: string | null; branchId: string | null; role: string }> {
     const result = await this.db.query<{
       company_id: string | null;
@@ -274,8 +299,10 @@ export class AuthService {
       `SELECT company_id, branch_id, role
        FROM company_memberships
        WHERE user_id = $1 AND is_active = true
+         AND ($2::uuid IS NULL OR company_id = $2::uuid)
+       ORDER BY company_id
        LIMIT 1`,
-      [userId],
+      [userId, companyId ?? null],
     );
 
     if (result.rows.length === 0) {
