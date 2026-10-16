@@ -71,8 +71,14 @@ export class InvoicesService {
     return entry.rows[0].id;
   }
 
+  private async membershipFor(user: AuthenticatedUser) {
+    return user.companyId
+      ? this.memberships.getMembershipForCompany(user.userId, user.companyId)
+      : this.memberships.getMembership(user.userId);
+  }
+
   async list(user: AuthenticatedUser, search?: string, status?: string): Promise<InvoiceRow[]> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const conditions = ['i.company_id = $1'];
     const params: (string | number)[] = [membership.companyId];
 
@@ -97,7 +103,7 @@ export class InvoicesService {
   }
 
   async getSalesTeamSummary(user: AuthenticatedUser) {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query<{
       user_id: string; full_name: string; role: string; invoice_count: number;
       sales_total: string | number; collected_total: string | number; outstanding_total: string | number;
@@ -119,7 +125,7 @@ export class InvoicesService {
   }
 
   async getById(user: AuthenticatedUser, invoiceId: string): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query<InvoiceRow>(
       `${INVOICE_SELECT}
        WHERE i.company_id = $1 AND i.id = $2
@@ -147,7 +153,7 @@ export class InvoicesService {
   }
 
   async create(user: AuthenticatedUser, dto: CreateInvoiceDto): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.transaction(async (client) => {
       const customer = await client.query<{ id: string; name: string }>(
         'SELECT id, name FROM customers WHERE id = $1 AND company_id = $2 AND is_active = TRUE FOR SHARE',
@@ -248,7 +254,7 @@ export class InvoicesService {
     invoiceId: string,
     dto: CreateInvoicePaymentDto,
   ): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const paymentAmount = Math.round(dto.amount * 100) / 100;
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
       throw new BadRequestException('Payment amount must be greater than zero.');
@@ -307,7 +313,7 @@ export class InvoicesService {
     invoiceId: string,
     paymentId: string,
   ): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     await this.accounting.ensureDefaults(membership.companyId);
     const confirmed = await this.db.transaction(async (client) => {
       const paymentResult = await client.query<InvoicePaymentRow>(
@@ -469,7 +475,7 @@ export class InvoicesService {
     invoiceId: string,
     paymentId: string,
   ): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const payment = await this.db.transaction(async (client) => {
       const result = await client.query<InvoicePaymentRow>(
         `SELECT id, invoice_id, amount, method, reference, paid_at, notes, created_at, status, verified_at, reconciled_at, reconciliation_reference
@@ -499,7 +505,7 @@ export class InvoicesService {
     paymentId: string,
     statementReference: string,
   ): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const reference = statementReference.trim();
     if (!reference) throw new BadRequestException('Bank statement reference is required.');
     const payment = await this.db.transaction(async (client) => {
@@ -534,7 +540,7 @@ export class InvoicesService {
   }
 
   async updateStatus(user: AuthenticatedUser, invoiceId: string, status: string): Promise<InvoiceRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     await this.accounting.ensureDefaults(membership.companyId);
     if (!this.isInvoiceStatus(status)) throw new BadRequestException('Invalid invoice status.');
     if (status !== 'sent' && status !== 'cancelled') {
