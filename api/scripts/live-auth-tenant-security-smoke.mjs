@@ -6,7 +6,7 @@ const passwordB = process.env.OMEGA_SECURITY_TEST_B_PASSWORD;
 if (![emailA, passwordA, emailB, passwordB].every(v => typeof v === "string" && v.trim())) {
   throw new Error("Configure OMEGA_SECURITY_TEST_A_EMAIL, OMEGA_SECURITY_TEST_A_PASSWORD, OMEGA_SECURITY_TEST_B_EMAIL, and OMEGA_SECURITY_TEST_B_PASSWORD as GitHub Actions secrets. Never pass credentials on the command line.");
 }
-if (emailA.toLowerCase() === emailB.toLowerCase()) throw new Error("Security test requires two distinct verified development accounts.");
+if (emailA.trim().toLowerCase() === emailB.trim().toLowerCase()) throw new Error("Security test requires two distinct verified development accounts.");
 const checks = [];
 function assert(ok, message) {
   if (!ok) throw new Error(message);
@@ -22,7 +22,7 @@ async function request(method, path, body, token, expected = [200]) {
   let data;
   try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
   if (!expected.includes(response.status)) {
-    throw new Error(`${method} ${path}: expected HTTP ${expected.join("/")}, received ${response.status}; response=${JSON.stringify(data).slice(0, 250)}`);
+    throw new Error(`${method} ${path}: expected HTTP ${expected.join("/")} , received ${response.status}; response=${JSON.stringify(data).slice(0, 250)}`);
   }
   return data;
 }
@@ -32,7 +32,6 @@ async function login(email, password, label) {
   const trustedOrigin = (process.env.OMEGA_SECURITY_TEST_ORIGIN || "https://omega-solutions-git-development-pestria72-2760.vercel.app").replace(/\/$/, "");
   if (neonAuthBase) {
     // Neon Auth requires an allowed browser Origin even for this server-side smoke test.
-    // Use the existing trusted development preview; never send credentials without an Origin.
     const response = await fetch(`${neonAuthBase}/sign-in/email`, {
       method: "POST",
       headers: {
@@ -46,12 +45,19 @@ async function login(email, password, label) {
     let authResult;
     try { authResult = raw ? JSON.parse(raw) : null; } catch { authResult = raw; }
     if (response.status === 401) {
-      // These long-lived smoke-test accounts may predate Neon Auth migration. Keep tenant
-      // isolation coverage runnable through the legacy Omega login while clearly reporting
-      // that Neon Auth exchange was not exercised for this account. A separate verified
-      // Neon Auth account is still required to certify the identity-exchange flow.
-      result = await request("POST", "/auth/login", { email, password }, undefined, [200]);
-      assert(true, `${label}: authenticated through legacy Omega login (Neon Auth credentials not accepted; identity exchange not tested)`);
+      // Some historical accounts may use the legacy Omega password hash. Try that provider,
+      // but report both failures so a missing/stale secret cannot look like a tenant regression.
+      try {
+        result = await request("POST", "/auth/login", { email, password }, undefined, [200]);
+        assert(true, `${label}: authenticated through legacy Omega login (Neon Auth credentials not accepted; identity exchange not tested)`);
+      } catch (legacyError) {
+        const legacyMessage = legacyError instanceof Error ? legacyError.message : String(legacyError);
+        const legacyStatus = legacyMessage.match(/received HTTP (\d+)/)?.[1];
+        if (legacyStatus === "401") {
+          throw new Error(`${label}: sign-in rejected by both providers (Neon Auth HTTP 401; legacy Omega login HTTP 401). The configured email/password is not valid in either provider, or the account is missing/inactive. Provision and verify two separate development accounts, then update the matching GitHub Actions secrets. No tenant-isolation assertions ran; credentials were not logged.`);
+        }
+        throw new Error(`${label}: Neon Auth rejected sign-in (HTTP 401), and legacy fallback failed: ${legacyMessage}`);
+      }
     } else {
       if (!response.ok) throw new Error(`${label}: Neon Auth sign-in returned HTTP ${response.status}; response=${JSON.stringify(authResult).slice(0, 250)}`);
       const identityToken = authResult?.token ?? authResult?.data?.token;
@@ -81,11 +87,9 @@ async function main() {
   assert(meA.companyId === a.companyId, "Account A /auth/me matches its selected company");
   assert(meB.companyId === b.companyId, "Account B /auth/me matches its selected company");
 
-  // A client-supplied query parameter must not override the company in the signed token.
   const forgedContext = await request("GET", `/auth/me?companyId=${encodeURIComponent(b.companyId)}`, undefined, a.accessToken);
   assert(forgedContext.companyId === a.companyId, "client-supplied companyId cannot override Account A's token context");
 
-  // Prove row-level tenant isolation with one unique temporary record, and always try to clean it up.
   let temporaryCustomerId;
   try {
     const marker = `OMEGA-TENANT-SECURITY-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -102,7 +106,6 @@ async function main() {
     const bCustomers = Array.isArray(bCustomersResponse) ? bCustomersResponse : (bCustomersResponse.items || bCustomersResponse.data || []);
     assert(!bCustomers.some(c => c.id === temporaryCustomerId), "Account B cannot read or list Account A's customer");
 
-    // A user must not switch into a company where they have no active membership.
     await request("POST", "/auth/switch-company", { companyId: b.companyId }, a.accessToken, [400, 401, 403, 404]);
     assert(true, "Account A cannot switch into Account B's company");
     await request("POST", "/auth/switch-company", { companyId: a.companyId }, b.accessToken, [400, 401, 403, 404]);
