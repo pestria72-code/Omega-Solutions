@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../database.service.js';
-import { RegisterDto, LoginDto, RefreshDto } from './dto/auth.dto.js';
+import { RegisterDto, LoginDto, RefreshDto, NeonExchangeDto } from './dto/auth.dto.js';
+import { verifyNeonIdentityToken } from './neon-token-verifier.js';
 import type {
   AuthenticatedUser,
   JwtPayload,
@@ -64,6 +66,95 @@ export class AuthService {
     });
 
     return { userId, companyId: result.companyId };
+  }
+
+  async exchangeNeonIdentity(dto: NeonExchangeDto): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
+    const identity = await verifyNeonIdentityToken(dto.token);
+    // Read the verified identity from Neon Auth's own database schema; never trust an email supplied by the browser.
+    const neonUserResult = await this.db.query<{
+      id: string;
+      email: string;
+      email_verified: boolean;
+      name: string | null;
+    }>(
+      'SELECT id, email, email_verified, name FROM neon_auth."user" WHERE id = $1 LIMIT 1',
+      [identity.sub],
+    );
+    const neonUser = neonUserResult.rows[0];
+    if (!neonUser || neonUser.email_verified !== true || !neonUser.email) {
+      throw new UnauthorizedException('Verify your email address before accessing Omega.');
+    }
+    const email = neonUser.email.trim().toLowerCase();
+    const fullName = dto.fullName?.trim() || neonUser.name?.trim() || email.split('@')[0] || 'Omega User';
+
+    const existing = await this.db.query<{
+      id: string;
+      email: string;
+      full_name: string;
+      is_active: boolean;
+    }>(
+      'SELECT id, email, full_name, is_active FROM users WHERE lower(email) = $1',
+      [email],
+    );
+    let user = existing.rows[0];
+    let membership: { companyId: string | null; branchId: string | null; role: string };
+
+    if (user && !user.is_active) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    if (!user) {
+      const userId = uuidv4();
+      const passwordHash = await bcrypt.hash(randomBytes(48).toString('hex'), BCRYPT_ROUNDS);
+      const companyName = dto.companyName?.trim() || `${fullName}'s Company`;
+      const created = await this.db.transaction(async (client) => {
+        await client.query(
+          `INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [userId, email, passwordHash, fullName, dto.phone ?? null],
+        );
+        const company = await client.query<{ id: string }>(
+          `INSERT INTO companies (name, currency, timezone, is_active)
+           VALUES ($1, 'KES', 'Africa/Nairobi', true)
+           RETURNING id`,
+          [companyName],
+        );
+        const companyId = company.rows[0].id;
+        await client.query(
+          `INSERT INTO company_memberships (user_id, company_id, role, is_active)
+           VALUES ($1, $2, 'owner', true)`,
+          [userId, companyId],
+        );
+        return { companyId };
+      });
+      user = { id: userId, email, full_name: fullName, is_active: true };
+      membership = { companyId: created.companyId, branchId: null, role: 'owner' };
+    } else {
+      membership = await this.getUserMembership(user.id);
+      if (!membership.companyId) {
+        throw new UnauthorizedException('This account has no active company membership. Contact your administrator.');
+      }
+    }
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      companyId: membership.companyId,
+      branchId: membership.branchId,
+      role: membership.role,
+    };
+    return {
+      accessToken: this.issueToken(payload, false),
+      refreshToken: this.issueToken(payload, true),
+      user: {
+        userId: user.id,
+        email: user.email,
+        fullName: user.full_name,
+        companyId: membership.companyId,
+        branchId: membership.branchId,
+        role: membership.role,
+      },
+    };
   }
 
   async login(dto: LoginDto): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {

@@ -17,38 +17,48 @@ export interface RegisterResponse {
   userId: string;
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api";
+
+async function readError(res: Response, fallback: string): Promise<Error> {
+  const err = await res.json().catch(() => ({ message: fallback }));
+  const message = Array.isArray(err.message) ? err.message.join(", ") : err.message;
+  return new Error(message || fallback);
+}
+
 export async function login(email: string, password: string): Promise<LoginResponse> {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"}/auth/login`, {
+  const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: "Login failed" }));
-    throw new Error(err.message || "Invalid credentials");
-  }
+  if (!res.ok) throw await readError(res, "Invalid credentials");
   return res.json();
 }
 
 export async function register(email: string, password: string, fullName: string, phone?: string, companyName?: string): Promise<RegisterResponse> {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"}/auth/register`, {
+  const res = await fetch(`${API_BASE}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, fullName, phone, companyName }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: "Registration failed" }));
-    throw new Error(err.message || "Registration failed");
-  }
+  if (!res.ok) throw await readError(res, "Registration failed");
+  return res.json();
+}
+
+export async function exchangeNeonToken(token: string, fullName: string, phone?: string, companyName?: string): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/auth/neon/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, fullName, phone, companyName }),
+  });
+  if (!res.ok) throw await readError(res, "Could not finish setting up your Omega account");
   return res.json();
 }
 
 export async function getCurrentUser(token: string): Promise<AuthenticatedUser> {
-  const res = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"}/auth/me`, {
+  const res = await fetch(`${API_BASE}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) {
-    throw new Error("Failed to fetch user profile");
-  }
+  if (!res.ok) throw new Error("Failed to fetch user profile");
   return res.json();
 }

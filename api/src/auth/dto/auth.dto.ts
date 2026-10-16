@@ -38,3 +38,27 @@ export class RefreshDto {
   @IsString()
   refreshToken!: string;
 }
+
+export class NeonExchangeDto {
+  @IsString()
+  @MinLength(20)
+  @MaxLength(8192)
+  token!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  @IsOptional()
+  fullName?: string;
+
+  @IsString()
+  @MaxLength(20)
+  @IsOptional()
+  phone?: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  @IsOptional()
+  companyName?: string;
+}
