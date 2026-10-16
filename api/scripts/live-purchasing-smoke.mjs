@@ -70,5 +70,5 @@ try {
  ok(received.status==="received"&&Number(received.items?.[0]?.received_quantity)===5,"second receipt completes order");
  const finalReceiptJournals=(await req("GET","/accounting/journals",undefined,token)).data.filter(x=>x.source_type==="purchase_order_receipt"&&[partial.receiptId,received.receiptId].includes(x.source_id));
  ok(finalReceiptJournals.length===2&&finalReceiptJournals.every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005)&&Math.abs(finalReceiptJournals.reduce((sum,x)=>sum+Number(x.total_debits),0)-500)<0.005,"both receipt journals balance and capitalize KES 500 total inventory");
- console.log(JSON.stringify({ok:true,email,userId:reg.userId,companyId:reg.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,checks},null,2));
-} catch(e) { console.error(JSON.stringify({ok:false,email,error:String(e),checks},null,2));process.exitCode=1; }
+ console.log(JSON.stringify({ok:true,email:login.email,userId:login.user.userId,companyId:login.user.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,checks},null,2));
+} catch(e) { console.error(JSON.stringify({ok:false,error:String(e),checks},null,2));process.exitCode=1; }
