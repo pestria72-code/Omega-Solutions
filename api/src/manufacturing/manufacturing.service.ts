@@ -122,7 +122,7 @@ export class ManufacturingService {
    if(!materials.rows.length)throw new BadRequestException('Production order has no material requirements.');
    for(const material of materials.rows){
     await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) VALUES($1,$2,$3,0,0,0) ON CONFLICT(warehouse_id,product_id) DO NOTHING`,[companyId,order.rows[0].warehouse_id,material.material_product_id]);
-    const reserved=await client.query<{id:string}>(`UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4 AND quantity-reserved_quantity >= $1 RETURNING id,average_unit_cost`,[material.required_quantity,companyId,order.rows[0].warehouse_id,material.material_product_id]);
+    const reserved=await client.query<{id:string;average_unit_cost:string|number}>(`UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4 AND quantity-reserved_quantity >= $1 RETURNING id,average_unit_cost`,[material.required_quantity,companyId,order.rows[0].warehouse_id,material.material_product_id]);
     if(!reserved.rows[0])throw new BadRequestException('Insufficient available stock for material '+material.material_product_id+'; production was not started.');
     await client.query(`UPDATE manufacturing_order_materials SET reserved_quantity=required_quantity,unit_cost=CASE WHEN $4::numeric>0 THEN $4 ELSE unit_cost END WHERE company_id=$1 AND production_order_id=$2 AND material_product_id=$3`,[companyId,id,material.material_product_id,Number(reserved.rows[0].average_unit_cost??0)]);
    }
