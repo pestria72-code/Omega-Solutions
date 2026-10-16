@@ -94,7 +94,13 @@ export class PurchaseOrdersService {
         const line=lineRes.rows[0];if(!line)throw new NotFoundException('Purchase order line not found.');
         if(r.quantity>Number(line.quantity)-Number(line.received_quantity)+0.0000001)throw new BadRequestException(`Receipt exceeds remaining quantity for "${line.product_name}".`);
         receiptValue += Math.round(r.quantity * Number(line.unit_cost) * 100) / 100;
-        await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) SELECT $1,$2,$3,$4,0,p.reorder_level FROM products p WHERE p.id=$3 AND p.company_id=$1 ON CONFLICT(warehouse_id,product_id) DO UPDATE SET quantity=inventory_stock_levels.quantity+EXCLUDED.quantity,updated_at=NOW()`,[m.companyId,dto.warehouseId,line.product_id,r.quantity]);
+        await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level,average_unit_cost)
+        SELECT $1,$2,$3,$4,0,p.reorder_level,$5 FROM products p WHERE p.id=$3 AND p.company_id=$1
+        ON CONFLICT(warehouse_id,product_id) DO UPDATE SET
+          average_unit_cost=CASE WHEN inventory_stock_levels.quantity+EXCLUDED.quantity>0
+            THEN ((inventory_stock_levels.quantity*inventory_stock_levels.average_unit_cost)+(EXCLUDED.quantity*EXCLUDED.average_unit_cost))/(inventory_stock_levels.quantity+EXCLUDED.quantity)
+            ELSE EXCLUDED.average_unit_cost END,
+          quantity=inventory_stock_levels.quantity+EXCLUDED.quantity,updated_at=NOW()`,[m.companyId,dto.warehouseId,line.product_id,r.quantity,Number(line.unit_cost)]);
         await client.query(`INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by) VALUES($1,$2,$3,'receipt',$4,$5,$6,$7,$8)`,[m.companyId,line.product_id,dto.warehouseId,r.quantity,Number(line.unit_cost),dto.reference??po.order_number,dto.notes??`Received against purchase order ${po.order_number}`,user.userId]);
         await client.query('UPDATE purchase_order_items SET received_quantity=received_quantity+$1 WHERE id=$2 AND company_id=$3',[r.quantity,line.id,m.companyId]);
         await client.query('UPDATE products SET stock_quantity=(SELECT COALESCE(SUM(quantity),0) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),updated_at=NOW() WHERE id=$2 AND company_id=$1',[m.companyId,line.product_id]);
