@@ -17,6 +17,7 @@ on:
       - "api/src/accounting/**"
       - "api/src/purchase-orders/**"
       - "api/src/inventory/**"
+      - "api/src/products/**"
       - "api/src/employees/**"
       - "api/src/payroll/**"
       - "api/src/expenses/**"
