@@ -6,11 +6,14 @@ describe('SalesOrdersService inventory fulfilment', () => {
   let service: SalesOrdersService;
   let db: { query: ReturnType<typeof vi.fn>; transaction: ReturnType<typeof vi.fn> };
   let client: { query: ReturnType<typeof vi.fn> };
-  let memberships: { getMembership: ReturnType<typeof vi.fn> };
+  let memberships: { getMembership: ReturnType<typeof vi.fn>; getMembershipForCompany: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-1' }) };
+    memberships = {
+      getMembership: vi.fn().mockResolvedValue({ companyId: 'company-1' }),
+      getMembershipForCompany: vi.fn().mockResolvedValue({ companyId: 'company-2' }),
+    };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     client = {
       query: vi.fn(async (sql: string) => {
@@ -32,6 +35,14 @@ describe('SalesOrdersService inventory fulfilment', () => {
       transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) => callback(client)),
     };
     service = new SalesOrdersService(db as any, memberships as any, audit as any);
+  });
+
+  it('uses the company selected in the authenticated context for sales-order reads', async () => {
+    await service.list({ ...user, companyId: 'company-2' } as any);
+
+    expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-1', 'company-2');
+    expect(memberships.getMembership).not.toHaveBeenCalled();
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('WHERE so.company_id = $1'), ['company-2']);
   });
 
   it('deducts available stock, records an issue movement, and marks the order fulfilled atomically', async () => {
