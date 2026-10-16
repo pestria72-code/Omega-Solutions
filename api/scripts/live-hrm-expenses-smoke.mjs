@@ -1,8 +1,6 @@
+import { neonTestLogin } from "./neon-test-auth.mjs";
 const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api.onrender.com/api").replace(/\/$/, "");
 const stamp = Date.now();
-const email = `omega-hrm-e2e-${stamp}@example.com`;
-const password = `E2e-${crypto.randomUUID()}-9!`;
-const companyName = `Omega HRM E2E ${stamp}`;
 // Authenticated live regression for HRM, expenses, accounting, and CRM.
 const checks = [];
 async function req(method, path, body, token, expected = [200, 201]) {
@@ -31,15 +29,11 @@ try {
   }
   if (!health) throw Error(`API health/database did not recover: ${String(lastError || "unexpected health response")}`);
   ok(health.data.status === "ok" && health.data.database === "connected", "health and database connection");
-  const registration = (await req("POST", "/auth/register", {
-    email, password, fullName: "Omega HRM E2E Runner", phone: "+254700000000", companyName,
-  }, null, [201])).data;
-  ok(!!registration.userId && !!registration.companyId, "register isolated temporary tenant");
-  const login = (await req("POST", "/auth/login", { email, password })).data;
-  const token = login.accessToken;
-  ok(!!token && !!login.refreshToken, "login and token pair");
+  const login = await neonTestLogin(base, { slot: "A", companyName: `Omega HRM E2E ${stamp}` });
+  const token = login.token;
+  ok(!!token && !!login.refreshToken, "verified Neon Auth identity exchanged for Omega tokens");
   const identity = (await req("GET", "/auth/me", undefined, token)).data;
-  ok(identity.userId === registration.userId && identity.companyId === registration.companyId, "authenticated tenant identity");
+  ok(identity.userId === login.user.userId && identity.companyId === login.user.companyId, "authenticated tenant identity");
 
   const employee = (await req("POST", "/employees", {
     employeeNumber: `E2E-${stamp}`, firstName: "Test", lastName: "Employee",
