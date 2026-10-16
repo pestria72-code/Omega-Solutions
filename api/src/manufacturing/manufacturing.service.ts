@@ -104,7 +104,7 @@ export class ManufacturingService {
    for(const line of lines.rows){
     const required=Number(line.quantity)*dto.plannedQuantity/Number(bom.rows[0].output_quantity)*(1+Number(line.waste_percent)/100);
     await client.query(`INSERT INTO manufacturing_order_materials(company_id,production_order_id,material_product_id,required_quantity,unit_cost)
-     SELECT $1,$2,p.id,$4,p.cost_price FROM products p WHERE p.company_id=$1 AND p.id=$3`,[companyId,created.rows[0].id,line.material_product_id,required]);
+     SELECT $1,$2,p.id,$4,COALESCE(NULLIF(s.average_unit_cost,0),p.cost_price) FROM products p LEFT JOIN inventory_stock_levels s ON s.company_id=p.company_id AND s.product_id=p.id AND s.warehouse_id=$5 WHERE p.company_id=$1 AND p.id=$3`,[companyId,created.rows[0].id,line.material_product_id,required,dto.warehouseId]);
    }
    return created.rows[0].id;
   });
@@ -122,9 +122,9 @@ export class ManufacturingService {
    if(!materials.rows.length)throw new BadRequestException('Production order has no material requirements.');
    for(const material of materials.rows){
     await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) VALUES($1,$2,$3,0,0,0) ON CONFLICT(warehouse_id,product_id) DO NOTHING`,[companyId,order.rows[0].warehouse_id,material.material_product_id]);
-    const reserved=await client.query<{id:string}>(`UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4 AND quantity-reserved_quantity >= $1 RETURNING id`,[material.required_quantity,companyId,order.rows[0].warehouse_id,material.material_product_id]);
+    const reserved=await client.query<{id:string}>(`UPDATE inventory_stock_levels SET reserved_quantity=reserved_quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4 AND quantity-reserved_quantity >= $1 RETURNING id,average_unit_cost`,[material.required_quantity,companyId,order.rows[0].warehouse_id,material.material_product_id]);
     if(!reserved.rows[0])throw new BadRequestException('Insufficient available stock for material '+material.material_product_id+'; production was not started.');
-    await client.query(`UPDATE manufacturing_order_materials SET reserved_quantity=required_quantity WHERE company_id=$1 AND production_order_id=$2 AND material_product_id=$3`,[companyId,id,material.material_product_id]);
+    await client.query(`UPDATE manufacturing_order_materials SET reserved_quantity=required_quantity,unit_cost=CASE WHEN $4::numeric>0 THEN $4 ELSE unit_cost END WHERE company_id=$1 AND production_order_id=$2 AND material_product_id=$3`,[companyId,id,material.material_product_id,Number(reserved.rows[0].average_unit_cost??0)]);
    }
    await client.query(`UPDATE manufacturing_production_orders SET status='in_progress',actual_start_at=NOW(),material_reserved_at=NOW(),updated_at=NOW() WHERE company_id=$1 AND id=$2`,[companyId,id]);
    return (await client.query(`SELECT * FROM manufacturing_production_orders WHERE company_id=$1 AND id=$2`,[companyId,id])).rows[0];
@@ -168,7 +168,7 @@ export class ManufacturingService {
    for(const material of materials.rows){
     const required=Number(material.required_quantity);
     if(Number(material.reserved_quantity)<required||Number(material.consumed_quantity)>0)throw new ConflictException('Material reservation state is inconsistent; completion was stopped.');
-    const stock=await client.query<{quantity:string|number;reserved_quantity:string|number}>(`SELECT quantity,reserved_quantity FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE`,[companyId,order.rows[0].warehouse_id,material.material_product_id]);
+    const stock=await client.query<{quantity:string|number;reserved_quantity:string|number;average_unit_cost:string|number}>(`SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE`,[companyId,order.rows[0].warehouse_id,material.material_product_id]);
     if(!stock.rows[0]||Number(stock.rows[0].quantity)<required||Number(stock.rows[0].reserved_quantity)<required)throw new ConflictException('Reserved material stock no longer matches the production requirement.');
     await client.query(`UPDATE inventory_stock_levels SET quantity=quantity-$1,reserved_quantity=reserved_quantity-$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4`,[required,companyId,order.rows[0].warehouse_id,material.material_product_id]);
     await client.query(`INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by) VALUES($1,$2,$3,'issue',$4,$5,$6,$7,$8)`,[companyId,material.material_product_id,order.rows[0].warehouse_id,-required,material.unit_cost,'MO-'+id,'Material consumed by production order',user.userId]);
@@ -180,10 +180,14 @@ export class ManufacturingService {
    const totalProductionCost=totalMaterialCost+Number(additionalCosts.rows[0]?.total??0);
    const finishedQuantity=Number(order.rows[0].planned_quantity);
    await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) VALUES($1,$2,$3,0,0,0) ON CONFLICT(warehouse_id,product_id) DO NOTHING`,[companyId,order.rows[0].warehouse_id,order.rows[0].product_id]);
-   await client.query(`UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4`,[finishedQuantity,companyId,order.rows[0].warehouse_id,order.rows[0].product_id]);
    const unitCost=finishedQuantity>0?totalProductionCost/finishedQuantity:Number(order.rows[0].product_cost);
+   const finishedStock=await client.query<{average_unit_cost:string|number}>(`UPDATE inventory_stock_levels
+    SET average_unit_cost=CASE WHEN quantity+$1>0 THEN ((quantity*average_unit_cost)+($1*$2))/(quantity+$1) ELSE $2 END,
+        quantity=quantity+$1,updated_at=NOW()
+    WHERE company_id=$3 AND warehouse_id=$4 AND product_id=$5 RETURNING average_unit_cost`,[finishedQuantity,unitCost,companyId,order.rows[0].warehouse_id,order.rows[0].product_id]);
+   const weightedAverageFinishedCost=Number(finishedStock.rows[0]?.average_unit_cost??unitCost);
    await client.query(`INSERT INTO inventory_stock_movements(company_id,product_id,warehouse_id,movement_type,quantity,unit_cost,reference,notes,created_by) VALUES($1,$2,$3,'receipt',$4,$5,$6,$7,$8)`,[companyId,order.rows[0].product_id,order.rows[0].warehouse_id,finishedQuantity,unitCost,'MO-'+id,'Finished goods received from production order',user.userId]);
-   await client.query(`UPDATE products SET stock_quantity=COALESCE((SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0),cost_price=$3 WHERE company_id=$1 AND id=$2`,[companyId,order.rows[0].product_id,unitCost]);
+   await client.query(`UPDATE products SET stock_quantity=COALESCE((SELECT SUM(quantity) FROM inventory_stock_levels WHERE company_id=$1 AND product_id=$2),0),cost_price=$3 WHERE company_id=$1 AND id=$2`,[companyId,order.rows[0].product_id,weightedAverageFinishedCost]);
    if(totalMaterialCost>0||totalProductionCost>0){
     if(totalMaterialCost>0) await this.postJournal(client,{companyId,description:`Materials consumed for production order ${id}`,sourceType:'manufacturing_material_consumption',sourceId:id,userId:user.userId,amount:totalMaterialCost,debitSystem:'work_in_progress',creditSystem:'inventory'});
     if(totalProductionCost>0) await this.postJournal(client,{companyId,description:`Finished goods received from production order ${id}`,sourceType:'manufacturing_finished_goods',sourceId:id,userId:user.userId,amount:totalProductionCost,debitSystem:'inventory',creditSystem:'work_in_progress'});
