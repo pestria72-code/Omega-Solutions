@@ -2,13 +2,6 @@ name: Payment regression smoke test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - development
-    paths:
-      - "api/scripts/neon-test-auth.mjs"
-      - "api/scripts/live-payment-regression-smoke.mjs"
-      - ".github/workflows/payment-regression-smoke.yml"
 
 permissions:
   contents: read
