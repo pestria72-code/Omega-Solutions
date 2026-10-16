@@ -15,6 +15,7 @@ if (configuredBase !== expectedBase) {
 const base = configuredBase;
 const stamp = Date.now();
 const testNationalId = String(randomInt(10000000, 99999999));
+const testKraPin = `A${randomInt(100000000, 999999999)}Z`;
 const testEmployeeNumber = `PAYE2E-${stamp}-${randomUUID().slice(0, 8)}`;
 const checks = [];
 let companyId;
@@ -61,7 +62,7 @@ try {
     firstName: "Test",
     lastName: "Payroll",
     nationalId: testNationalId,
-    kraPin: "A123456789Z",
+    kraPin: testKraPin,
     nssfNumber: `NSSF${stamp}`,
     shaNumber: `SHA${stamp}`,
     nhifNumber: `NHIF${stamp}`,
@@ -75,7 +76,7 @@ try {
   ok(emp.has_kra_pin === true && emp.has_nssf_number === true && emp.has_sha_number === true && emp.has_nhif_number === true,
     "statutory presence flags returned");
 
-  const sensitive = [testNationalId, "A123456789Z", `NSSF${stamp}`, `SHA${stamp}`, `NHIF${stamp}`];
+  const sensitive = [testNationalId, testKraPin, `NSSF${stamp}`, `SHA${stamp}`, `NHIF${stamp}`];
   ok(sensitive.every(value => !JSON.stringify(emp).includes(value)), "employee create response does not expose statutory identifiers");
 
   const directory = await req("GET", "/employees", undefined, token);
