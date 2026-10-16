@@ -24,8 +24,14 @@ export class CustomersService {
     private readonly audit: AuditService,
   ) {}
 
+  private async membershipFor(user: AuthenticatedUser) {
+    return user.companyId
+      ? this.memberships.getMembershipForCompany(user.userId, user.companyId)
+      : this.memberships.getMembership(user.userId);
+  }
+
   async list(user: AuthenticatedUser, search?: string): Promise<CustomerRow[]> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
 
     if (search) {
       const result = await this.db.query<CustomerRow>(
@@ -46,12 +52,12 @@ export class CustomersService {
   }
 
   async getById(user: AuthenticatedUser, customerId: string): Promise<CustomerRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     return this.getByIdInternal(membership.companyId, customerId);
   }
 
   async create(user: AuthenticatedUser, dto: CreateCustomerDto): Promise<CustomerRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
 
     if (dto.email) {
       const existing = await this.db.query<{ id: string }>(
@@ -104,7 +110,7 @@ export class CustomersService {
     customerId: string,
     dto: UpdateCustomerDto,
   ): Promise<CustomerRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const existing = await this.getByIdInternal(membership.companyId, customerId);
 
     if (dto.email && dto.email !== existing.email) {
@@ -179,7 +185,7 @@ export class CustomersService {
   }
 
   async delete(user: AuthenticatedUser, customerId: string): Promise<void> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const existing = await this.getByIdInternal(membership.companyId, customerId);
 
     await this.db.query(
