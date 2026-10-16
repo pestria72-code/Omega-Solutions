@@ -1,3 +1,4 @@
+import { neonTestLogin } from "./neon-test-auth.mjs";
 // Authenticated payroll smoke test for the Omega development API only.
 // This creates a dedicated test tenant, employee, pay settings and an unapproved draft run.
 // It never approves or posts payroll. The created records are intentionally retained for audit.
@@ -12,8 +13,6 @@ if (configuredBase !== expectedBase) {
 }
 const base = configuredBase;
 const stamp = Date.now();
-const email = `payroll-e2e-${stamp}@example.com`;
-const password = `E2e-${crypto.randomUUID()}-9!`;
 const checks = [];
 let companyId;
 let employeeId;
@@ -47,22 +46,12 @@ try {
   const health = await req("GET", "/health");
   ok(health.status === "ok" && health.database === "connected", "development API and database healthy");
 
-  const reg = await req("POST", "/auth/register", {
-    email,
-    password,
-    fullName: "Payroll E2E Runner",
-    phone: "+254700000000",
-    companyName: `Omega Payroll E2E ${stamp}`
-  }, null, [201]);
-  companyId = reg.companyId;
-  ok(!!reg.userId && !!companyId, "dedicated test tenant registered");
-
-  const login = await req("POST", "/auth/login", { email, password });
-  const token = login.accessToken;
-  ok(!!token, "test account authenticated");
-
+  const login = await neonTestLogin(base, { slot: "A", companyName: `Omega Payroll E2E ${stamp}` });
+  const token = login.token;
+  ok(!!token && !!login.refreshToken, "existing verified test account authenticated and exchanged");
   const identity = await req("GET", "/auth/me", undefined, token);
-  ok(identity.companyId === companyId, "tenant identity verified");
+  companyId = identity.companyId;
+  ok(typeof companyId === "string" && companyId.length > 0, "existing test account tenant identity verified");
 
   const emp = await req("POST", "/employees", {
     employeeNumber: `PAYE2E-${stamp}`,
