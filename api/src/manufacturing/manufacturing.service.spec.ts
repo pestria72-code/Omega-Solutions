@@ -79,7 +79,7 @@ describe('ManufacturingService',()=>{
   const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
    if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:0,bom_id:'bom-1',product_id:'finished-1',product_cost:0}],rowCount:1};
    if(sql.includes('SELECT material_product_id,required_quantity,reserved_quantity,consumed_quantity,unit_cost'))return {rows:[{material_product_id:'material-1',required_quantity:2,reserved_quantity:2,consumed_quantity:0,unit_cost:50}],rowCount:1};
-   if(sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2}],rowCount:1};
+   if(sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2,average_unit_cost:50}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:journalNumber+1}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:`journal-${++journalNumber}`}],rowCount:1};
    if(sql.includes('SELECT id FROM chart_of_accounts'))return {rows:[{id:params[1]==='inventory'?'account-inventory':'account-wip'}],rowCount:1};
@@ -107,7 +107,7 @@ describe('ManufacturingService',()=>{
   const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
    if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status,warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:0,bom_id:'bom-1',product_id:'finished-1',product_cost:0}],rowCount:1};
    if(sql.includes('SELECT material_product_id,required_quantity,reserved_quantity,consumed_quantity,unit_cost'))return {rows:[{material_product_id:'material-1',required_quantity:2,reserved_quantity:2,consumed_quantity:0,unit_cost:50}],rowCount:1};
-   if(sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2}],rowCount:1};
+   if(sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2,average_unit_cost:50}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:journalNumber+1}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:`journal-${++journalNumber}`}],rowCount:1};
    if(sql.includes('SELECT id FROM chart_of_accounts'))return {rows:[{id:params[1]==='inventory'?'account-inventory':'account-wip'}],rowCount:1};
@@ -153,7 +153,7 @@ describe('ManufacturingService',()=>{
   const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
    if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:0,bom_id:'bom-1',product_id:'finished-1',product_cost:0}],rowCount:1};
    if(sql.includes('SELECT material_product_id,required_quantity,reserved_quantity,consumed_quantity,unit_cost'))return {rows:[{material_product_id:'material-1',required_quantity:2,reserved_quantity:2,consumed_quantity:0,unit_cost:50}],rowCount:1};
-   if(sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2}],rowCount:1};
+   if(sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2,average_unit_cost:50}],rowCount:1};
    if(sql.includes('SELECT COALESCE(SUM(amount),0)::numeric AS total FROM manufacturing_order_costs'))return {rows:[{total:250}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:1}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:'journal-1'}],rowCount:1};
@@ -199,7 +199,7 @@ describe('ManufacturingService',()=>{
   const client={query:vi.fn().mockImplementation(async(sql:string,params:unknown[] = [])=>{
    if(sql.includes('SELECT o.id,o.status,o.warehouse_id,o.planned_quantity,o.produced_quantity,o.bom_id'))return {rows:[{id:'order-1',status:'in_progress',warehouse_id:'warehouse-1',planned_quantity:1,produced_quantity:0,bom_id:'bom-1',product_id:'finished-1',product_cost:0}],rowCount:1};
    if(sql.includes('SELECT material_product_id,required_quantity,reserved_quantity,consumed_quantity,unit_cost'))return {rows:[{material_product_id:'material-1',required_quantity:2,reserved_quantity:2,consumed_quantity:0,unit_cost:50}],rowCount:1};
-   if(sql.includes('SELECT quantity,reserved_quantity FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2}],rowCount:1};
+   if(sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels'))return {rows:[{quantity:10,reserved_quantity:2,average_unit_cost:50}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entry_sequences'))return {rows:[{next_number:1}],rowCount:1};
    if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:'journal-1'}],rowCount:1};
    if(sql.includes('SELECT id FROM chart_of_accounts'))return {rows:params[1]==='work_in_progress'?[{id:'account-wip'}]:[],rowCount:params[1]==='work_in_progress'?1:0};
