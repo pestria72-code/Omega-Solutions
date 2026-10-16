@@ -21,8 +21,14 @@ const SELECT_ORDERS = `
 export class SalesOrdersService {
   constructor(private readonly db: DatabaseService, private readonly memberships: MembershipsService, private readonly audit: AuditService) {}
 
+  private async membershipFor(user: AuthenticatedUser) {
+    return user.companyId
+      ? this.memberships.getMembershipForCompany(user.userId, user.companyId)
+      : this.memberships.getMembership(user.userId);
+  }
+
   async list(user: AuthenticatedUser): Promise<SalesOrderRow[]> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query<SalesOrderRow>(
       `${SELECT_ORDERS} WHERE so.company_id = $1 GROUP BY so.id, c.name, q.quotation_number ORDER BY so.created_at DESC`,
       [membership.companyId],
@@ -31,7 +37,7 @@ export class SalesOrdersService {
   }
 
   async getById(user: AuthenticatedUser, id: string): Promise<SalesOrderRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query<SalesOrderRow>(
       `${SELECT_ORDERS} WHERE so.company_id = $1 AND so.id = $2 GROUP BY so.id, c.name, q.quotation_number`,
       [membership.companyId, id],
@@ -48,7 +54,7 @@ export class SalesOrdersService {
   }
 
   async createFromQuotation(user: AuthenticatedUser, quotationId: string): Promise<SalesOrderRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     let createdNewOrder = false;
     const orderId = await this.db.transaction(async (client) => {
       const result = await client.query<Record<string, unknown>>(
@@ -101,7 +107,7 @@ export class SalesOrdersService {
   }
 
   async updateStatus(user: AuthenticatedUser, id: string, next: string, warehouseId?: string): Promise<SalesOrderRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     let fromStatus: SalesOrderStatus = 'confirmed';
     const transition = await this.db.transaction(async (client) => {
       const current = await client.query<{ id: string; status: string; order_number: string }>(
