@@ -6,6 +6,7 @@ on:
     branches:
       - development
     paths:
+      - "api/scripts/neon-test-auth.mjs"
       - "api/scripts/live-purchasing-smoke.mjs"
       - "api/scripts/live-payment-regression-smoke.mjs"
       - "api/scripts/live-hrm-expenses-smoke.mjs"
@@ -50,21 +51,37 @@ jobs:
       - name: Verify live authenticated purchasing and accounting workflow
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
         run: node api/scripts/live-purchasing-smoke.mjs
 
       - name: Verify live payment, reconciliation, POS and tenant-isolation workflow
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
         run: node api/scripts/live-payment-regression-smoke.mjs
 
       - name: Verify live authenticated HRM, expenses, CRM and trial balance
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
         run: node api/scripts/live-hrm-expenses-smoke.mjs
 
       - name: Verify employee statutory privacy and draft payroll calculations
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
           OMEGA_PAYROLL_SMOKE_CONFIRM_DEVELOPMENT: YES
         run: node api/scripts/live-payroll-smoke.mjs
 
