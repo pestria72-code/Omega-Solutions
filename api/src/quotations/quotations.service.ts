@@ -24,8 +24,14 @@ export class QuotationsService {
     private readonly audit: AuditService,
   ) {}
 
+  private async membershipFor(user: AuthenticatedUser) {
+    return user.companyId
+      ? this.memberships.getMembershipForCompany(user.userId, user.companyId)
+      : this.memberships.getMembership(user.userId);
+  }
+
   async list(user: AuthenticatedUser, search?: string, status?: string): Promise<QuotationRow[]> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const conditions = ['q.company_id = $1'];
     const params: (string | number)[] = [membership.companyId];
     if (search?.trim()) {
@@ -46,7 +52,7 @@ export class QuotationsService {
   }
 
   async getById(user: AuthenticatedUser, id: string): Promise<QuotationRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const result = await this.db.query<QuotationRow>(
       `${SELECT_QUOTATIONS} WHERE q.company_id = $1 AND q.id = $2 GROUP BY q.id, c.name`,
       [membership.companyId, id],
@@ -64,7 +70,7 @@ export class QuotationsService {
   }
 
   async create(user: AuthenticatedUser, dto: CreateQuotationDto): Promise<QuotationRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     if (dto.validUntil < dto.issueDate) throw new BadRequestException('Valid-until date cannot be before issue date.');
 
     const created = await this.db.transaction(async (client) => {
@@ -130,7 +136,7 @@ export class QuotationsService {
   }
 
   async updateStatus(user: AuthenticatedUser, id: string, nextStatus: string): Promise<QuotationRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.membershipFor(user);
     const current = await this.db.query<QuotationRow>(
       'SELECT id, company_id, status FROM quotations WHERE id = $1 AND company_id = $2',
       [id, membership.companyId],
