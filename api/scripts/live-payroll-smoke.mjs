@@ -17,6 +17,8 @@ const stamp = Date.now();
 const testNationalId = String(randomInt(10000000, 99999999));
 const testKraPin = `A${randomInt(100000000, 999999999)}Z`;
 const testEmployeeNumber = `PAYE2E-${stamp}-${randomUUID().slice(0, 8)}`;
+const payrollPeriodOptions = [];
+const existingPeriodKeys = new Set();
 const checks = [];
 let companyId;
 let employeeId;
@@ -94,18 +96,33 @@ try {
     qualifyingMortgageInterest: 0,
     eligibleInsurancePremiums: 0,
     residentForTaxPurposes: true,
-    effectiveFrom: "2026-09-01"
+    effectiveFrom: payrollPeriod.start
   }, token, [200, 201]);
   ok(settings.employee_id === employeeId && Number(settings.monthly_basic_salary) === 100000,
     "KES 100,000 monthly salary settings saved");
 
+  const existingRunsResponse = await req("GET", "/payroll/runs", undefined, token);
+  const existingRuns = Array.isArray(existingRunsResponse) ? existingRunsResponse : (existingRunsResponse.items || existingRunsResponse.data || []);
+  for (const existingRun of existingRuns) existingPeriodKeys.add(`${String(existingRun.period_start).slice(0, 10)}|${String(existingRun.period_end).slice(0, 10)}`);
+  const now = new Date();
+  for (let offset = 0; offset < 18; offset++) {
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    const start = first.toISOString().slice(0, 10);
+    const end = last.toISOString().slice(0, 10);
+    if (start < "2026-09-01" || existingPeriodKeys.has(`${start}|${end}`)) continue;
+    payrollPeriodOptions.push({ start, end, label: first.toLocaleString("en", { month: "long", timeZone: "UTC" }) + ` ${first.getUTCFullYear()}` });
+    break;
+  }
+  const payrollPeriod = payrollPeriodOptions[0];
+  if (!payrollPeriod) throw new Error("No unused monthly payroll period is available in the next 18 months for this test company.");
   const run = await req("POST", "/payroll/runs", {
-    periodStart: "2026-09-01",
-    periodEnd: "2026-09-30"
+    periodStart: payrollPeriod.start,
+    periodEnd: payrollPeriod.end
   }, token, [200, 201]);
   payrollRunId = run.id;
   ok(!!payrollRunId && run.status === "draft" && Number(run.employee_count) === 1,
-    "September 2026 payroll created as a one-employee draft");
+    `${payrollPeriod.label} payroll created as a one-employee draft`);
 
   const details = await req("GET", `/payroll/runs/${payrollRunId}`, undefined, token);
   ok(details.status === "draft" && details.approved_at == null && details.posted_at == null && details.journal_entry_id == null,
