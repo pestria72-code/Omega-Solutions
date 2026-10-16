@@ -68,6 +68,9 @@ export class PayrollService {
   const expectedStart=`${dto.periodStart.slice(0,7)}-01`;
   const expectedEnd=new Date(Date.UTC(periodYear,periodMonth,0)).toISOString().slice(0,10);
   if(dto.periodStart!==expectedStart||dto.periodEnd!==expectedEnd||dto.periodStart.slice(0,7)!==dto.periodEnd.slice(0,7))throw new BadRequestException('Payroll periods must cover one complete calendar month, from its first through its last day.');
+  // The current calculator implements NSSF Year 4 (effective February 2026) only.
+  // Never silently apply those current rules to an earlier historical payroll period.
+  if(dto.periodStart<'2026-02-01')throw new BadRequestException('Historical payroll periods before 2026-02-01 are not supported until effective-dated statutory rules are implemented and verified. No payroll was created.');
   const employees=await this.db.query<PayEmployee>(`SELECT e.id,e.employee_number,e.first_name,e.last_name,
     s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,
     s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes
