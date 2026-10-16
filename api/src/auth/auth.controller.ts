@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Body, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
-import { LoginDto, RefreshDto, NeonExchangeDto } from './dto/auth.dto.js';
+import { LoginDto, RefreshDto, NeonExchangeDto, SwitchCompanyDto } from './dto/auth.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from './interfaces/authenticated-user.js';
 
@@ -26,6 +26,16 @@ export class AuthController {
   @Post('refresh')
   async refresh(@Body() dto: RefreshDto) {
     return this.authService.refresh(dto);
+  }
+
+
+  @Post('switch-company')
+  @UseGuards(JwtAuthGuard)
+  async switchCompany(
+    @Request() req: { user: AuthenticatedUser },
+    @Body() dto: SwitchCompanyDto,
+  ) {
+    return this.authService.switchCompany(req.user.userId, dto.companyId);
   }
 
   @Get('me')
