@@ -1,3 +1,4 @@
+import { neonTestLogin } from "./neon-test-auth.mjs";
 import crypto from "node:crypto";
 const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api.onrender.com/api").replace(/\/$/, "");
 const stamp = Date.now();
@@ -15,20 +16,16 @@ async function request(method, path, body, token, expected = [200, 201]) {
   return data;
 }
 function assert(ok, message) { if (!ok) throw new Error(message); checks.push(message); }
-async function tenant(label) {
-  const email = `pay-regression-${label}-${stamp}@example.com`;
-  const password = `Test-${crypto.randomUUID()}-9!`;
-  const registered = await request("POST", "/auth/register", { email, password, fullName: "Payment Regression", phone: "+254700000000", companyName: `Payment Regression ${label} ${stamp}` }, null, [201]);
-  assert(!!registered.userId && !!registered.companyId, `registered ${label} tenant`);
-  const login = await request("POST", "/auth/login", { email, password });
-  assert(!!login.accessToken, `authenticated ${label} tenant`);
-  return { ...registered, token: login.accessToken };
+async function tenant(label, slot) {
+  const login = await neonTestLogin(base, { slot, companyName: `Payment Regression ${label} ${stamp}` });
+  assert(!!login.token && !!login.user?.companyId, `authenticated verified ${label} Neon test identity`);
+  return { userId: login.user.userId, companyId: login.user.companyId, token: login.token };
 }
 async function main() {
   const health = await request("GET", "/health");
   assert(health.status === "ok" && health.database === "connected", "API and database healthy");
-  const a = await tenant("owner");
-  const b = await tenant("other");
+  const a = await tenant("owner", "A");
+  const b = await tenant("other", "B");
   await request("GET", "/invoices", undefined, undefined, [401, 403]);
   assert(true, "invoice API requires authentication");
   const customer = await request("POST", "/customers", { name: `Payment Test Customer ${stamp}`, email: `customer-${stamp}@example.com` }, a.token, [201]);
