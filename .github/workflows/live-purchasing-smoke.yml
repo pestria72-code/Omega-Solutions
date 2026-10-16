@@ -26,6 +26,7 @@ on:
 permissions:
   contents: read
 
+# Re-run after configuring the development-only cleanup secret; production is never targeted.
 # Tests target the development API. Tenant cleanup requires an explicitly configured
 # development-only database secret and strict tenant/email guards in the cleanup script.
 
