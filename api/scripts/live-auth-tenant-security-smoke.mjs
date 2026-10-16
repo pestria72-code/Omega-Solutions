@@ -64,6 +64,15 @@ async function login(email, password, label) {
       if (typeof identityToken !== "string" || identityToken.length < 20) {
         throw new Error(`${label}: Neon Auth sign-in did not return the JWT token required by /auth/neon/exchange; no tenant checks were run.`);
       }
+      // Log only non-secret JWT metadata to diagnose issuer/key configuration; never log the token.
+      try {
+        const parts = identityToken.split(".");
+        const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+        const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+        console.log(`${label} Neon JWT metadata: ${JSON.stringify({ alg: header.alg, kid: header.kid, iss: claims.iss, aud: claims.aud, exp: claims.exp })}`);
+      } catch {
+        console.log(`${label} Neon JWT metadata: token was not a decodable three-part JWT`);
+      }
       result = await request("POST", "/auth/neon/exchange", { token: identityToken }, undefined, [200]);
       assert(true, `${label}: authenticated through Neon Auth identity exchange`);
     }
