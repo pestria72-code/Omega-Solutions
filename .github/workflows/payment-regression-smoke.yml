@@ -6,6 +6,7 @@ on:
     branches:
       - development
     paths:
+      - "api/scripts/neon-test-auth.mjs"
       - "api/scripts/live-payment-regression-smoke.mjs"
       - ".github/workflows/payment-regression-smoke.yml"
 
@@ -23,4 +24,8 @@ jobs:
       - name: Run authenticated payment regression against development API
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
         run: node api/scripts/live-payment-regression-smoke.mjs
