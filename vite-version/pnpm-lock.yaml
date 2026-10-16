@@ -108,9 +108,6 @@ importers:
       globals:
         specifier: ^17.13.0
         version: 17.13.0
-      shadcn:
-        specifier: ^4.21.4
-        version: 4.21.4
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
