@@ -1,0 +1,63 @@
+name: Configure Neon Auth email verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - development
+    paths:
+      - .github/workflows/configure-neon-auth-verification.yml
+
+permissions:
+  contents: read
+
+jobs:
+  configure-development-auth:
+    name: Require email OTP before sign-in (development only)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required credential
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          if [ -z "$NEON_API_KEY" ]; then
+            echo "::error::Add NEON_API_KEY as a GitHub Actions secret before running this workflow."
+            exit 1
+          fi
+
+      - name: Enable required email verification on the development branch
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            --url "https://console.neon.tech/api/v2/projects/ancient-lake-38155666/branches/br-snowy-block-b4pwz78t/auth/email_and_password" \
+            --header "Authorization: Bearer $NEON_API_KEY" \
+            --header "Content-Type: application/json" \
+            --data '{"enabled":true,"email_verification_method":"otp","require_email_verification":true,"auto_sign_in_after_verification":false,"send_verification_email_on_sign_up":true,"send_verification_email_on_sign_in":true,"disable_sign_up":false}')"
+          echo "$response" | jq .
+          echo "$response" | jq -e '
+            .enabled == true and
+            .email_verification_method == "otp" and
+            .require_email_verification == true and
+            .auto_sign_in_after_verification == false and
+            .send_verification_email_on_sign_up == true
+          ' >/dev/null
+
+      - name: Read back and verify configuration
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: |
+          set -euo pipefail
+          response="$(curl --fail-with-body --silent --show-error \
+            --url "https://console.neon.tech/api/v2/projects/ancient-lake-38155666/branches/br-snowy-block-b4pwz78t/auth/email_and_password" \
+            --header "Authorization: Bearer $NEON_API_KEY")"
+          echo "$response" | jq .
+          echo "$response" | jq -e '
+            .enabled == true and
+            .email_verification_method == "otp" and
+            .require_email_verification == true and
+            .auto_sign_in_after_verification == false and
+            .send_verification_email_on_sign_up == true
+          ' >/dev/null
