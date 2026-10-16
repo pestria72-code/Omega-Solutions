@@ -27,8 +27,17 @@ export class ProductsService {
     private readonly accounting: AccountingService,
   ) {}
 
+  private async resolveMembership(user: AuthenticatedUser) {
+    // Respect the company selected in the signed access token. Falling back to
+    // the user's default membership when a company is selected can cross tenants.
+    if (user.companyId) {
+      return this.memberships.getMembershipForCompany(user.userId, user.companyId);
+    }
+    return this.memberships.getMembership(user.userId);
+  }
+
   async list(user: AuthenticatedUser, search?: string): Promise<ProductRow[]> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.resolveMembership(user);
 
     if (search) {
       const result = await this.db.query<ProductRow>(
@@ -49,12 +58,12 @@ export class ProductsService {
   }
 
   async getById(user: AuthenticatedUser, productId: string): Promise<ProductRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.resolveMembership(user);
     return this.getByIdInternal(membership.companyId, productId);
   }
 
   async create(user: AuthenticatedUser, dto: CreateProductDto): Promise<ProductRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.resolveMembership(user);
     const initialStock = dto.stockQuantity ?? 0;
     const isService = dto.isService ?? false;
 
@@ -210,7 +219,7 @@ export class ProductsService {
     productId: string,
     dto: UpdateProductDto,
   ): Promise<ProductRow> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.resolveMembership(user);
     const existing = await this.getByIdInternal(membership.companyId, productId);
 
     if (dto.stockQuantity !== undefined && Number(dto.stockQuantity) !== Number(existing.stock_quantity)) {
@@ -290,7 +299,7 @@ export class ProductsService {
   }
 
   async delete(user: AuthenticatedUser, productId: string): Promise<void> {
-    const membership = await this.memberships.getMembership(user.userId);
+    const membership = await this.resolveMembership(user);
     const existing = await this.getByIdInternal(membership.companyId, productId);
 
     await this.db.query(
