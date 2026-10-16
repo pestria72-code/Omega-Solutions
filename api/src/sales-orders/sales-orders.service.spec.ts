@@ -22,7 +22,7 @@ describe('SalesOrdersService inventory fulfilment', () => {
         }
         if (sql.includes('FROM warehouses WHERE id = $1')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
         if (sql.includes('FROM sales_order_items soi')) return { rows: [{ product_id: 'product-1', quantity: '2', is_service: false, is_active: true, cost_price: '4.5', product_name: 'Widget' }], rowCount: 1 };
-        if (sql.includes('FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '1' }], rowCount: 1 };
+        if (sql.includes('FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '1', average_unit_cost: '3.75' }], rowCount: 1 };
         return { rows: [], rowCount: 1 };
       }),
     };
@@ -49,7 +49,7 @@ describe('SalesOrdersService inventory fulfilment', () => {
     await service.updateStatus(user, 'order-1', 'fulfilled', 'warehouse-1');
     const calls = client.query.mock.calls as unknown as [string, unknown[]?][];
     expect(calls.some(([sql, params]) => sql.includes('UPDATE inventory_stock_levels SET quantity = quantity -') && params?.[0] === 2)).toBe(true);
-    expect(calls.some(([sql, params]) => sql.includes('INSERT INTO inventory_stock_movements') && params?.[3] === -2 && params?.[5] === 'SO-2026-00001')).toBe(true);
+    expect(calls.some(([sql, params]) => sql.includes('INSERT INTO inventory_stock_movements') && params?.[3] === -2 && params?.[4] === 3.75 && params?.[5] === 'SO-2026-00001')).toBe(true);
     expect(calls.some(([sql, params]) => sql.includes('UPDATE sales_orders SET status') && params?.[0] === 'fulfilled')).toBe(true);
     expect(db.transaction).toHaveBeenCalledTimes(1);
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'sales_order.fulfilled' }));
