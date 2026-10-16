@@ -225,7 +225,7 @@ export class InventoryService {
       ),
       this.db.query<{ stock_cost_value: string | number; inventory_account_balance: string | number }>(
         `SELECT
-           COALESCE((SELECT SUM(s.quantity*p.cost_price)
+           COALESCE((SELECT SUM(s.quantity*s.average_unit_cost)
              FROM inventory_stock_levels s JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
              WHERE s.company_id=$1 AND p.is_service=false),0)::numeric(16,2) AS stock_cost_value,
            COALESCE((SELECT SUM(l.debit-l.credit)
