@@ -74,14 +74,15 @@ describe('CompaniesService', () => {
   });
 
   describe('getMyCompany', () => {
-    it('returns the company for the authenticated user via membership', async () => {
-      memberships.getMembership.mockResolvedValue({ companyId: 'comp-a', branchId: null, role: 'owner' });
+    it('returns the selected company for the authenticated user via company-scoped membership', async () => {
+      memberships.getMembershipForCompany.mockResolvedValue({ companyId: 'comp-a', branchId: null, role: 'owner' });
       db.query.mockResolvedValue({ rows: [COMPANY_A], rowCount: 1 });
 
       const result = await service.getMyCompany(USER_A);
 
       expect(result.id).toBe('comp-a');
-      expect(memberships.getMembership).toHaveBeenCalledWith('user-a');
+      expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-a', 'comp-a');
+      expect(memberships.getMembership).not.toHaveBeenCalled();
     });
   });
 
