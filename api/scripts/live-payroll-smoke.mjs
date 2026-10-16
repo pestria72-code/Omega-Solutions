@@ -52,7 +52,7 @@ try {
   const health = await req("GET", "/health");
   ok(health.status === "ok" && health.database === "connected", "development API and database healthy");
 
-  const login = await neonTestLogin(base, { slot: "A", companyName: `Omega Payroll E2E ${stamp}` });
+  const login = await neonTestLogin(base, { slot: "B", companyName: `Omega Payroll E2E ${stamp}` });
   const token = login.token;
   ok(!!token && !!login.refreshToken, "existing verified test account authenticated and exchanged");
   const identity = await req("GET", "/auth/me", undefined, token);
