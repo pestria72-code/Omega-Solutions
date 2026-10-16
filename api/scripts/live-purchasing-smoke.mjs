@@ -70,5 +70,35 @@ try {
  ok(received.status==="received"&&Number(received.items?.[0]?.received_quantity)===5,"second receipt completes order");
  const finalReceiptJournals=(await req("GET","/accounting/journals",undefined,token)).data.filter(x=>x.source_type==="purchase_order_receipt"&&[partial.receiptId,received.receiptId].includes(x.source_id));
  ok(finalReceiptJournals.length===2&&finalReceiptJournals.every(x=>Math.abs(Number(x.total_debits)-Number(x.total_credits))<0.005)&&Math.abs(finalReceiptJournals.reduce((sum,x)=>sum+Number(x.total_debits),0)-500)<0.005,"both receipt journals balance and capitalize KES 500 total inventory");
- console.log(JSON.stringify({ok:true,email:login.email,userId:login.user.userId,companyId:login.user.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,checks},null,2));
+ // Weighted-average valuation: receive the same product at a second cost through the accounting-integrated PO flow.
+ const wacPo=(await req("POST","/purchase-orders",{supplierId:supplier.id,expectedDate:new Date(Date.now()+86400000).toISOString().slice(0,10),notes:"Weighted-average valuation regression",items:[{productId:product.id,quantity:2,unitCost:200,taxRate:0}]},token,[201])).data;
+ const wacLine=wacPo.items?.[0];ok(!!wacPo.id&&!!wacLine?.id,"create second purchase order at a different unit cost");
+ await req("PATCH",`/purchase-orders/${wacPo.id}/status`,{status:"ordered"},token);
+ const wacReceipt=(await req("POST",`/purchase-orders/${wacPo.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:wacLine.id,quantity:2}],reference:`WAC-${stamp}`},token,[201])).data;
+ ok(wacReceipt.status==="received","receive second purchase order at KES 200 per unit");
+ const wacStock=(await req("GET",`/inventory/stock?warehouseId=${warehouse.id}&search=${product.sku}`,undefined,token)).data;
+ const wacRow=(Array.isArray(wacStock)?wacStock:(wacStock.items||wacStock.data||[])).find(x=>(x.product_id||x.productId)===product.id);
+ const expectedAverage=(5*100+2*200)/7;
+ ok(!!wacRow&&Number(wacRow.quantity)===7&&Math.abs(Number(wacRow.average_unit_cost)-expectedAverage)<0.005,"weighted-average unit cost recalculates to KES 128.57 after receipts at different costs");
+ const customer=(await req("POST","/customers",{name:`WAC Fulfilment Customer ${stamp}`,email:`wac-customer-${stamp}@example.com`},token,[201])).data;
+ const quote=(await req("POST","/quotations",{customerId:customer.id,issueDate:new Date().toISOString().slice(0,10),validUntil:new Date(Date.now()+7*86400000).toISOString().slice(0,10),items:[{productId:product.id,quantity:2,unitPrice:150,taxRate:16}],notes:"Automated weighted-average sales fulfilment regression"},token,[201])).data;
+ ok(!!customer.id&&!!quote.id,"create customer and stock-backed quotation");
+ await req("PATCH",`/quotations/${quote.id}/status`,{status:"sent"},token);
+ const acceptedQuote=(await req("PATCH",`/quotations/${quote.id}/status`,{status:"accepted"},token)).data;
+ ok(acceptedQuote.status==="accepted","quotation accepted before sales-order conversion");
+ const salesOrder=(await req("POST",`/sales-orders/from-quotation/${quote.id}`,undefined,token,[201])).data;
+ ok(!!salesOrder.id&&salesOrder.status==="confirmed","convert accepted quotation to confirmed sales order");
+ await req("PATCH",`/sales-orders/${salesOrder.id}/status`,{status:"processing"},token);
+ const fulfilled=(await req("PATCH",`/sales-orders/${salesOrder.id}/status`,{status:"fulfilled",warehouseId:warehouse.id},token)).data;
+ ok(fulfilled.status==="fulfilled","fulfil sales order from selected warehouse");
+ const postFulfilStock=(await req("GET",`/inventory/stock?warehouseId=${warehouse.id}&search=${product.sku}`,undefined,token)).data;
+ const postFulfilRow=(Array.isArray(postFulfilStock)?postFulfilStock:(postFulfilStock.items||postFulfilStock.data||[])).find(x=>(x.product_id||x.productId)===product.id);
+ ok(!!postFulfilRow&&Number(postFulfilRow.quantity)===5&&Math.abs(Number(postFulfilRow.average_unit_cost)-expectedAverage)<0.005,"sales fulfilment issues two units and preserves weighted-average unit cost");
+ const cogsJournals=(await req("GET","/accounting/journals",undefined,token)).data;
+ const salesCogs=cogsJournals.find(x=>x.source_type==="sales_order_cogs"&&x.source_id===salesOrder.id);
+ ok(!!salesCogs&&Math.abs(Number(salesCogs.total_debits)-257.14)<0.015&&Math.abs(Number(salesCogs.total_credits)-257.14)<0.015,"sales-order COGS journal uses weighted-average cost and balances at KES 257.14");
+ const inventoryReconciliation=(await req("GET","/inventory/reconciliation",undefined,token)).data;
+ ok(inventoryReconciliation.stockLedger?.reconciled===true&&inventoryReconciliation.legacyProductQuantities?.reconciled===true,"inventory movement ledger and product quantities reconcile after fulfilment");
+ ok(inventoryReconciliation.valuation?.basis==="weighted_average_cost"&&inventoryReconciliation.valuation?.reconciled===true,"weighted-average stock valuation reconciles to the inventory control account");
+ console.log(JSON.stringify({ok:true,email:login.email,userId:login.user.userId,companyId:login.user.companyId,supplierId:supplier.id,productId:product.id,warehouseId:warehouse.id,purchaseOrderId:po.id,supplierBillId:bill.id,wacPurchaseOrderId:wacPo.id,salesOrderId:salesOrder.id,checks},null,2));
 } catch(e) { console.error(JSON.stringify({ok:false,error:String(e),checks},null,2));process.exitCode=1; }
