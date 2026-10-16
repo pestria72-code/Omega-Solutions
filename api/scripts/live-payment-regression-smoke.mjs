@@ -64,7 +64,7 @@ async function main() {
   const reconciled = await request("POST", `/invoices/${invoice.id}/payments/${paymentId}/reconcile`, { statementReference: `STMT-${stamp}` }, a.token);
   assert(reconciled.payments.some(p => p.id === paymentId && p.status === "reconciled" && p.reconciliation_reference === `STMT-${stamp}`), "reconciliation stored");
   const receivables = await request("GET", "/accounting/reconciliation/receivables", undefined, a.token);
-  assert(receivables.reconciled === true && Math.abs(Number(receivables.customerInvoicesBalance) - 600) < 0.005, "receivables control account reconciles to outstanding invoices");
+  assert(receivables.reconciled === true && Math.abs(Number(receivables.controlAccountBalance) - Number(receivables.customerInvoicesBalance)) < 0.005 && Math.abs(Number(receivables.variance)) < 0.005, "receivables control account reconciles to all outstanding invoices in the existing test company");
   const trialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(trialBalance.balanced === true && Math.abs(Number(trialBalance.variance)) <= 0.01, "trial balance is balanced");
   const supplier = await request("POST", "/suppliers", { name: `Payment Regression Supplier ${stamp}`, email: `supplier-${stamp}@example.com`, county: "Nakuru" }, a.token, [201]);
@@ -74,7 +74,7 @@ async function main() {
   const billPayment = await request("POST", `/supplier-bills/${bill.id}/payments`, { amount: 400, paymentDate: new Date().toISOString().slice(0, 10), method: "bank_transfer", reference: `BILL-PAY-${stamp}` }, a.token, [201]);
   assert(Number(billPayment.paid_amount) === 400 && Number(billPayment.balance) === 600 && billPayment.status === "partially_paid", "supplier payment updates payable balance");
   const payables = await request("GET", "/accounting/reconciliation/payables", undefined, a.token);
-  assert(payables.reconciled === true && Math.abs(Number(payables.supplierBillsBalance) - 600) < 0.005, "payables control account reconciles to supplier bills");
+  assert(payables.reconciled === true && Math.abs(Number(payables.controlAccountBalance) - Number(payables.supplierBillsBalance)) < 0.005 && Math.abs(Number(payables.variance)) < 0.005, "payables control account reconciles to all supplier bills in the existing test company");
   const finalTrialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(finalTrialBalance.balanced === true && Math.abs(Number(finalTrialBalance.variance)) <= 0.01, "trial balance remains balanced after supplier payment");
   // POS regression: cash checkout, stock ledger, idempotency, payment confirmation, and tenant isolation.
