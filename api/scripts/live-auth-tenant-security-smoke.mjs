@@ -60,18 +60,28 @@ async function login(email, password, label) {
       }
     } else {
       if (!response.ok) throw new Error(`${label}: Neon Auth sign-in returned HTTP ${response.status}; response=${JSON.stringify(authResult).slice(0, 250)}`);
-      const identityToken = authResult?.token ?? authResult?.data?.token;
-      if (typeof identityToken !== "string" || identityToken.length < 20) {
-        throw new Error(`${label}: Neon Auth sign-in did not return the JWT token required by /auth/neon/exchange; no tenant checks were run.`);
+      // Managed Neon Auth sign-in returns a session response; obtain its short-lived JWT
+      // through the JWT plugin endpoint, forwarding only the session cookies.
+      const setCookies = typeof response.headers.getSetCookie === "function"
+        ? response.headers.getSetCookie()
+        : [response.headers.get("set-cookie")].filter(Boolean);
+      const cookieHeader = setCookies.map(value => value.split(";", 1)[0]).filter(Boolean).join("; ");
+      if (!cookieHeader) {
+        throw new Error(label + ": Neon Auth sign-in succeeded but did not set a session cookie; cannot request a JWT.");
       }
-      // Log only non-secret JWT metadata to diagnose issuer/key configuration; never log the token.
-      try {
-        const parts = identityToken.split(".");
-        const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
-        const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-        console.log(`${label} Neon JWT metadata: ${JSON.stringify({ alg: header.alg, kid: header.kid, iss: claims.iss, aud: claims.aud, exp: claims.exp })}`);
-      } catch {
-        console.log(`${label} Neon JWT metadata: token was not a decodable three-part JWT`);
+      const tokenResponse = await fetch(neonAuthBase + "/token", {
+        method: "GET",
+        headers: { origin: trustedOrigin, referer: trustedOrigin + "/login", cookie: cookieHeader },
+      });
+      const tokenRaw = await tokenResponse.text();
+      let tokenResult;
+      try { tokenResult = tokenRaw ? JSON.parse(tokenRaw) : null; } catch { tokenResult = tokenRaw; }
+      if (!tokenResponse.ok) {
+        throw new Error(label + ": Neon Auth JWT endpoint returned HTTP " + tokenResponse.status + "; response=" + JSON.stringify(tokenResult).slice(0, 200));
+      }
+      const identityToken = tokenResult?.token ?? tokenResult?.data?.token;
+      if (typeof identityToken !== "string" || identityToken.split(".").length !== 3) {
+        throw new Error(label + ": Neon Auth JWT endpoint did not return a JWT in data.token; no tenant checks were run.");
       }
       result = await request("POST", "/auth/neon/exchange", { token: identityToken }, undefined, [200]);
       assert(true, `${label}: authenticated through Neon Auth identity exchange`);
