@@ -96,7 +96,7 @@ try {
     qualifyingMortgageInterest: 0,
     eligibleInsurancePremiums: 0,
     residentForTaxPurposes: true,
-    effectiveFrom: payrollPeriod.start
+    effectiveFrom: "2026-09-01"
   }, token, [200, 201]);
   ok(settings.employee_id === employeeId && Number(settings.monthly_basic_salary) === 100000,
     "KES 100,000 monthly salary settings saved");
