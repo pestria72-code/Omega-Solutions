@@ -184,7 +184,7 @@ export class InventoryService {
       `SELECT COUNT(DISTINCT s.product_id)::int AS stocked_products,
         COUNT(*) FILTER(WHERE s.quantity>0 AND s.quantity<=s.reorder_level)::int AS low_stock_lines,
         COUNT(*) FILTER(WHERE s.quantity=0)::int AS out_of_stock_lines,
-        COALESCE(SUM(s.quantity*p.cost_price),0) AS inventory_cost_value,
+        COALESCE(SUM(s.quantity*s.average_unit_cost),0) AS inventory_cost_value,
         (SELECT COUNT(*)::int FROM warehouses WHERE company_id=$1 AND is_active=true) AS active_warehouses,
         (SELECT COUNT(*)::int FROM inventory_stock_movements WHERE company_id=$1 AND created_at >= NOW()-INTERVAL '30 days') AS movements_last_30_days
        FROM inventory_stock_levels s JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
@@ -304,9 +304,17 @@ export class InventoryService {
       );
       if (Number(source.rows[0].quantity)-Number(source.rows[0].reserved_quantity)<dto.quantity) throw new BadRequestException('Insufficient available stock in the source warehouse.');
       await client.query('UPDATE inventory_stock_levels SET quantity=quantity-$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.quantity,companyId,dto.sourceWarehouseId,dto.productId]);
-      await client.query('UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',[dto.quantity,companyId,dto.destinationWarehouseId,dto.productId]);
-      const out=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.sourceWarehouseId,type:'transfer_out',quantity:-dto.quantity,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId,transferGroupId});
-      const into=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.destinationWarehouseId,type:'transfer_in',quantity:dto.quantity,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId,transferGroupId});
+      const sourceCostResult=await client.query<{average_unit_cost:string|number}>('SELECT average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3',[companyId,dto.sourceWarehouseId,dto.productId]);
+      const transferCost=Number(sourceCostResult.rows[0]?.average_unit_cost ?? dto.unitCost ?? 0);
+      await client.query(
+        `UPDATE inventory_stock_levels
+         SET average_unit_cost=CASE WHEN quantity+$1>0 THEN ((quantity*average_unit_cost)+($1*$2))/(quantity+$1) ELSE $2 END,
+             quantity=quantity+$1,updated_at=NOW()
+         WHERE company_id=$3 AND warehouse_id=$4 AND product_id=$5`,
+        [dto.quantity,transferCost,companyId,dto.destinationWarehouseId,dto.productId],
+      );
+      const out=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.sourceWarehouseId,type:'transfer_out',quantity:-dto.quantity,unitCost:transferCost,reference:dto.reference,notes:dto.notes,userId:user.userId,transferGroupId});
+      const into=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.destinationWarehouseId,type:'transfer_in',quantity:dto.quantity,unitCost:transferCost,reference:dto.reference,notes:dto.notes,userId:user.userId,transferGroupId});
       await this.syncLegacyProductQuantity(client,companyId,dto.productId);
       return {transferGroupId,sourceMovement:out,destinationMovement:into};
     });
@@ -325,11 +333,22 @@ export class InventoryService {
         [companyId,dto.warehouseId,dto.productId],
       );
       if (type==='issue' && Number(stock.rows[0].quantity)-Number(stock.rows[0].reserved_quantity)<dto.quantity) throw new BadRequestException('Insufficient available stock.');
-      await client.query(
-        'UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',
-        [signedQuantity,companyId,dto.warehouseId,dto.productId],
-      );
-      const saved=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.warehouseId,type,quantity:signedQuantity,unitCost:dto.unitCost ?? 0,reference:dto.reference,notes:dto.notes,userId:user.userId});
+      const movementCost=type==='receipt' ? Number(dto.unitCost ?? 0) : Number(stock.rows[0].average_unit_cost ?? 0);
+      if(type==='receipt'){
+        await client.query(
+          `UPDATE inventory_stock_levels
+           SET average_unit_cost=CASE WHEN quantity+$1>0 THEN ((quantity*average_unit_cost)+($1*$2))/(quantity+$1) ELSE $2 END,
+               quantity=quantity+$1,updated_at=NOW()
+           WHERE company_id=$3 AND warehouse_id=$4 AND product_id=$5`,
+          [dto.quantity,movementCost,companyId,dto.warehouseId,dto.productId],
+        );
+      } else {
+        await client.query(
+          'UPDATE inventory_stock_levels SET quantity=quantity+$1,updated_at=NOW() WHERE company_id=$2 AND warehouse_id=$3 AND product_id=$4',
+          [signedQuantity,companyId,dto.warehouseId,dto.productId],
+        );
+      }
+      const saved=await this.insertMovement(client,{companyId,productId:dto.productId,warehouseId:dto.warehouseId,type,quantity:signedQuantity,unitCost:movementCost,reference:dto.reference,notes:dto.notes,userId:user.userId});
       await this.syncLegacyProductQuantity(client,companyId,dto.productId);
       return saved;
     });
