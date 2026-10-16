@@ -11,7 +11,7 @@ type Mock = ReturnType<typeof vi.fn>;
 describe('ProductsService initial stock', () => {
   let service: ProductsService;
   let db: { query: Mock; transaction: Mock };
-  let memberships: { getMembership: Mock };
+  let memberships: { getMembership: Mock; getMembershipForCompany: Mock };
   let audit: { log: Mock };
   let accounting: { ensureDefaults: Mock };
   let client: { query: Mock };
@@ -63,6 +63,7 @@ describe('ProductsService initial stock', () => {
     };
     memberships = {
       getMembership: vi.fn().mockResolvedValue({ companyId: 'company-1', branchId: null, role: 'owner' }),
+      getMembershipForCompany: vi.fn().mockResolvedValue({ companyId: 'company-2', branchId: null, role: 'owner' }),
     };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     accounting = { ensureDefaults: vi.fn().mockResolvedValue(undefined) };
@@ -77,6 +78,16 @@ describe('ProductsService initial stock', () => {
       ],
     }).compile();
     service = module.get(ProductsService);
+  });
+
+  it('uses the company selected in the authenticated user context instead of the default membership', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.list({ ...user, companyId: 'company-2' } as any);
+
+    expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-1', 'company-2');
+    expect(memberships.getMembership).not.toHaveBeenCalled();
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('WHERE company_id = $1 ORDER BY created_at DESC'), ['company-2']);
   });
 
   it('records positive initial stock in the stock ledger and opening-balance movement in one transaction', async () => {
