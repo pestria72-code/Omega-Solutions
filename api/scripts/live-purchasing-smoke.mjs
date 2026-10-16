@@ -1,8 +1,6 @@
+import { neonTestLogin } from "./neon-test-auth.mjs";
 const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api.onrender.com/api").replace(/\/$/, "");
 const stamp = Date.now();
-const email = `omega-e2e-${stamp}@example.com`;
-const password = `E2e-${crypto.randomUUID()}-9!`;
-const companyName = `Omega E2E ${stamp}`;
 const checks = [];
 async function req(method,path,body,token,expected=[200,201]) {
  const r=await fetch(base+path,{method,headers:{"content-type":"application/json",...(token?{authorization:`Bearer ${token}`}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
@@ -16,11 +14,10 @@ try {
  for(let attempt=0;attempt<12;attempt++){try{h=await req("GET","/health");if(h.data?.status==="ok"&&h.data?.database==="connected")break;h=null}catch(e){lastHealthError=e}await new Promise(resolve=>setTimeout(resolve,5000))}
  if(!h)throw Error(`API health/database did not recover: ${String(lastHealthError||"unexpected health response")}`);
  ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
- const reg=(await req("POST","/auth/register",{email,password,fullName:"Omega E2E Runner",phone:"+254700000000",companyName},null,[201])).data;
- ok(!!reg.userId&&!!reg.companyId,"register temporary tenant");
- const login=(await req("POST","/auth/login",{email,password})).data;const token=login.accessToken;
- ok(!!token&&!!login.refreshToken,"login and token pair");
- const me=(await req("GET","/auth/me",undefined,token)).data;ok(me.userId===reg.userId&&me.companyId===reg.companyId,"authenticated /me and tenant identity");
+ const login = await neonTestLogin(base, { slot: "A", companyName: `Omega E2E ${stamp}` });
+ const token = login.token;
+ ok(!!token&&!!login.refreshToken,"verified Neon Auth identity exchanged for Omega tokens");
+ const me=(await req("GET","/auth/me",undefined,token)).data;ok(me.userId===login.user.userId&&me.companyId===login.user.companyId,"authenticated /me and tenant identity");
  const supplier=(await req("POST","/suppliers",{name:`E2E Supplier ${stamp}`,email:`supplier-${stamp}@example.com`},token,[201])).data;ok(!!supplier.id,"create tenant supplier");
  const product=(await req("POST","/products",{sku:`E2E-${stamp}`,name:`E2E Stock ${stamp}`,sellingPrice:150,costPrice:100,stockQuantity:0,reorderLevel:0,isService:false,isActive:true},token,[201])).data;ok(!!product.id,"create physical product");
  const warehouse=(await req("POST","/inventory/warehouses",{code:`E${String(stamp).slice(-8)}`,name:`E2E Warehouse ${stamp}`,location:"Automated test",capacity:0,isActive:true},token,[201])).data;ok(!!warehouse.id,"create active warehouse");
