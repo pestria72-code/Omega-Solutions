@@ -182,7 +182,7 @@ export class ManufacturingService {
    await client.query(`INSERT INTO inventory_stock_levels(company_id,warehouse_id,product_id,quantity,reserved_quantity,reorder_level) VALUES($1,$2,$3,0,0,0) ON CONFLICT(warehouse_id,product_id) DO NOTHING`,[companyId,order.rows[0].warehouse_id,order.rows[0].product_id]);
    const unitCost=finishedQuantity>0?totalProductionCost/finishedQuantity:Number(order.rows[0].product_cost);
    const finishedStock=await client.query<{average_unit_cost:string|number}>(`UPDATE inventory_stock_levels
-    SET average_unit_cost=CASE WHEN quantity+$1>0 THEN ((quantity*average_unit_cost)+($1*$2))/(quantity+$1) ELSE $2 END,
+    SET average_unit_cost=CASE WHEN quantity+$1>0 THEN ROUND(((quantity*average_unit_cost)+($1*$2))/(quantity+$1),2) ELSE ROUND($2::numeric,2) END,
         quantity=quantity+$1,updated_at=NOW()
     WHERE company_id=$3 AND warehouse_id=$4 AND product_id=$5 RETURNING average_unit_cost`,[finishedQuantity,unitCost,companyId,order.rows[0].warehouse_id,order.rows[0].product_id]);
    const weightedAverageFinishedCost=Number(finishedStock.rows[0]?.average_unit_cost??unitCost);
