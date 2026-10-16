@@ -37,6 +37,12 @@ jobs:
         working-directory: api
         run: npm test
 
+      - name: Report API dependency audit findings
+        working-directory: api
+        run: |
+          npm audit --json > "$RUNNER_TEMP/api-audit.json" || true
+          node -e "const a=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities,vulnerabilities:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{title:x.title,url:x.url,range:x.range})}))},null,2))" "$RUNNER_TEMP/api-audit.json"
+
       - name: Lint API
         working-directory: api
         run: npm run lint
@@ -46,3 +52,9 @@ jobs:
         run: |
           npm ci
           npm run build
+
+      - name: Report frontend dependency audit findings
+        working-directory: vite-version
+        run: |
+          npm audit --json > "$RUNNER_TEMP/frontend-audit.json" || true
+          node -e "const a=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')); console.log(JSON.stringify({metadata:a.metadata?.vulnerabilities,vulnerabilities:Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,isDirect:v.isDirect,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==='string'?x:{title:x.title,url:x.url,range:x.range})}))},null,2))" "$RUNNER_TEMP/frontend-audit.json"
