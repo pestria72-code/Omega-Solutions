@@ -31,6 +31,10 @@ on:
       - "api/src/crm/**"
       - ".github/workflows/live-purchasing-smoke.yml"
 
+concurrency:
+  group: omega-development-live-smoke
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
