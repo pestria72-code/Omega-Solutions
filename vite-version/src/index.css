@@ -215,23 +215,21 @@ html {
 }
 
 /* Light-theme component polish: clearer hierarchy without changing dark mode. */
-:root:not(.dark) [data-slot="button"][data-variant="default"],
-:root:not(.dark) button[data-slot="button"]:not([data-variant]) {
+:root:not(.dark) [data-slot="button"].bg-primary {
   box-shadow: 0 1px 2px rgb(20 60 45 / 10%);
 }
 
-:root:not(.dark) [data-slot="button"][data-variant="default"]:hover,
-:root:not(.dark) button[data-slot="button"]:not([data-variant]):hover {
+:root:not(.dark) [data-slot="button"].bg-primary:hover {
   background-color: color-mix(in srgb, var(--primary) 88%, #143c2d);
   box-shadow: 0 3px 8px rgb(20 60 45 / 14%);
 }
 
-:root:not(.dark) [data-slot="button"][data-variant="outline"] {
+:root:not(.dark) [data-slot="button"].border-border {
   border-color: #cbd1da;
   background-color: #ffffff;
 }
 
-:root:not(.dark) [data-slot="button"][data-variant="outline"]:hover {
+:root:not(.dark) [data-slot="button"].border-border:hover {
   border-color: #aeb8c4;
   background-color: #eef0f4;
 }
