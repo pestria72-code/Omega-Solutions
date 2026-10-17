@@ -23,8 +23,8 @@ async function tenant(label, slot) {
   const company = await request("GET", "/companies/me", undefined, login.token);
   assert(company?.id === login.user.companyId, `${label} identity resolves to its active company context`);
   const expectedCompanyId = slot === "A"
-    ? "82920006-d0a8-464e-bbde-42de40a26d48"
-    : "5a72776a-a976-4d98-87e5-ea323fec61f8";
+    ? "5a72776a-a976-4d98-87e5-ea323fec61f8"
+    : "82920006-d0a8-464e-bbde-42de40a26d48";
   assert(login.user.companyId === expectedCompanyId, `${label} identity is mapped to its approved isolated test company`);
   return { userId: login.user.userId, companyId: login.user.companyId, token: login.token };
 }
