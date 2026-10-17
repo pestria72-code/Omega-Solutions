@@ -1,13 +1,16 @@
 import * as React from "react";
 import type { AuthenticatedUser } from "@/lib/api-types";
 import { getAccessToken, setTokens, clearTokens } from "@/lib/api-client";
-import { getCurrentUser, login, exchangeNeonToken } from "@/lib/auth-api";
+import { getCurrentUser, login, exchangeNeonToken, completeMfaChallenge } from "@/lib/auth-api";
 import { signInWithNeon } from "@/lib/neon-auth-api";
+import type { LoginResponse, MfaChallengeResponse } from "@/lib/auth-api";
 
 interface AuthContextValue {
   user: AuthenticatedUser | null;
   loading: boolean;
   error: string | null;
+  mfaChallengePending: boolean;
+  completeMfaCode: (code: string) => Promise<void>;
   loginEmail: (email: string, password: string) => Promise<void>;
   registerUser: (email: string, password: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;
   finishNeonRegistration: (token: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;
@@ -21,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthenticatedUser | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [mfaChallengeToken, setMfaChallengeToken] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const token = getAccessToken();
@@ -37,7 +41,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const applyOmegaSession = React.useCallback(async (result: Awaited<ReturnType<typeof login>>) => {
+  const applyOmegaSession = React.useCallback(async (result: LoginResponse | MfaChallengeResponse) => {
+    if ("mfaRequired" in result) {
+      setMfaChallengeToken(result.mfaChallengeToken);
+      return;
+    }
+    setMfaChallengeToken(null);
     setTokens(result.accessToken, result.refreshToken);
     try {
       const current = await getCurrentUser(result.accessToken);
@@ -72,6 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applyOmegaSession]);
 
+  const completeMfaCode = React.useCallback(async (code: string) => {
+    if (!mfaChallengeToken) throw new Error("No active MFA challenge. Please sign in again.");
+    const result = await completeMfaChallenge(mfaChallengeToken, code);
+    await applyOmegaSession(result);
+  }, [mfaChallengeToken, applyOmegaSession]);
+
   const registerUser = React.useCallback(async (email: string, password: string, fullName: string, phone?: string, companyName?: string) => {
     setError(null);
     // New accounts must verify their email with Neon before Omega creates company membership.
@@ -103,6 +118,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     loading,
     error,
+    mfaChallengePending: Boolean(mfaChallengeToken),
+    completeMfaCode,
     loginEmail,
     registerUser,
     finishNeonRegistration,
