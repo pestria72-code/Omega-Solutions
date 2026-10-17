@@ -29,6 +29,7 @@ import { WorkforceModule } from './workforce/workforce.module.js';
 import { PosModule } from './pos/pos.module.js';
 import { RequisitionsModule } from './requisitions/requisitions.module.js';
 import { ApprovalsModule } from './approvals/approvals.module.js';
+import { UsersRolesModule } from './users-roles/users-roles.module.js';
 
 @Module({
   imports: [
@@ -37,7 +38,7 @@ import { ApprovalsModule } from './approvals/approvals.module.js';
     CustomersModule, SuppliersModule, ProductsModule, InvoicesModule, QuotationsModule,
     SalesOrdersModule, CrmModule, InventoryModule, PurchaseOrdersModule, SupplierBillsModule,
     AccountingModule, ManufacturingModule, EmployeesModule, ExpensesModule, PayrollModule,
-    WorkforceModule, PosModule, RequisitionsModule, ApprovalsModule,
+    WorkforceModule, PosModule, RequisitionsModule, ApprovalsModule, UsersRolesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
