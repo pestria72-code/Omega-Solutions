@@ -98,6 +98,7 @@ const navGroups = [
       { title: "Chart of Accounts", url: "/chart-of-accounts", icon: BookOpen },
       { title: "Expenses", url: "/expenses", icon: Wallet },
       { title: "Financial Reports", url: "/financial-reports", icon: FileBarChart },
+      { title: "Reports", url: "/reports", icon: FileBarChart },
     ],
   },
   {
