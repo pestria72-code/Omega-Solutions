@@ -1,0 +1,43 @@
+name: Manufacturing live valuation smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - development
+    paths:
+      - "api/scripts/live-manufacturing-smoke.mjs"
+      - "api/scripts/neon-test-auth.mjs"
+      - "api/src/manufacturing/**"
+      - "api/src/inventory/**"
+      - "api/src/accounting/**"
+      - ".github/workflows/manufacturing-live-smoke.yml"
+
+concurrency:
+  group: omega-development-manufacturing-live-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  manufacturing-live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout existing development branch
+        uses: actions/checkout@v4
+        with:
+          ref: development
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify authenticated manufacturing valuation and accounting
+        env:
+          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
+        run: node api/scripts/live-manufacturing-smoke.mjs
