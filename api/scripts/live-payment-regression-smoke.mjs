@@ -85,23 +85,11 @@ async function main() {
   assert(payables.reconciled === true && Math.abs(Number(payables.controlAccountBalance) - Number(payables.supplierBillsBalance)) < 0.005 && Math.abs(Number(payables.variance)) < 0.005, "payables control account reconciles to all supplier bills in the existing test company");
   const finalTrialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(finalTrialBalance.balanced === true && Math.abs(Number(finalTrialBalance.variance)) <= 0.01, "trial balance remains balanced after supplier payment");
-  // Reconcile and close only a prior shift created by this smoke test. Never close an operator\'s real shift.
+  // Never close or mutate a shift left by a previous run or an operator.
+  // A leftover shift must be reviewed explicitly; auto-closing it can alter real cash reconciliation.
   const currentShift = await request("GET", "/pos/shifts/current", undefined, a.token);
   if (currentShift?.id) {
-    assert(String(currentShift.register_name || "").startsWith("TEMP POS Register "), "any existing open shift belongs to a prior automated POS regression");
-    const existingSales = await request("GET", "/pos/sales?limit=100", undefined, a.token);
-    let confirmedCash = 0;
-    for (const sale of existingSales.filter(row => row.shift_id === currentShift.id)) {
-      const saleInvoice = await request("GET", `/invoices/${sale.invoice_id}`, undefined, a.token);
-      confirmedCash += (saleInvoice.payments || [])
-        .filter(payment => payment.method === "cash" && ["confirmed", "reconciled"].includes(payment.status))
-        .reduce((sum, payment) => sum + Number(payment.amount), 0);
-    }
-    const countedCash = Math.round((Number(currentShift.opening_float) + confirmedCash) * 100) / 100;
-    const closedShift = await request("POST", `/pos/shifts/${currentShift.id}/close`, {
-      countedCash, notes: "Closed during setup for automated POS regression; expected cash reconciled from confirmed cash payments."
-    }, a.token, [200, 201]);
-    assert(closedShift.status === "closed", "closed prior automated POS shift with reconciled cash");
+    throw new Error(`Refusing to run POS regression: an open shift already exists (${currentShift.id}, ${currentShift.register_name || "unnamed register"}). Reconcile and close it manually after confirming it is a disposable test shift; this script will not alter it.`);
   }
   // POS regression: cash checkout, stock ledger, idempotency, payment confirmation, and tenant isolation.
   const warehouse = await request("POST", "/inventory/warehouses", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Warehouse ${stamp}`, location: "Automated regression", capacity: 100 }, a.token, [201]);
@@ -171,6 +159,12 @@ async function main() {
   await request("GET", `/invoices/${invoice.id}`, undefined, b.token, [404]);
   await request("POST", `/invoices/${invoice.id}/payments/${paymentId}/confirm`, undefined, b.token, [403, 404]);
   assert(true, "cross-tenant invoice/payment access blocked");
+  // Close only the shift created by this run, using its known opening float and confirmed cash sale.
+  const closedShift = await request("POST", `/pos/shifts/${shift.id}/close`, {
+    countedCash: 216,
+    notes: `Automated payment regression run ${stamp}; only this run's KES 116 cash sale plus KES 100 opening float counted. M-Pesa receipts excluded from cash.`,
+  }, a.token, [200, 201]);
+  assert(closedShift.status === "closed", "closed only the POS shift created by this regression run");
   console.log(JSON.stringify({ result: "PASS", checksPassed: checks.length, checks }, null, 2));
 }
 main().catch(error => { console.error(JSON.stringify({ result: "FAIL", checksPassed: checks.length, checks, error: String(error?.stack || error) }, null, 2)); process.exitCode = 1; });
