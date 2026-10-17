@@ -13,7 +13,7 @@ export interface LoginResponse {
   };
 }
 
-export interface RegisterResponse {
+export interface MfaChallengeResponse {\n  mfaRequired: true;\n  mfaChallengeToken: string;\n}\n\nexport interface RegisterResponse {
   userId: string;
 }
 
@@ -25,7 +25,7 @@ async function readError(res: Response, fallback: string): Promise<Error> {
   return new Error(message || fallback);
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(email: string, password: string): Promise<LoginResponse | MfaChallengeResponse> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -60,5 +60,15 @@ export async function getCurrentUser(token: string): Promise<AuthenticatedUser> 
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error("Failed to fetch user profile");
+  return res.json();
+}
+
+export async function completeMfaChallenge(challengeToken: string, code: string): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/auth/mfa/challenge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ challengeToken, code }),
+  });
+  if (!res.ok) throw await readError(res, "MFA verification failed");
   return res.json();
 }
