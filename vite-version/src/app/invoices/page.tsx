@@ -58,7 +58,7 @@ function printInvoice(invoice: InvoiceApiRow, company: { name?: string; address_
     <div class="footer">Thank you for your business.${company?.registration_number ? ` Registration no: ${escapeHtml(company.registration_number)}.` : ""}${company?.vat_number ? ` VAT no: ${escapeHtml(company.vat_number)}.` : ""}</div>
     </main></body></html>`;
   if (download) {
-    const blob = new Blob(["\\uFEFF", html], { type: "text/html;charset=utf-8" });
+    const blob = new Blob(["\uFEFF", html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
