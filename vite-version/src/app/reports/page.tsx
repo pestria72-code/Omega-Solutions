@@ -56,10 +56,10 @@ export default function ReportsPage() {
   const paid = filtered.reduce((sum, invoice) => sum + Number(invoice.amount_paid || 0), 0);
   const outstanding = filtered.filter((invoice) => invoice.status !== "cancelled").reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.amount_paid || 0)), 0);
   const exportCsv = () => downloadCsv("omega-invoices-quickbooks-export.csv", [
-    ["Invoice No", "Customer", "Invoice Date", "Due Date", "Product/Service", "Description", "Quantity", "Rate", "Amount", "Tax Amount", "Total", "Amount Paid", "Balance", "Status", "Currency", "Memo"],
+    ["Invoice No", "Customer", "Invoice Date", "Due Date", "Subtotal", "Tax Amount", "Total", "Amount Paid", "Balance", "Status", "Currency", "Memo"],
     ...filtered.map((invoice) => [
       invoice.invoice_number, invoice.customer_name, String(invoice.issue_date).slice(0, 10), String(invoice.due_date).slice(0, 10),
-      "", "", "", "", Number(invoice.subtotal), Number(invoice.tax_amount), Number(invoice.total), Number(invoice.amount_paid),
+      Number(invoice.subtotal), Number(invoice.tax_amount), Number(invoice.total), Number(invoice.amount_paid),
       Math.max(0, Number(invoice.total) - Number(invoice.amount_paid)), invoice.status, invoice.currency || "KES", invoice.notes || "",
     ]),
   ]);
@@ -83,7 +83,7 @@ export default function ReportsPage() {
         <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">Outstanding balance</p><p className="mt-2 text-2xl font-semibold tabular-nums">{loading ? "—" : formatKES(outstanding)}</p></CardContent></Card>
       </div>
       <Card><CardContent className="flex flex-col gap-4 p-4">
-        <div><h2 className="font-semibold">Invoice report</h2><p className="text-sm text-muted-foreground">CSV columns are arranged for accounting import and reconciliation. Confirm your QuickBooks import mapping before importing.</p></div>
+        <div><h2 className="font-semibold">Invoice report</h2><p className="text-sm text-muted-foreground">Export a clean invoice register for spreadsheet review and accounting reconciliation. This is a report export, not a direct QuickBooks invoice-import file.</p></div>
         {loading ? <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading invoice records…</div> : filtered.length === 0 ? <EmptyState icon={FileBarChart} title={invoices.length ? "No invoices in this date range" : "No invoice records yet"} description={invoices.length ? "Change the date range to view other invoices." : "Invoices will appear here once your company records them."} /> : <>
           <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Invoice #</TableHead><TableHead>Customer</TableHead><TableHead>Issue date</TableHead><TableHead>Due date</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Balance</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{filtered.map((invoice) => <TableRow key={invoice.id}><TableCell className="font-medium">{invoice.invoice_number}</TableCell><TableCell>{invoice.customer_name}</TableCell><TableCell>{formatDate(invoice.issue_date)}</TableCell><TableCell>{formatDate(invoice.due_date)}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(invoice.total))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(invoice.amount_paid))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Math.max(0, Number(invoice.total) - Number(invoice.amount_paid)))}</TableCell><TableCell className="capitalize">{invoice.status.replaceAll("_", " ")}</TableCell></TableRow>)}</TableBody></Table></div>
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-sm text-muted-foreground"><span>{filtered.length} invoice(s)</span><span>Showing issue dates {fromDate || "any time"} to {toDate || "any time"}</span></div>
