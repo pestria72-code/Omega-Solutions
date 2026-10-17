@@ -43,6 +43,7 @@ export const routes: RouteObject[] = [
       { path: "/leave-management", lazy: page(() => import("@/app/leave-management/page")) },
       { path: "/companies", lazy: page(() => import("@/app/companies/page")) },
       { path: "/users-roles", lazy: page(() => import("@/app/users-roles/page")) },
+      { path: "/accept-invitation", lazy: page(() => import("@/app/accept-invitation/page")) },
       { path: "/audit-logs", lazy: page(() => import("@/app/audit-logs/page")) },
       { path: "/settings", lazy: page(() => import("@/app/settings/page")) },
     ],
