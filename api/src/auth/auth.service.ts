@@ -240,7 +240,7 @@ export class AuthService {
     const profile = await this.getUserProfile(challenge.sub);
     const payload: JwtPayload = {
       sub: profile.userId, email: profile.email, companyId: profile.companyId,
-      branchId: profile.branchId, role: profile.role,
+      branchId: profile.branchId, role: profile.role, mfaVerified: true,
     };
     return {
       accessToken: this.issueToken(payload, false),
@@ -259,6 +259,8 @@ export class AuthService {
       });
 
       // Re-check the account and active company membership whenever a refresh token is used.
+      const mfaStatus = await this.mfaService.status(payload.sub);
+      if (mfaStatus.enabled && payload.mfaVerified !== true) throw new UnauthorizedException('Sign in again and complete MFA before refreshing tokens.');
       const profile = await this.getUserProfile(payload.sub, payload.companyId);
 
       const newPayload: JwtPayload = {
@@ -267,6 +269,7 @@ export class AuthService {
         companyId: profile.companyId,
         branchId: profile.branchId,
         role: profile.role,
+        ...(payload.mfaVerified === true ? { mfaVerified: true } : {}),
       };
 
       return {
@@ -278,7 +281,7 @@ export class AuthService {
     }
   }
 
-  async switchCompany(userId: string, companyId: string): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
+  async switchCompany(userId: string, companyId: string, mfaVerified = false): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
     // The target company is accepted only after an active membership check for this user.
     const profile = await this.getUserProfile(userId, companyId);
     const payload: JwtPayload = {
@@ -287,6 +290,7 @@ export class AuthService {
       companyId: profile.companyId,
       branchId: profile.branchId,
       role: profile.role,
+      ...(mfaVerified ? { mfaVerified: true } : {}),
     };
     return {
       accessToken: this.issueToken(payload, false),
