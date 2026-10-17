@@ -126,4 +126,78 @@ describe('ApprovalsService', () => {
       ['company-1', user.userId],
     );
   });
+
+  it('submits a draft purchase order for approval within the active company', async () => {
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT id,status,created_by FROM purchase_orders')) {
+        return { rows: [{ id: 'po-1', status: 'draft', created_by: 'approver-1' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await expect(service.submitPurchaseOrder(user, 'po-1')).resolves.toEqual({ id: 'po-1', status: 'pending_approval' });
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE company_id=$1 AND id=$2 FOR UPDATE'),
+      ['company-1', 'po-1'],
+    );
+    expect(client.query.mock.calls.some(([sql, params]) =>
+      String(sql).includes("VALUES($1,$2,'purchase_order',$3,$4,'pending'") &&
+      (params as unknown[])[0] === 'company-1' && (params as unknown[])[2] === 'po-1')).toBe(true);
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'submit_for_approval', entityType: 'purchase_order', entityId: 'po-1',
+    }));
+  });
+
+  it('does not allow a different user to submit a purchase order', async () => {
+    client.query.mockResolvedValueOnce({ rows: [{ id: 'po-1', status: 'draft', created_by: 'someone-else' }], rowCount: 1 });
+    await expect(service.submitPurchaseOrder(user, 'po-1')).rejects.toThrow(BadRequestException);
+    expect(client.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO approval_requests'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('approves a purchase order by moving it from draft to ordered', async () => {
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT * FROM approval_requests')) {
+        return { rows: [{ id: 'approval-1', entity_type: 'purchase_order', entity_id: 'po-1', requester_user_id: 'requester-1', status: 'pending' }], rowCount: 1 };
+      }
+      if (sql.includes('SELECT id,status FROM purchase_orders')) {
+        return { rows: [{ id: 'po-1', status: 'draft' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await expect(service.decide(user, 'approval-1', 'approved')).resolves.toEqual({
+      id: 'approval-1', entityId: 'po-1', entityType: 'purchase_order', status: 'approved',
+    });
+    expect(client.query.mock.calls.some(([sql]) => String(sql).includes("UPDATE purchase_orders SET status='ordered'"))).toBe(true);
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'approve', newValues: { status: 'approved', entityId: 'po-1', entityType: 'purchase_order', note: null },
+    }));
+  });
+
+  it('rejects a purchase order without moving it to ordered', async () => {
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT * FROM approval_requests')) {
+        return { rows: [{ id: 'approval-1', entity_type: 'purchase_order', entity_id: 'po-1', requester_user_id: 'requester-1', status: 'pending' }], rowCount: 1 };
+      }
+      if (sql.includes('SELECT id,status FROM purchase_orders')) {
+        return { rows: [{ id: 'po-1', status: 'draft' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await service.decide(user, 'approval-1', 'rejected');
+    expect(client.query.mock.calls.some(([sql]) => String(sql).includes("UPDATE purchase_orders SET status='ordered'"))).toBe(false);
+    expect(client.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE approval_requests') && (sql as string).includes('status=$1'))).toBe(true);
+  });
+
+  it('includes purchase order and supplier details in the company-scoped inbox', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    await service.inbox(user);
+    const sql = String(db.query.mock.calls[0][0]);
+    expect(sql).toContain('LEFT JOIN purchase_orders');
+    expect(sql).toContain('LEFT JOIN suppliers');
+    expect(sql).toContain("a.entity_type='purchase_order'");
+    expect(sql).toContain("WHERE a.company_id=$1 AND a.status='pending'");
+  });
 });
