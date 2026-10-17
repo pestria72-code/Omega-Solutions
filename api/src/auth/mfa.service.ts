@@ -126,9 +126,9 @@ export class MfaService {
     const hashes = recoveryCodes.map(hashCode);
     await this.db.query(
       `UPDATE user_mfa SET secret_encrypted=pending_secret_encrypted, pending_secret_encrypted=NULL,
-       enabled_at=NOW(), recovery_code_hashes=$2, failed_attempts=0, locked_until=NULL, updated_at=NOW()
+       enabled_at=NOW(), recovery_code_hashes=ARRAY(SELECT jsonb_array_elements_text($2::jsonb)), failed_attempts=0, locked_until=NULL, updated_at=NOW()
        WHERE user_id=$1`,
-      [userId, hashes],
+      [userId, JSON.stringify(hashes)],
     );
     return { enabled: true, recoveryCodes };
   }
@@ -177,8 +177,8 @@ export class MfaService {
     const remaining = [...row.recovery_code_hashes];
     remaining.splice(index, 1);
     const updated = await this.db.query(
-      'UPDATE user_mfa SET recovery_code_hashes=$2, failed_attempts=0, locked_until=NULL, updated_at=NOW() WHERE user_id=$1 AND $3 = ANY(recovery_code_hashes)',
-      [userId, remaining, target],
+      'UPDATE user_mfa SET recovery_code_hashes=ARRAY(SELECT jsonb_array_elements_text($2::jsonb)), failed_attempts=0, locked_until=NULL, updated_at=NOW() WHERE user_id=$1 AND $3 = ANY(recovery_code_hashes)',
+      [userId, JSON.stringify(remaining), target],
     );
     return (updated.rowCount ?? 0) > 0;
   }
