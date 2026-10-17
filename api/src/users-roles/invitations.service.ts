@@ -62,6 +62,12 @@ export class InvitationsService {
       if (!branch.rows.length) throw new NotFoundException('Active branch not found in this company.');
     }
 
+    // Release the unique pending-email slot for expired, unused invitations.
+    await this.db.query(
+      `UPDATE company_invitations SET revoked_at = NOW(), updated_at = NOW()
+       WHERE company_id = $1 AND email = $2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at <= NOW()`,
+      [actor.companyId, email],
+    );
     const existing = await this.db.query(
       `SELECT id FROM company_invitations
        WHERE company_id = $1 AND email = $2 AND accepted_at IS NULL AND revoked_at IS NULL
