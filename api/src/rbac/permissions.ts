@@ -8,6 +8,7 @@ export type Permission =
   | 'products:read' | 'products:write'
   | 'inventory:read' | 'inventory:write'
   | 'sales:read' | 'sales:write' | 'sales:team-read'
+  | 'credit-notes:read' | 'credit-notes:write'
   | 'purchases:read' | 'purchases:write'
   | 'requisitions:read' | 'requisitions:write'
   | 'approvals:read' | 'approvals:approve'
