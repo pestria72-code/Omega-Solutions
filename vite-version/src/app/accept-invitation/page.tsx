@@ -22,6 +22,8 @@ export default function AcceptInvitationPage() {
     setBusy(true); setError("");
     try {
       await api.post("/users-roles/invitations/accept", { token });
+      // Remove the single-use invitation token from the browser URL/history after it is consumed.
+      navigate("/accept-invitation", { replace: true });
       setAccepted(true);
     } catch (e) {
       setError(e && typeof e === "object" && "message" in e ? String((e as {message: unknown}).message) : "The invitation could not be accepted.");
