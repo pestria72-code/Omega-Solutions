@@ -3,10 +3,12 @@ import { AuthService } from './auth.service.js';
 import { LoginDto, RefreshDto, NeonExchangeDto, SwitchCompanyDto } from './dto/auth.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from './interfaces/authenticated-user.js';
+import { MfaService } from './mfa.service.js';
+import { MfaCodeDto, MfaChallengeDto } from './dto/mfa.dto.js';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService, private readonly mfaService: MfaService) {}
 
   @Post('register')
   async register() {
@@ -21,6 +23,37 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+
+  @Post('mfa/challenge')
+  async completeMfaChallenge(@Body() dto: MfaChallengeDto) {
+    return this.authService.completeMfaChallenge(dto.challengeToken, dto.code);
+  }
+
+  @Get('mfa/status')
+  @UseGuards(JwtAuthGuard)
+  async mfaStatus(@Request() req: { user: AuthenticatedUser }) {
+    return this.mfaService.status(req.user.userId);
+  }
+
+  @Post('mfa/enroll')
+  @UseGuards(JwtAuthGuard)
+  async beginMfaEnrollment(@Request() req: { user: AuthenticatedUser }) {
+    return this.mfaService.beginEnrollment(req.user.userId, req.user.email);
+  }
+
+  @Post('mfa/confirm')
+  @UseGuards(JwtAuthGuard)
+  async confirmMfaEnrollment(@Request() req: { user: AuthenticatedUser }, @Body() dto: MfaCodeDto) {
+    return this.mfaService.confirmEnrollment(req.user.userId, dto.code);
+  }
+
+  @Post('mfa/disable')
+  @UseGuards(JwtAuthGuard)
+  async disableMfa(@Request() req: { user: AuthenticatedUser }, @Body() dto: MfaCodeDto) {
+    await this.mfaService.disable(req.user.userId, dto.code);
+    return { enabled: false };
   }
 
   @Post('refresh')
