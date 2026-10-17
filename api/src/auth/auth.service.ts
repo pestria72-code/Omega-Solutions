@@ -16,6 +16,7 @@ import type {
   JwtPayload,
   TokenPair,
 } from './interfaces/authenticated-user.js';
+import { MfaService } from './mfa.service.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -24,6 +25,7 @@ export class AuthService {
   constructor(
     private readonly db: DatabaseService,
     private readonly jwtService: JwtService,
+    private readonly mfaService: MfaService,
   ) {}
 
   async register(dto: RegisterDto): Promise<{ userId: string; companyId: string | null }> {
@@ -68,7 +70,7 @@ export class AuthService {
     return { userId, companyId: result.companyId };
   }
 
-  async exchangeNeonIdentity(dto: NeonExchangeDto): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
+  async exchangeNeonIdentity(dto: NeonExchangeDto): Promise<(TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }) | { mfaRequired: true; mfaChallengeToken: string }> {
     const identity = await verifyNeonIdentityToken(dto.token);
     // Read the verified identity from Neon Auth's own database schema; never trust an email supplied by the browser.
     const neonUserResult = await this.db.query<{
@@ -136,6 +138,9 @@ export class AuthService {
       }
     }
 
+    const mfaStatus = await this.mfaService.status(user.id);
+    if (mfaStatus.enabled) return this.createMfaChallenge(user.id, user.email);
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -157,7 +162,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
+  async login(dto: LoginDto): Promise<(TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }) | { mfaRequired: true; mfaChallengeToken: string }> {
     const result = await this.db.query<{
       id: string;
       email: string;
@@ -183,6 +188,9 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const mfaStatus = await this.mfaService.status(user.id);
+    if (mfaStatus.enabled) return this.createMfaChallenge(user.id, user.email);
+
     const membership = await this.getUserMembership(user.id);
 
     const payload: JwtPayload = {
@@ -203,6 +211,43 @@ export class AuthService {
         companyId: membership.companyId,
         branchId: membership.branchId,
         role: membership.role,
+      },
+    };
+  }
+
+  private createMfaChallenge(userId: string, email: string): { mfaRequired: true; mfaChallengeToken: string } {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET is missing from the environment.');
+    return {
+      mfaRequired: true,
+      mfaChallengeToken: this.jwtService.sign({ sub: userId, email, mfaChallenge: true }, { secret, expiresIn: '5m' }),
+    };
+  }
+
+  async completeMfaChallenge(challengeToken: string, code: string): Promise<TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }> {
+    let challenge: { sub: string; email: string; mfaChallenge?: boolean };
+    try {
+      challenge = this.jwtService.verify(challengeToken, { secret: process.env.JWT_SECRET });
+    } catch {
+      throw new UnauthorizedException('MFA challenge expired or invalid. Please sign in again.');
+    }
+    if (challenge.mfaChallenge !== true || !challenge.sub || !challenge.email) {
+      throw new UnauthorizedException('Invalid MFA challenge.');
+    }
+    const valid = (await this.mfaService.verifyUserCode(challenge.sub, code)) ||
+      (await this.mfaService.useRecoveryCode(challenge.sub, code));
+    if (!valid) throw new UnauthorizedException('Invalid authenticator or recovery code.');
+    const profile = await this.getUserProfile(challenge.sub);
+    const payload: JwtPayload = {
+      sub: profile.userId, email: profile.email, companyId: profile.companyId,
+      branchId: profile.branchId, role: profile.role,
+    };
+    return {
+      accessToken: this.issueToken(payload, false),
+      refreshToken: this.issueToken(payload, true),
+      user: {
+        userId: profile.userId, email: profile.email, fullName: profile.fullName,
+        companyId: profile.companyId, branchId: profile.branchId, role: profile.role,
       },
     };
   }
