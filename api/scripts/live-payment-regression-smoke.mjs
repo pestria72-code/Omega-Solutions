@@ -17,8 +17,14 @@ async function request(method, path, body, token, expected = [200, 201]) {
 }
 function assert(ok, message) { if (!ok) throw new Error(message); checks.push(message); }
 async function tenant(label, slot) {
-  const login = await neonTestLogin(base, { slot, companyName: `Payment Regression ${label} ${stamp}` });
+  const expectedCompanyName = `Payment Regression ${label} ${stamp}`;
+  const login = await neonTestLogin(base, { slot, companyName: expectedCompanyName });
   assert(!!login.token && !!login.user?.companyId, `authenticated verified ${label} Neon test identity`);
+  // Never create regression records in a pre-existing company. A verified identity
+  // must already be provisioned into this run's uniquely named isolated tenant.
+  const company = await request("GET", "/companies/me", undefined, login.token);
+  assert(company?.name === expectedCompanyName,
+    `refused to use non-isolated company for ${label} regression tenant`);
   return { userId: login.user.userId, companyId: login.user.companyId, token: login.token };
 }
 async function main() {
