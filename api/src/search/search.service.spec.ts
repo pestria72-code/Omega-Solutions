@@ -1,0 +1,54 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SearchService } from './search.service.js';
+import type { DatabaseService } from '../database.service.js';
+import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+
+const user = (overrides: Partial<AuthenticatedUser> = {}): AuthenticatedUser => ({
+  userId: 'user-a',
+  email: 'a@example.test',
+  fullName: 'User A',
+  companyId: 'company-a',
+  branchId: null,
+  role: 'staff',
+  permissions: ['customers:read'],
+  ...overrides,
+});
+
+describe('SearchService', () => {
+  const db = { query: vi.fn() };
+  let service: SearchService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    service = new SearchService(db as unknown as DatabaseService);
+  });
+
+  it('does not query the database without a company or search term', async () => {
+    expect(await service.search(user({ companyId: null }), 'Acme')).toEqual([]);
+    expect(await service.search(user(), '  ')).toEqual([]);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('searches only modules the user can read and scopes SQL to the active company', async () => {
+    db.query.mockResolvedValue({ rows: [{ id: 'customer-a', title: 'Acme', type: 'Customer' }], rowCount: 1 });
+    const results = await service.search(user(), 'Acme');
+
+    expect(results).toHaveLength(1);
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('WHERE company_id=$1');
+    expect(db.query.mock.calls[0][1]).toEqual(['company-a', '%Acme%']);
+  });
+
+  it('returns no records for a user without read permissions', async () => {
+    expect(await service.search(user({ permissions: [] }), 'Acme')).toEqual([]);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('searches invoice records only for users with sales:read and scopes them to company', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    await service.search(user({ permissions: ['sales:read'] }), 'INV-1');
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('i.company_id=$1');
+    expect(db.query.mock.calls[0][1]?.[0]).toBe('company-a');
+  });
+});
