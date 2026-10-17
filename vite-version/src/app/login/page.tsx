@@ -40,7 +40,7 @@ export default function LoginPage() {
     try {
       if (mfaChallengePending) {
         const code = otp.trim();
-        if (!/^(\\d{6}|[a-fA-F0-9]{10})$/.test(code)) {
+        if (!/^(\d{6}|[a-fA-F0-9]{10})$/.test(code)) {
           setError("Enter the 6-digit authenticator code or one unused 10-character recovery code.");
           return;
         }
@@ -56,7 +56,6 @@ export default function LoginPage() {
         navigate("/dashboard", { replace: true })
       } else if (mode === "login") {
         await loginEmail(email, password)
-        navigate("/dashboard", { replace: true })
       } else {
         if (password.length < 8) {
           setError("Password must be at least 8 characters")
@@ -111,11 +110,13 @@ export default function LoginPage() {
             {mfaChallengePending ? "Two-step verification" : verificationPending ? "Verify your email" : mode === "login" ? "Sign in to your account" : "Create a new account"}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {verificationPending
-              ? `Enter the verification code sent to ${email}. You will then be signed in and taken to your dashboard.`
-              : mode === "login"
-                ? "Enter your credentials to access the dashboard"
-                : "Create your account. You must verify your email before your Omega company account is created."}
+            {mfaChallengePending
+              ? "Enter your authenticator code or an unused recovery code to finish signing in."
+              : verificationPending
+                ? `Enter the verification code sent to ${email}. You will then be signed in and taken to your dashboard.`
+                : mode === "login"
+                  ? "Enter your credentials to access the dashboard"
+                  : "Create your account. You must verify your email before your Omega company account is created."}
           </p>
         </div>
 
@@ -135,10 +136,10 @@ export default function LoginPage() {
           </>
         )}
 
-        <div className="space-y-2">
+        {!mfaChallengePending && <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={verificationPending} placeholder="you@example.com" autoComplete="email" />
-        </div>
+        </div>}
 
         {!verificationPending && !mfaChallengePending && (
           <div className="space-y-2">
@@ -147,20 +148,20 @@ export default function LoginPage() {
           </div>
         )}
 
-        {mode === "register" && !verificationPending && (
+        {mode === "register" && !verificationPending && !mfaChallengePending && (
           <div className="space-y-2">
             <Label htmlFor="phone">Phone (optional)</Label>
             <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+254 712 345 678" autoComplete="tel" />
           </div>
         )}
 
-        {verificationPending && (
+        {(verificationPending || mfaChallengePending) && (
           <div className="space-y-2">
-            <Label htmlFor="otp">Email verification code</Label>
-            <Input id="otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} required placeholder="6-digit code" />
-            <div className="text-right">
+            <Label htmlFor="otp">{mfaChallengePending ? "Authenticator / recovery code" : "Email verification code"}</Label>
+            <Input id="otp" inputMode={mfaChallengePending ? "text" : "numeric"} autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(mfaChallengePending ? e.target.value.replace(/[^a-fA-F0-9]/g, "").slice(0, 10) : e.target.value.replace(/\D/g, "").slice(0, 6))} required placeholder={mfaChallengePending ? "6-digit code or recovery code" : "6-digit code"} />
+            {verificationPending && <div className="text-right">
               <button type="button" onClick={resendCode} disabled={submitting} className="text-sm font-medium text-primary hover:underline">Resend code</button>
-            </div>
+            </div>}
           </div>
         )}
 
