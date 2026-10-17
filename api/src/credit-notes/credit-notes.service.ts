@@ -126,9 +126,14 @@ export class CreditNotesService {
       if (invoice.status === 'draft' || invoice.status === 'cancelled') {
         throw new BadRequestException('Credit notes can only be issued against sent or settled invoices.');
       }
-      const remaining = Math.round((Number(invoice.total) - Number(invoice.amount_paid) - Number(invoice.credited_amount)) * 100) / 100;
+      const pendingResult = await client.query<{ amount: string | number }>(
+        "SELECT COALESCE(SUM(amount),0) AS amount FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2 AND status='pending'",
+        [companyId, invoice.id],
+      );
+      const pendingPayments = Number(pendingResult.rows[0]?.amount ?? 0);
+      const remaining = Math.round((Number(invoice.total) - Number(invoice.amount_paid) - Number(invoice.credited_amount) - pendingPayments) * 100) / 100;
       if (total > remaining + 0.005) {
-        throw new BadRequestException(`Credit total ${total.toFixed(2)} exceeds the remaining unpaid invoice balance of ${Math.max(0, remaining).toFixed(2)}.`);
+        throw new BadRequestException(`Credit total ${total.toFixed(2)} exceeds the remaining unpaid invoice balance after pending payment reports of ${Math.max(0, remaining).toFixed(2)}.`);
       }
       const year = Number(issueDate.slice(0, 4));
       const sequence = await client.query<{ next_number: number }>(
