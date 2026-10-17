@@ -80,7 +80,8 @@ describe('InvitationsService', () => {
         rowCount: 1,
       })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'branch-2' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'membership-new' }], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [], rowCount: 1 });
     const invitee = { userId: 'invitee-1', email: 'new@example.com', companyId: 'company-1' } as any;
 
@@ -89,9 +90,10 @@ describe('InvitationsService', () => {
     expect(result).toEqual({ success: true, companyId: 'company-2', role: 'staff' });
     expect(db.transaction).toHaveBeenCalledTimes(1);
     expect(client.query.mock.calls[1][1]).toEqual(['invitee-1', 'company-2']);
-    expect(client.query.mock.calls[2][0]).toContain('INSERT INTO company_memberships');
-    expect(client.query.mock.calls[2][1]).toEqual(['invitee-1', 'company-2', 'branch-2', 'staff']);
-    expect(client.query.mock.calls[3][0]).toContain('SET accepted_at = NOW()');
+    expect(client.query.mock.calls[2][1]).toEqual(['branch-2', 'company-2']);
+    expect(client.query.mock.calls[3][0]).toContain('INSERT INTO company_memberships');
+    expect(client.query.mock.calls[3][1]).toEqual(['invitee-1', 'company-2', 'branch-2', 'staff']);
+    expect(client.query.mock.calls[4][0]).toContain('SET accepted_at = NOW()');
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
       action: 'accept_invitation',
       companyId: 'company-2',
