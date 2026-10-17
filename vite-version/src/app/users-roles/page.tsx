@@ -1,151 +1,80 @@
-import * as React from "react"
-import { Search, UserCog, Shield } from "lucide-react"
-import { BaseLayout } from "@/components/layouts/base-layout"
-import { PageHeader } from "@/components/page-header"
-import { DemoBanner } from "@/components/demo-banner"
-import { EmptyState } from "@/components/empty-state"
-import { StatusBadge, RoleBadge } from "@/components/status-badge"
-import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { DEMO_USERS } from "@/data/mock-data"
-import { formatDateTime } from "@/lib/format"
-import type { UserRole } from "@/lib/types"
+import * as React from "react";
+import { AlertCircle, Loader2, RefreshCw, Shield, UserCog } from "lucide-react";
+import { BaseLayout } from "@/components/layouts/base-layout";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api-client";
+import { useAuth } from "@/contexts/auth-context";
 
-const rolePermissions: Record<UserRole, string[]> = {
-  Owner: ["All permissions"],
-  Admin: ["Manage users", "Manage branches", "View all modules", "Create/edit records"],
-  Manager: ["View all modules", "Create/edit records", "Approve orders"],
-  Staff: ["Create/edit records", "View assigned modules"],
-  Viewer: ["View records only"],
+type Role = "owner" | "admin" | "manager" | "staff" | "viewer";
+type Member = {
+  membership_id: string; user_id: string; company_id: string; branch_id: string | null;
+  role: Role; is_active: boolean; full_name: string; email: string; phone: string | null;
+  last_login_at: string | null; user_created_at: string; branch_name: string | null;
+  permissions: string[];
+};
+type RoleInfo = { role: Role; permissions: string[] };
+const roles: Role[] = ["admin", "manager", "staff", "viewer"];
+const title = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
+function errorText(e: unknown) {
+  return e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "Request failed. Please try again.";
 }
-
 export default function UsersRolesPage() {
-  const [search, setSearch] = React.useState("")
-  const [roleFilter, setRoleFilter] = React.useState("all")
-
-  const filtered = DEMO_USERS.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase())
-    const matchesRole = roleFilter === "all" || u.role === roleFilter
-    return matchesSearch && matchesRole
-  })
-
-  return (
-    <BaseLayout>
-      <div className="px-4 lg:px-6 flex flex-col gap-6">
-        <PageHeader
-          title="Users & Roles"
-          description="Manage user accounts and role permissions"
-        />
-        <DemoBanner message="User and role data shown here is demo data. Permission management is presentational only — it is not enforced by the backend yet." />
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardContent className="flex flex-col gap-4 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name or email..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-8"
-                    aria-label="Search users"
-                  />
-                </div>
-                <Select value={roleFilter} onValueChange={(v) => v && setRoleFilter(v)}>
-                  <SelectTrigger size="sm" className="w-full sm:w-36" aria-label="Filter by role">
-                    <SelectValue placeholder="All roles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All roles</SelectItem>
-                    <SelectItem value="Owner">Owner</SelectItem>
-                    <SelectItem value="Admin">Admin</SelectItem>
-                    <SelectItem value="Manager">Manager</SelectItem>
-                    <SelectItem value="Staff">Staff</SelectItem>
-                    <SelectItem value="Viewer">Viewer</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {filtered.length === 0 ? (
-                <EmptyState icon={UserCog} title="No users found" description="Try adjusting your search or filters." />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="hidden md:table-cell">Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden lg:table-cell">Branch</TableHead>
-                      <TableHead className="hidden xl:table-cell">Last Active</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((u) => (
-                      <TableRow key={u.id}>
-                        <TableCell className="font-medium">{u.name}</TableCell>
-                        <TableCell className="hidden md:table-cell text-muted-foreground">{u.email}</TableCell>
-                        <TableCell><RoleBadge role={u.role} /></TableCell>
-                        <TableCell><StatusBadge status={u.status} /></TableCell>
-                        <TableCell className="hidden lg:table-cell text-muted-foreground">{u.branch}</TableCell>
-                        <TableCell className="hidden xl:table-cell text-muted-foreground">
-                          {u.lastActive ? formatDateTime(u.lastActive) : "Never"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Shield className="size-4" /> Role Permissions</CardTitle>
-              <CardDescription>Presentational view of role-based access</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-4">
-                {(Object.keys(rolePermissions) as UserRole[]).map((role) => (
-                  <div key={role} className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                      <RoleBadge role={role} />
-                      <span className="text-xs text-muted-foreground">{rolePermissions[role].length} permission(s)</span>
-                    </div>
-                    <div className="flex flex-col gap-1.5 pl-1">
-                      {rolePermissions[role].map((perm) => (
-                        <label key={perm} className="flex items-center gap-2 text-sm">
-                          <Checkbox checked disabled />
-                          <span className="text-muted-foreground">{perm}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+  const { user } = useAuth();
+  const [members, setMembers] = React.useState<Member[]>([]);
+  const [roleInfo, setRoleInfo] = React.useState<RoleInfo[]>([]);
+  const [search, setSearch] = React.useState("");
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [notice, setNotice] = React.useState("");
+  const canManage = user?.role === "owner" || user?.role === "admin";
+  const refresh = React.useCallback(async () => {
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const rows = await api.get<Member[]>("/users-roles");
+      setMembers(rows);
+      if (canManage) {
+        try { setRoleInfo(await api.get<RoleInfo[]>("/users-roles/roles")); }
+        catch { setRoleInfo([]); }
+      }
+    } catch (e) { setError(errorText(e)); }
+    finally { setLoading(false); }
+  }, [canManage]);
+  React.useEffect(() => { void refresh(); }, [refresh]);
+  const changeRole = async (member: Member, role: Role) => {
+    if (role === member.role) return;
+    setSaving(member.membership_id); setError(""); setNotice("");
+    try {
+      await api.patch("/users-roles/" + member.membership_id + "/role", { role });
+      setNotice("Role updated for " + member.full_name + ".");
+      await refresh();
+    } catch (e) { setError(errorText(e)); }
+    finally { setSaving(""); }
+  };
+  const filtered = members.filter(m => (m.full_name + " " + m.email + " " + (m.branch_name ?? "")).toLowerCase().includes(search.toLowerCase()));
+  return <BaseLayout><div className="flex flex-col gap-5 px-4 lg:px-6">
+    <PageHeader title="Users & Roles" description="Company membership, access roles and enforced permissions" action={<Button variant="outline" onClick={() => void refresh()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button>}/>
+    {error && <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0"/>{error}</div>}
+    {notice && <div role="status" className="rounded-md border p-3 text-sm">{notice}</div>}
+    <Card><CardHeader><CardTitle className="flex items-center gap-2"><UserCog className="size-4"/>Company users</CardTitle><CardDescription>Live memberships from the active company. Other companies' users are not shown.</CardDescription></CardHeader><CardContent>
+      <div className="mb-4"><Label htmlFor="users-search">Search users</Label><Input id="users-search" className="mt-2 max-w-md" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Name, email or branch"/></div>
+      {loading ? <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin"/>Loading company users…</div>
+      : filtered.length === 0 ? <div className="py-10 text-center text-sm text-muted-foreground">{members.length ? "No users match this search." : "No company memberships were returned for your account."}</div>
+      : <div className="space-y-3">{filtered.map(m=><div key={m.membership_id} className="flex flex-col gap-3 rounded-lg border p-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0"><p className="font-semibold">{m.full_name}</p><p className="break-all text-sm text-muted-foreground">{m.email}</p><p className="mt-1 text-xs text-muted-foreground">{m.branch_name ?? "All branches / no branch assigned"} · {m.is_active ? "Active membership" : "Inactive membership"} · {m.last_login_at ? "Last login " + new Date(m.last_login_at).toLocaleString() : "No recorded login"}</p></div>
+        <div className="flex items-center gap-3"><span className="rounded-full bg-muted px-3 py-1 text-xs font-medium">{title(m.role)}</span>
+        {canManage && m.role !== "owner" && m.user_id !== user?.userId && <div className="flex items-center gap-2"><Label className="sr-only" htmlFor={"role-"+m.membership_id}>Change role for {m.full_name}</Label><select id={"role-"+m.membership_id} aria-label={"Change role for "+m.full_name} className="h-9 rounded-md border bg-background px-3 text-sm" value={m.role} disabled={saving===m.membership_id} onChange={e=>void changeRole(m,e.target.value as Role)}>{roles.filter(r=>r!=="admin"||user?.role==="owner").map(r=><option key={r} value={r}>{title(r)}</option>)}</select>{saving===m.membership_id&&<Loader2 className="size-4 animate-spin"/>}</div>}
         </div>
-      </div>
-    </BaseLayout>
-  )
+      </div>)}</div>}
+    </CardContent></Card>
+    <Card><CardHeader><CardTitle className="flex items-center gap-2"><Shield className="size-4"/>Role permissions</CardTitle><CardDescription>These are the permissions assigned to each system role in the backend. API endpoints enforce them on every request.</CardDescription></CardHeader><CardContent>
+      {!canManage ? <p className="text-sm text-muted-foreground">Owner or admin access is required to view the full role catalog.</p>
+      : roleInfo.length === 0 ? <p className="text-sm text-muted-foreground">Role permission catalog is unavailable. Refresh or verify administrator access.</p>
+      : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{roleInfo.map(r=><div key={r.role} className="rounded-lg border p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{title(r.role)}</h3><span className="text-xs text-muted-foreground">{r.permissions.length} permissions</span></div><ul className="space-y-1.5">{r.permissions.map(p=><li key={p} className="break-words text-sm text-muted-foreground">{p}</li>)}</ul></div>)}</div>}
+    </CardContent></Card>
+  </div></BaseLayout>;
 }
