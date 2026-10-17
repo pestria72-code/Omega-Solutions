@@ -148,6 +148,34 @@ describe('ApprovalsService', () => {
     }));
   });
 
+  it('cannot submit a purchase order owned by another company', async () => {
+    client.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    await expect(service.submitPurchaseOrder(user, 'foreign-company-po')).rejects.toThrow(NotFoundException);
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE company_id=$1 AND id=$2 FOR UPDATE'),
+      ['company-1', 'foreign-company-po'],
+    );
+    expect(client.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO approval_requests'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('does not create a duplicate pending approval for a purchase order', async () => {
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT id,status,created_by FROM purchase_orders')) {
+        return { rows: [{ id: 'po-1', status: 'draft', created_by: user.userId }], rowCount: 1 };
+      }
+      if (sql.includes('SELECT status FROM approval_requests')) {
+        return { rows: [{ status: 'pending' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await expect(service.submitPurchaseOrder(user, 'po-1')).rejects.toThrow(BadRequestException);
+    expect(client.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO approval_requests'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
   it('does not allow a different user to submit a purchase order', async () => {
     client.query.mockResolvedValueOnce({ rows: [{ id: 'po-1', status: 'draft', created_by: 'someone-else' }], rowCount: 1 });
     await expect(service.submitPurchaseOrder(user, 'po-1')).rejects.toThrow(BadRequestException);
