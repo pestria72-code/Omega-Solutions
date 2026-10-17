@@ -22,6 +22,15 @@ export class PosController {
     return this.pos.createRegister(req.user, body);
   }
 
+  @Get('salesperson-assignment/me')
+  @RequirePermissions('sales:read')
+  mySalespersonAssignment(@Req() req: { user: AuthenticatedUser }) { return this.pos.mySalespersonAssignment(req.user); }
+  @Get('salesperson-assignments')
+  @RequirePermissions('sales:stock-assign')
+  listSalespersonAssignments(@Req() req: { user: AuthenticatedUser }) { return this.pos.listSalespersonAssignments(req.user); }
+  @Post('salesperson-assignments')
+  @RequirePermissions('sales:stock-assign')
+  assignSalespersonWarehouse(@Req() req: { user: AuthenticatedUser }, @Body() body: { userId: string; warehouseId: string }) { return this.pos.assignSalespersonWarehouse(req.user, body); }
   @Get('products')
   @RequirePermissions('products:read')
   searchProducts(@Req() req: { user: AuthenticatedUser }, @Query('search') search?: string, @Query('warehouseId') warehouseId?: string) {

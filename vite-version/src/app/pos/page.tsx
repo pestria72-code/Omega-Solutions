@@ -60,14 +60,14 @@ export default function PosPage() {
   const load=React.useCallback(async()=>{
     setLoading(true);setError(null)
     try{
-      const [regs,current,warehouseRows,customerRows,saleRows]=await Promise.all([
+      const [regs,current,warehouseRows,customerRows,saleRows,assignment]=await Promise.all([
         api.get<Register[]>("/pos/registers"),api.get<Shift|null>("/pos/shifts/current"),
         api.get<Warehouse[]>("/inventory/warehouses"),api.get<Customer[]>("/customers"),
-        api.get<Record<string,unknown>[]>("/pos/sales?limit=10")
+        api.get<Record<string,unknown>[]>("/pos/sales?limit=10"),api.get<{warehouse_id:string}|null>("/pos/salesperson-assignment/me")
       ])
       setRegisters(regs);setShift(current);setWarehouses(warehouseRows.filter(w=>w.is_active));setCustomers(customerRows.filter(c=>c.is_active));setSales(saleRows)
       setRegisterId(current?.register_id??regs.find(r=>r.is_active&&!r.open_shift_id)?.id??"")
-      setWarehouseId(old=>old&&warehouseRows.some(w=>w.id===old&&w.is_active)?old:warehouseRows.find(w=>w.is_active)?.id??"")
+      setWarehouseId(assignment?.warehouse_id ?? warehouseRows.find(w=>w.is_active)?.id ?? "")
     }catch(e){setError((e as {message?:string}).message??"Could not load POS data.")}
     finally{setLoading(false)}
   },[])

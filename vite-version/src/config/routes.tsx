@@ -14,6 +14,7 @@ export const routes: RouteObject[] = [
     children: [
       { path: "/dashboard", lazy: page(() => import("@/app/dashboard/page")) },
       { path: "/sales-dashboard", lazy: page(() => import("@/app/sales-dashboard/page")) },
+      { path: "/salesperson-stock", lazy: page(() => import("@/app/salesperson-stock/page")) },
       { path: "/crm", lazy: page(() => import("@/app/crm/page")) },
       { path: "/crm/campaigns", lazy: page(() => import("@/app/crm/campaigns/page")) },
       { path: "/crm/segments", lazy: page(() => import("@/app/crm/segments/page")) },

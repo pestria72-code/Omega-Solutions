@@ -125,8 +125,38 @@ export class PosService {
     if(Math.abs(debits-credits)>0.005||debits<=0) throw new BadRequestException('POS accounting journal is not balanced.');
   }
 
+  async mySalespersonAssignment(user: AuthenticatedUser) {
+    const {companyId}=await this.company(user);
+    const r=await this.db.query(`SELECT a.id,a.user_id,a.warehouse_id,a.is_active,u.full_name AS salesperson_name,u.email AS salesperson_email,w.code AS warehouse_code,w.name AS warehouse_name FROM salesperson_stock_assignments a JOIN users u ON u.id=a.user_id JOIN warehouses w ON w.id=a.warehouse_id AND w.company_id=a.company_id WHERE a.company_id=$1 AND a.user_id=$2 AND a.is_active=true LIMIT 1`,[companyId,user.userId]);
+    return r.rows[0]??null;
+  }
+  async listSalespersonAssignments(user: AuthenticatedUser) {
+    const {companyId}=await this.company(user);
+    return (await this.db.query(`SELECT a.id,a.user_id,a.warehouse_id,a.is_active,u.full_name AS salesperson_name,u.email AS salesperson_email,w.code AS warehouse_code,w.name AS warehouse_name FROM salesperson_stock_assignments a JOIN users u ON u.id=a.user_id JOIN warehouses w ON w.id=a.warehouse_id AND w.company_id=a.company_id WHERE a.company_id=$1 ORDER BY a.is_active DESC,u.full_name`,[companyId])).rows;
+  }
+  async assignSalespersonWarehouse(user: AuthenticatedUser,input:{userId:string;warehouseId:string}) {
+    const {companyId}=await this.company(user);
+    if(!input.userId||!input.warehouseId||input.userId===user.userId) throw new BadRequestException('Choose a salesperson and warehouse.');
+    const saved=await this.db.transaction(async client=>{
+      const m=await client.query(`SELECT m.user_id FROM company_memberships m JOIN users u ON u.id=m.user_id WHERE m.company_id=$1 AND m.user_id=$2 AND m.is_active=true AND u.is_active=true AND m.role='staff' FOR SHARE`,[companyId,input.userId]);
+      if(!m.rows[0]) throw new BadRequestException('Salesperson must be active staff in this company.');
+      const w=await client.query('SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true FOR SHARE',[input.warehouseId,companyId]);
+      if(!w.rows[0]) throw new BadRequestException('Choose an active warehouse belonging to this company.');
+      const duplicate=await client.query('SELECT user_id FROM salesperson_stock_assignments WHERE company_id=$1 AND warehouse_id=$2 AND is_active=true AND user_id<>$3 FOR UPDATE',[companyId,input.warehouseId,input.userId]);
+      if(duplicate.rows[0]) throw new BadRequestException('Warehouse already assigned to another salesperson.');
+      return (await client.query(`INSERT INTO salesperson_stock_assignments(company_id,user_id,warehouse_id,assigned_by,is_active) VALUES($1,$2,$3,$4,true) ON CONFLICT(company_id,user_id) DO UPDATE SET warehouse_id=EXCLUDED.warehouse_id,assigned_by=EXCLUDED.assigned_by,is_active=true,updated_at=NOW() RETURNING id,user_id,warehouse_id,is_active`,[companyId,input.userId,input.warehouseId,user.userId])).rows[0];
+    });
+    await this.audit.log({userId:user.userId,companyId,branchId:null,action:'salesperson_stock.assign',entityType:'salesperson_stock_assignment',entityId:String(saved.id),oldValues:null,newValues:{userId:input.userId,warehouseId:input.warehouseId},ipAddress:null});
+    return saved;
+  }
   async searchProducts(user:AuthenticatedUser, search?:string, warehouseId?:string) {
     const {companyId}=await this.company(user);
+    if(!user.permissions.includes('sales:team-read')) {
+      const a=await this.db.query<{warehouse_id:string}>('SELECT warehouse_id FROM salesperson_stock_assignments WHERE company_id=$1 AND user_id=$2 AND is_active=true LIMIT 1',[companyId,user.userId]);
+      if(!a.rows[0]) throw new BadRequestException('Your manager must assign a stock warehouse before selling.');
+      if(warehouseId&&warehouseId!==a.rows[0].warehouse_id) throw new BadRequestException('You can only sell from your assigned warehouse.');
+      warehouseId=a.rows[0].warehouse_id;
+    }
     const term=search?.trim();
     const result=await this.db.query(
       `SELECT p.id,p.sku,p.name,p.unit,p.selling_price,p.cost_price,p.is_service,
@@ -168,7 +198,11 @@ export class PosService {
         'SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',
         [dto.warehouseId,companyId]);
       if(!warehouse.rows[0]) throw new BadRequestException('Choose an active warehouse belonging to this company.');
-
+      if(!user.permissions.includes('sales:team-read')) {
+        const a=await client.query<{warehouse_id:string}>('SELECT warehouse_id FROM salesperson_stock_assignments WHERE company_id=$1 AND user_id=$2 AND is_active=true LIMIT 1 FOR SHARE',[companyId,user.userId]);
+        if(!a.rows[0]) throw new BadRequestException('Your manager must assign a stock warehouse before selling.');
+        if(a.rows[0].warehouse_id!==dto.warehouseId) throw new BadRequestException('You can only sell from your assigned warehouse.');
+      }
       let customerId=dto.customerId;
       if(customerId) {
         const customer=await client.query<{id:string}>(
