@@ -167,7 +167,7 @@ async function main() {
   const closedShift = await request("POST", `/pos/shifts/${shift.id}/close`, {
     countedCash: 216,
     notes: `Automated payment regression run ${stamp}; only this run's KES 116 cash sale plus KES 100 opening float counted. M-Pesa receipts excluded from cash.`,
-  }, a.token, [200, 201]);
+  }, b.token, [200, 201]);
   assert(closedShift.status === "closed", "closed only the POS shift created by this regression run");
   console.log(JSON.stringify({ result: "PASS", checksPassed: checks.length, checks }, null, 2));
 }
