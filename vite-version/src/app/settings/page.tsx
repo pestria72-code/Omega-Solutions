@@ -116,6 +116,16 @@ export default function SettingsPage() {
             <div className="flex flex-col gap-3">
               <p className="text-sm">{mfaEnabled ? "MFA is enabled for this account." : "MFA is currently disabled for this account."}</p>
               {mfaError && <p role="alert" className="text-sm text-destructive">{mfaError}</p>}
+              {mfaEnabled && <>
+                <Label htmlFor="mfa-disable-code">Authenticator or recovery code to disable MFA</Label>
+                <Input id="mfa-disable-code" value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/[^a-fA-F0-9]/g, "").slice(0, 10))} placeholder="6-digit or 10-character code" autoComplete="one-time-code" />
+                <Button variant="outline" disabled={mfaBusy || mfaCode.length < 6} onClick={async () => {
+                  setMfaBusy(true); setMfaError(null)
+                  try { await mfaRequest("/auth/mfa/disable", { code: mfaCode }); setMfaEnabled(false); setMfaCode(""); setRecoveryCodes([]); }
+                  catch (err) { setMfaError(err instanceof Error ? err.message : "Could not disable MFA.") }
+                  finally { setMfaBusy(false) }
+                }}>{mfaBusy ? "Disabling…" : "Disable MFA"}</Button>
+              </>}
               {!mfaEnabled && !mfaSecret && <Button disabled={mfaBusy} onClick={async () => {
                 setMfaBusy(true); setMfaError(null)
                 try { const data = await mfaRequest("/auth/mfa/enroll", {}); setMfaSecret(data.secret); }
