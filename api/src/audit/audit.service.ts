@@ -41,7 +41,10 @@ export class AuditService {
     try {
       await this.db.query(sql, params);
     } catch (err) {
-      this.logger.error(`Failed to write audit log: ${err}`);
+      this.logger.error(
+        `Failed to write audit log for ${entry.action} (${entry.entityType}:${entry.entityId ?? 'unknown'}): ${err instanceof Error ? err.stack ?? err.message : String(err)}`,
+      );
+      throw err;
     }
   }
 }
