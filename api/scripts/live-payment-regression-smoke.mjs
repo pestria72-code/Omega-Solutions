@@ -34,6 +34,14 @@ async function main() {
   const a = await tenant("owner", "A");
   const b = await tenant("other", "B");
   assert(a.userId !== b.userId && a.companyId !== b.companyId, "two verified test identities map to separate company tenants");
+  // Preflight the POS register before creating invoices, payments, bills, or journals.
+  // This avoids partial financial test data if a previous run/operator left a shift open.
+  // Never close or mutate a shift left by a previous run or an operator.
+  // A leftover shift must be reviewed explicitly; auto-closing it can alter real cash reconciliation.
+  const currentShift = await request("GET", "/pos/shifts/current", undefined, a.token);
+  if (currentShift?.id) {
+    throw new Error(`Refusing to run POS regression: an open shift already exists (${currentShift.id}, ${currentShift.register_name || "unnamed register"}). Reconcile and close it manually after confirming it is a disposable test shift; this script will not alter it.`);
+  }
   await request("GET", "/invoices", undefined, undefined, [401, 403]);
   assert(true, "invoice API requires authentication");
   const customer = await request("POST", "/customers", { name: `Payment Test Customer ${stamp}`, email: `customer-${stamp}@example.com` }, a.token, [201]);
@@ -85,12 +93,6 @@ async function main() {
   assert(payables.reconciled === true && Math.abs(Number(payables.controlAccountBalance) - Number(payables.supplierBillsBalance)) < 0.005 && Math.abs(Number(payables.variance)) < 0.005, "payables control account reconciles to all supplier bills in the existing test company");
   const finalTrialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(finalTrialBalance.balanced === true && Math.abs(Number(finalTrialBalance.variance)) <= 0.01, "trial balance remains balanced after supplier payment");
-  // Never close or mutate a shift left by a previous run or an operator.
-  // A leftover shift must be reviewed explicitly; auto-closing it can alter real cash reconciliation.
-  const currentShift = await request("GET", "/pos/shifts/current", undefined, a.token);
-  if (currentShift?.id) {
-    throw new Error(`Refusing to run POS regression: an open shift already exists (${currentShift.id}, ${currentShift.register_name || "unnamed register"}). Reconcile and close it manually after confirming it is a disposable test shift; this script will not alter it.`);
-  }
   // POS regression: cash checkout, stock ledger, idempotency, payment confirmation, and tenant isolation.
   const warehouse = await request("POST", "/inventory/warehouses", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Warehouse ${stamp}`, location: "Automated regression", capacity: 100 }, a.token, [201]);
   assert(!!warehouse.id, "created temporary POS warehouse");
