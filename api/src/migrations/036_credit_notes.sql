@@ -63,5 +63,8 @@ INSERT INTO role_permissions(role,permission_id)
 SELECT 'manager',id FROM permissions WHERE permission='credit-notes:read'
 ON CONFLICT(role,permission_id) DO NOTHING;
 INSERT INTO role_permissions(role,permission_id)
+SELECT 'staff',id FROM permissions WHERE permission='credit-notes:read'
+ON CONFLICT(role,permission_id) DO NOTHING;
+INSERT INTO role_permissions(role,permission_id)
 SELECT 'viewer',id FROM permissions WHERE permission='credit-notes:read'
 ON CONFLICT(role,permission_id) DO NOTHING;
