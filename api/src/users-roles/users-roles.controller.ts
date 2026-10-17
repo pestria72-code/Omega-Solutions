@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { UsersRolesService } from './users-roles.service.js';
 import { InvitationsService } from './invitations.service.js';
 import { AcceptInvitationDto, CreateInvitationDto } from './dto/invitations.dto.js';
