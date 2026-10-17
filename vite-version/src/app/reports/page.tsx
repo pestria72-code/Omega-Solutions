@@ -18,7 +18,7 @@ function errorMessage(error: unknown) {
 function csvCell(value: unknown) {
   let text = value == null ? "" : String(value);
   // Prevent spreadsheet formula execution when business-entered text is opened in Excel/Sheets.
-  if (/^[=+@\\t\\r]/.test(text) || /^-/.test(text)) text = "'" + text;
+  if (/^[=+@\t\r]/.test(text) || /^-/.test(text)) text = "'" + text;
   return '"' + text.replaceAll('"', '""') + '"';
 }
 function downloadCsv(filename: string, rows: unknown[][]) {
