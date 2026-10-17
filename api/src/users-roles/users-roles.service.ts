@@ -57,6 +57,10 @@ export class UsersRolesService {
     if (membershipId === actorMembership.companyId) {
       throw new BadRequestException('Invalid membership identifier.');
     }
+    // Reject unauthorized admin grants before opening a database transaction.
+    if (dto.role === 'admin' && actorMembership.role !== 'owner') {
+      throw new ForbiddenException('Only a company owner can grant the admin role.');
+    }
     const result = await this.db.transaction(async client => {
       const found = await client.query(
         'SELECT id,user_id,role,is_active FROM company_memberships WHERE company_id=$1 AND id=$2 FOR UPDATE',
