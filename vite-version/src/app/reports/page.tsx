@@ -54,13 +54,13 @@ export default function ReportsPage() {
   }), [invoices, fromDate, toDate]);
   const total = filtered.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
   const paid = filtered.reduce((sum, invoice) => sum + Number(invoice.amount_paid || 0), 0);
-  const outstanding = filtered.filter((invoice) => invoice.status !== "cancelled").reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.amount_paid || 0)), 0);
+  const outstanding = filtered.filter((invoice) => invoice.status !== "cancelled").reduce((sum, invoice) => sum + Math.max(0, Number(invoice.total || 0) - Number(invoice.amount_paid || 0) - Number(invoice.credited_amount || 0)), 0);
   const exportCsv = () => downloadCsv("omega-invoices-quickbooks-export.csv", [
     ["Invoice No", "Customer", "Invoice Date", "Due Date", "Subtotal", "Tax Amount", "Total", "Amount Paid", "Balance", "Status", "Currency", "Memo"],
     ...filtered.map((invoice) => [
       invoice.invoice_number, invoice.customer_name, String(invoice.issue_date).slice(0, 10), String(invoice.due_date).slice(0, 10),
       Number(invoice.subtotal), Number(invoice.tax_amount), Number(invoice.total), Number(invoice.amount_paid),
-      Math.max(0, Number(invoice.total) - Number(invoice.amount_paid)), invoice.status, invoice.currency || "KES", invoice.notes || "",
+      Math.max(0, Number(invoice.total) - Number(invoice.amount_paid) - Number(invoice.credited_amount || 0)), invoice.status, invoice.currency || "KES", invoice.notes || "",
     ]),
   ]);
   const printReport = () => window.print();
