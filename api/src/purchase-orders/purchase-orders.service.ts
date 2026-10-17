@@ -29,10 +29,11 @@ export class PurchaseOrdersService {
   async list(user: AuthenticatedUser) {
     const {companyId}=await this.companyFor(user);
     return (await this.db.query(
-      `SELECT po.id,po.company_id,po.supplier_id,s.name AS supplier_name,po.order_number,po.order_date,po.expected_date,po.status,po.currency,po.subtotal,po.tax_amount,po.total,po.notes,po.created_at,po.updated_at,COUNT(i.id)::int AS item_count,COALESCE(SUM(i.quantity),0) AS ordered_quantity,COALESCE(SUM(i.received_quantity),0) AS received_quantity
+      `SELECT po.id,po.company_id,po.supplier_id,s.name AS supplier_name,po.order_number,po.order_date,po.expected_date,po.status,po.currency,po.subtotal,po.tax_amount,po.total,po.notes,po.created_at,po.updated_at,ar.status AS approval_status,COUNT(i.id)::int AS item_count,COALESCE(SUM(i.quantity),0) AS ordered_quantity,COALESCE(SUM(i.received_quantity),0) AS received_quantity
        FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id AND s.company_id=po.company_id
        LEFT JOIN purchase_order_items i ON i.purchase_order_id=po.id AND i.company_id=po.company_id
-       WHERE po.company_id=$1 GROUP BY po.id,s.name ORDER BY po.created_at DESC`,[companyId])).rows;
+       LEFT JOIN approval_requests ar ON ar.company_id=po.company_id AND ar.entity_type='purchase_order' AND ar.entity_id=po.id
+       WHERE po.company_id=$1 GROUP BY po.id,s.name,ar.status ORDER BY po.created_at DESC`,[companyId])).rows;
   }
   async getById(user: AuthenticatedUser,id: string) {
     const {companyId}=await this.companyFor(user);
@@ -75,7 +76,11 @@ export class PurchaseOrdersService {
         if(!approval.rows[0]) throw new BadRequestException('Purchase orders must be approved before they can be ordered.');
         await client.query("UPDATE purchase_orders SET status='ordered',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
       }
-      else if(dto.status==='cancelled'&&['draft','ordered'].includes(row.status)) await client.query("UPDATE purchase_orders SET status='cancelled',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
+      else if(dto.status==='cancelled'&&['draft','ordered'].includes(row.status)) {
+        const pending=await client.query("SELECT id FROM approval_requests WHERE company_id=$1 AND entity_type='purchase_order' AND entity_id=$2 AND status='pending'",[m.companyId,id]);
+        if(pending.rows[0]) throw new BadRequestException('A purchase order awaiting approval cannot be cancelled.');
+        await client.query("UPDATE purchase_orders SET status='cancelled',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
+      }
       else throw new BadRequestException(`Cannot change purchase order status from ${row.status} to ${dto.status}.`);
       return row.status;
     });
