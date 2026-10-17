@@ -38,9 +38,11 @@ async function main() {
   // This avoids partial financial test data if a previous run/operator left a shift open.
   // Never close or mutate a shift left by a previous run or an operator.
   // A leftover shift must be reviewed explicitly; auto-closing it can alter real cash reconciliation.
-  const currentShift = await request("GET", "/pos/shifts/current", undefined, a.token);
+  // POS mutations run only in the second approved development test company (tenant B).
+  // Keep payment/invoice/accounting regression in tenant A even if its old POS shift is open.
+  const currentShift = await request("GET", "/pos/shifts/current", undefined, b.token);
   if (currentShift?.id) {
-    throw new Error(`Refusing to run POS regression: an open shift already exists (${currentShift.id}, ${currentShift.register_name || "unnamed register"}). Reconcile and close it manually after confirming it is a disposable test shift; this script will not alter it.`);
+    throw new Error(`Refusing to run POS regression in tenant B: an open shift already exists (${currentShift.id}, ${currentShift.register_name || "unnamed register"}). Reconcile and close it manually after confirming it is a disposable test shift; this script will not alter it.`);
   }
   await request("GET", "/invoices", undefined, undefined, [401, 403]);
   assert(true, "invoice API requires authentication");
@@ -94,70 +96,70 @@ async function main() {
   const finalTrialBalance = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
   assert(finalTrialBalance.balanced === true && Math.abs(Number(finalTrialBalance.variance)) <= 0.01, "trial balance remains balanced after supplier payment");
   // POS regression: cash checkout, stock ledger, idempotency, payment confirmation, and tenant isolation.
-  const warehouse = await request("POST", "/inventory/warehouses", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Warehouse ${stamp}`, location: "Automated regression", capacity: 100 }, a.token, [201]);
+  const warehouse = await request("POST", "/inventory/warehouses", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Warehouse ${stamp}`, location: "Automated regression", capacity: 100 }, b.token, [201]);
   assert(!!warehouse.id, "created temporary POS warehouse");
   const posSku = `POS-${stamp}`;
-  const posProduct = await request("POST", "/products", { sku: posSku, name: `TEMP POS Product ${stamp}`, sellingPrice: 100, costPrice: 60, stockQuantity: 0, reorderLevel: 0, isService: false, isActive: true, unit: "each" }, a.token, [201]);
+  const posProduct = await request("POST", "/products", { sku: posSku, name: `TEMP POS Product ${stamp}`, sellingPrice: 100, costPrice: 60, stockQuantity: 0, reorderLevel: 0, isService: false, isActive: true, unit: "each" }, b.token, [201]);
   assert(!!posProduct.id, "created temporary POS stock product");
   // Seed POS stock through the purchase-order receipt flow so opening stock and the
   // inventory subledger are accompanied by a balanced Inventory/GRNI journal.
-  const posSupplier = await request("POST", "/suppliers", { name: `POS Regression Supplier ${stamp}`, email: `pos-supplier-${stamp}@example.com` }, a.token, [201]);
+  const posSupplier = await request("POST", "/suppliers", { name: `POS Regression Supplier ${stamp}`, email: `pos-supplier-${stamp}@example.com` }, b.token, [201]);
   assert(!!posSupplier.id, "created temporary POS stock supplier");
-  const posPo = await request("POST", "/purchase-orders", { supplierId: posSupplier.id, expectedDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10), notes: "POS regression opening stock with accounting integration", items: [{ productId: posProduct.id, quantity: 5, unitCost: 60, taxRate: 0 }] }, a.token, [201]);
+  const posPo = await request("POST", "/purchase-orders", { supplierId: posSupplier.id, expectedDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10), notes: "POS regression opening stock with accounting integration", items: [{ productId: posProduct.id, quantity: 5, unitCost: 60, taxRate: 0 }] }, b.token, [201]);
   const posPoLine = posPo.items?.[0];
   assert(!!posPo.id && !!posPoLine?.id, "created purchase order for POS opening stock");
-  const orderedPosPo = await request("PATCH", `/purchase-orders/${posPo.id}/status`, { status: "ordered" }, a.token);
+  const orderedPosPo = await request("PATCH", `/purchase-orders/${posPo.id}/status`, { status: "ordered" }, b.token);
   assert(orderedPosPo.status === "ordered", "POS stock purchase order moved to ordered");
-  const posReceipt = await request("POST", `/purchase-orders/${posPo.id}/receive`, { warehouseId: warehouse.id, items: [{ itemId: posPoLine.id, quantity: 5 }], reference: `POS-OPEN-${stamp}` }, a.token, [201]);
+  const posReceipt = await request("POST", `/purchase-orders/${posPo.id}/receive`, { warehouseId: warehouse.id, items: [{ itemId: posPoLine.id, quantity: 5 }], reference: `POS-OPEN-${stamp}` }, b.token, [201]);
   assert(posReceipt.status === "received" && !!posReceipt.receiptId, "POS opening stock received through accounting-integrated purchase flow");
-  const openingStockJournalsResponse = await request("GET", "/accounting/journals", undefined, a.token);
+  const openingStockJournalsResponse = await request("GET", "/accounting/journals", undefined, b.token);
   const openingStockJournals = Array.isArray(openingStockJournalsResponse) ? openingStockJournalsResponse : (openingStockJournalsResponse.items || openingStockJournalsResponse.data || []);
   const openingStockJournal = openingStockJournals.find(j => j.source_type === "purchase_order_receipt" && j.source_id === posReceipt.receiptId);
   assert(!!openingStockJournal && Math.abs(Number(openingStockJournal.total_debits) - 300) < 0.005 && Math.abs(Number(openingStockJournal.total_credits) - 300) < 0.005, "POS opening stock creates balanced KES 300 Inventory/GRNI journal");
-  const register = await request("POST", "/pos/registers", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Register ${stamp}` }, a.token, [201]);
+  const register = await request("POST", "/pos/registers", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Register ${stamp}` }, b.token, [201]);
   assert(!!register.id, "created temporary POS register");
-  const shift = await request("POST", "/pos/shifts/open", { registerId: register.id, openingFloat: 100 }, a.token, [201]);
+  const shift = await request("POST", "/pos/shifts/open", { registerId: register.id, openingFloat: 100 }, b.token, [201]);
   assert(!!shift.id && shift.status === "open", "opened POS cashier shift");
   const cashBody = { requestId: crypto.randomUUID(), shiftId: shift.id, warehouseId: warehouse.id, items: [{ productId: posProduct.id, quantity: 1, unitPrice: 100, taxRate: 16 }], payments: [{ method: "cash", amount: 116 }] };
-  const cashSale = await request("POST", "/pos/checkout", cashBody, a.token, [201]);
+  const cashSale = await request("POST", "/pos/checkout", cashBody, b.token, [201]);
   assert(!!cashSale.saleId && cashSale.status === "completed" && Number(cashSale.total) === 116, "POS cash checkout records exact tax-inclusive total");
-  const beforeRetry = await request("GET", "/pos/sales?limit=100", undefined, a.token);
-  const retry = await request("POST", "/pos/checkout", cashBody, a.token, [201]);
-  const afterRetry = await request("GET", "/pos/sales?limit=100", undefined, a.token);
+  const beforeRetry = await request("GET", "/pos/sales?limit=100", undefined, b.token);
+  const retry = await request("POST", "/pos/checkout", cashBody, b.token, [201]);
+  const afterRetry = await request("GET", "/pos/sales?limit=100", undefined, b.token);
   assert(retry.saleId === cashSale.saleId && retry.idempotent === true && beforeRetry.length === afterRetry.length, "POS retry does not duplicate a sale");
-  let stock = await request("GET", `/inventory/stock?warehouseId=${warehouse.id}&search=${posSku}`, undefined, a.token);
+  let stock = await request("GET", `/inventory/stock?warehouseId=${warehouse.id}&search=${posSku}`, undefined, b.token);
   assert(Number(stock.find(row => row.sku === posSku)?.quantity) === 4, "POS cash sale deducts one unit from inventory");
   const salesBeforeRejected = afterRetry.length;
-  await request("POST", "/pos/checkout", { ...cashBody, requestId: crypto.randomUUID(), items: [{ productId: posProduct.id, quantity: 99, unitPrice: 100, taxRate: 0 }], payments: [{ method: "cash", amount: 9900 }] }, a.token, [400]);
-  const salesAfterRejected = await request("GET", "/pos/sales?limit=100", undefined, a.token);
-  stock = await request("GET", `/inventory/stock?warehouseId=${warehouse.id}&search=${posSku}`, undefined, a.token);
+  await request("POST", "/pos/checkout", { ...cashBody, requestId: crypto.randomUUID(), items: [{ productId: posProduct.id, quantity: 99, unitPrice: 100, taxRate: 0 }], payments: [{ method: "cash", amount: 9900 }] }, b.token, [400]);
+  const salesAfterRejected = await request("GET", "/pos/sales?limit=100", undefined, b.token);
+  stock = await request("GET", `/inventory/stock?warehouseId=${warehouse.id}&search=${posSku}`, undefined, b.token);
   assert(salesBeforeRejected === salesAfterRejected.length && Number(stock.find(row => row.sku === posSku)?.quantity) === 4, "insufficient-stock POS checkout rolls back completely");
   const mpesaRef = `POS-MPESA-${stamp}`;
-  const mpesaSale = await request("POST", "/pos/checkout", { requestId: crypto.randomUUID(), shiftId: shift.id, warehouseId: warehouse.id, items: [{ productId: posProduct.id, quantity: 1, unitPrice: 100, taxRate: 0 }], payments: [{ method: "mpesa", amount: 100, reference: mpesaRef }] }, a.token, [201]);
+  const mpesaSale = await request("POST", "/pos/checkout", { requestId: crypto.randomUUID(), shiftId: shift.id, warehouseId: warehouse.id, items: [{ productId: posProduct.id, quantity: 1, unitPrice: 100, taxRate: 0 }], payments: [{ method: "mpesa", amount: 100, reference: mpesaRef }] }, b.token, [201]);
   assert(mpesaSale.status === "awaiting_payment_confirmation" && Number(mpesaSale.amountConfirmed) === 0, "POS M-Pesa payment remains pending verification");
-  let posInvoice = await request("GET", `/invoices/${mpesaSale.invoiceId}`, undefined, a.token);
+  let posInvoice = await request("GET", `/invoices/${mpesaSale.invoiceId}`, undefined, b.token);
   const posPayment = posInvoice.payments?.find(p => p.reference === mpesaRef);
   assert(!!posPayment && posPayment.status === "pending", "POS M-Pesa payment is attached to invoice");
-  posInvoice = await request("POST", `/invoices/${mpesaSale.invoiceId}/payments/${posPayment.id}/confirm`, undefined, a.token);
+  posInvoice = await request("POST", `/invoices/${mpesaSale.invoiceId}/payments/${posPayment.id}/confirm`, undefined, b.token);
   assert(Number(posInvoice.amount_paid) === 100 && posInvoice.status === "paid", "verified POS M-Pesa payment updates invoice balance");
-  const refreshedSales = await request("GET", "/pos/sales?limit=100", undefined, a.token);
+  const refreshedSales = await request("GET", "/pos/sales?limit=100", undefined, b.token);
   assert(refreshedSales.find(row => row.id === mpesaSale.saleId)?.status === "completed", "verified M-Pesa changes POS sale to completed");
-  stock = await request("GET", `/inventory/stock?warehouseId=${warehouse.id}&search=${posSku}`, undefined, a.token);
+  stock = await request("GET", `/inventory/stock?warehouseId=${warehouse.id}&search=${posSku}`, undefined, b.token);
   assert(Number(stock.find(row => row.sku === posSku)?.quantity) === 3, "POS M-Pesa sale deducts one more unit");
-  const posJournalsResponse = await request("GET", "/accounting/journals", undefined, a.token);
+  const posJournalsResponse = await request("GET", "/accounting/journals", undefined, b.token);
   const posJournals = Array.isArray(posJournalsResponse) ? posJournalsResponse : (posJournalsResponse.items || posJournalsResponse.data || []);
   const posSalesJournal = posJournals.find(j => j.source_type === "invoice" && j.source_id === cashSale.invoiceId);
-  const cashInvoice = await request("GET", `/invoices/${cashSale.invoiceId}`, undefined, a.token);
+  const cashInvoice = await request("GET", `/invoices/${cashSale.invoiceId}`, undefined, b.token);
   const posCashPayment = cashInvoice.payments?.find(p => p.method === "cash");
   const posCashJournal = posJournals.find(j => j.source_type === "invoice_payment" && j.source_id === posCashPayment?.id);
   const posCogsJournal = posJournals.find(j => j.source_type === "invoice_cogs" && j.source_id === cashSale.invoiceId);
   assert(!!posSalesJournal && Math.abs(Number(posSalesJournal.total_debits) - 116) < 0.005 && Math.abs(Number(posSalesJournal.total_credits) - 116) < 0.005, "POS sales journal balances");
   assert(!!posCashJournal && Math.abs(Number(posCashJournal.total_debits) - 116) < 0.005 && Math.abs(Number(posCashJournal.total_credits) - 116) < 0.005, "POS cash receipt journal balances");
   assert(!!posCogsJournal && Math.abs(Number(posCogsJournal.total_debits) - 60) < 0.005 && Math.abs(Number(posCogsJournal.total_credits) - 60) < 0.005, "POS cost-of-goods journal balances");
-  const posTrial = await request("GET", "/accounting/reports/trial-balance", undefined, a.token);
+  const posTrial = await request("GET", "/accounting/reports/trial-balance", undefined, b.token);
   assert(posTrial.balanced === true && Math.abs(Number(posTrial.variance)) <= 0.01, "trial balance remains balanced after POS transactions");
-  const isolatedSales = await request("GET", "/pos/sales?limit=100", undefined, b.token);
-  assert(isolatedSales.length === 0, "POS sales are isolated between tenants");
+  const salesAsTenantA = await request("GET", "/pos/sales?limit=100", undefined, a.token);
+  assert(!salesAsTenantA.some(row => row.id === cashSale.saleId || row.id === mpesaSale.saleId), "POS sales created in tenant B are not visible to tenant A");
   await request("GET", `/invoices/${invoice.id}`, undefined, b.token, [404]);
   await request("POST", `/invoices/${invoice.id}/payments/${paymentId}/confirm`, undefined, b.token, [403, 404]);
   assert(true, "cross-tenant invoice/payment access blocked");
