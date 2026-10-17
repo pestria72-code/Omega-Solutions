@@ -32,6 +32,6 @@ export async function neonTestLogin(apiBase, options = {}) {
   if (response.status !== 401) throw new Error(`Neon Auth sign-in failed (HTTP ${response.status}); verify the existing account configuration.`);
   const legacy = await fetch(`${apiBase.replace(/\/$/, "")}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
   const result = await legacy.json().catch(() => ({}));
-  if (!legacy.ok || !result.accessToken) throw new Error(`Existing account sign-in failed through Neon Auth (HTTP 401) and Omega legacy login (HTTP ${legacy.status}). Check the existing test-account secrets; no account was created.`);
+  if (!legacy.ok || !result.accessToken) throw new Error(`Existing test account slot ${suffix} failed sign-in through Neon Auth (HTTP 401) and Omega legacy login (HTTP ${legacy.status}). Check only the configured ${suffix} account email/password secrets; no account was created.`);
   return { email, token: result.accessToken, refreshToken: result.refreshToken, user: result.user };
 }
