@@ -56,7 +56,7 @@ export default function UsersRolesPage() {
     finally { setSaving(""); }
   };
   const filtered = members.filter(m => (m.full_name + " " + m.email + " " + (m.branch_name ?? "")).toLowerCase().includes(search.toLowerCase()));
-  return <BaseLayout><div className="flex flex-col gap-5 px-4 lg:px-6">
+  return <BaseLayout><div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 lg:px-6">
     <PageHeader title="Users & Roles" description="Company membership, access roles and enforced permissions" action={<Button variant="outline" onClick={() => void refresh()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button>}/>
     {error && <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0"/>{error}</div>}
     {notice && <div role="status" className="rounded-md border p-3 text-sm">{notice}</div>}
@@ -74,7 +74,7 @@ export default function UsersRolesPage() {
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Shield className="size-4"/>Role permissions</CardTitle><CardDescription>These are the permissions assigned to each system role in the backend. API endpoints enforce them on every request.</CardDescription></CardHeader><CardContent>
       {!canManage ? <p className="text-sm text-muted-foreground">Owner or admin access is required to view the full role catalog.</p>
       : roleInfo.length === 0 ? <p className="text-sm text-muted-foreground">Role permission catalog is unavailable. Refresh or verify administrator access.</p>
-      : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{roleInfo.map(r=><div key={r.role} className="rounded-lg border p-4"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{title(r.role)}</h3><span className="text-xs text-muted-foreground">{r.permissions.length} permissions</span></div><ul className="space-y-1.5">{r.permissions.map(p=><li key={p} className="break-words text-sm text-muted-foreground">{p}</li>)}</ul></div>)}</div>}
+      : <div className="grid max-w-4xl gap-2 sm:grid-cols-2">{roleInfo.map(r=><details key={r.role} className="group rounded-lg border bg-card px-3 py-2"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-1 [&::-webkit-details-marker]:hidden"><span className="font-medium">{title(r.role)}</span><span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><span>{r.permissions.length} permissions</span><span aria-hidden="true" className="transition-transform group-open:rotate-180">⌄</span></span></summary><ul className="mt-2 space-y-1 border-t pt-2">{r.permissions.map(p=><li key={p} className="break-words text-sm text-muted-foreground">{p}</li>)}</ul></details>)}</div>}
     </CardContent></Card>
   </div></BaseLayout>;
 }
