@@ -30,6 +30,7 @@
     "react-hook-form": "^7.89.0",
     "react-resizable-panels": "^4.14.3",
     "react-router-dom": "^7.18.4",
+    "qrcode.react": "^4.2.0",
     "recharts": "3.10.1",
     "tailwindcss": "^4.3.3",
     "zod": "^4.6.5",
