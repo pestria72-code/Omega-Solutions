@@ -19,7 +19,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+  async validate(payload: JwtPayload & { mfaChallenge?: boolean }): Promise<AuthenticatedUser> {
+    if (payload.mfaChallenge) throw new UnauthorizedException('MFA challenge token cannot be used as an access token.');
     const user = await this.authService.getUserProfile(payload.sub, payload.companyId);
 
     if (!user) {
