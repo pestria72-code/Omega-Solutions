@@ -17,14 +17,15 @@ async function request(method, path, body, token, expected = [200, 201]) {
 }
 function assert(ok, message) { if (!ok) throw new Error(message); checks.push(message); }
 async function tenant(label, slot) {
-  const expectedCompanyName = `Payment Regression ${label} ${stamp}`;
-  const login = await neonTestLogin(base, { slot, companyName: expectedCompanyName });
+  const login = await neonTestLogin(base, { slot });
   assert(!!login.token && !!login.user?.companyId, `authenticated verified ${label} Neon test identity`);
-  // Never create regression records in a pre-existing company. A verified identity
-  // must already be provisioned into this run's uniquely named isolated tenant.
+  // Use only the two pre-provisioned development test companies. Never create or rename a company here.
   const company = await request("GET", "/companies/me", undefined, login.token);
-  assert(company?.name === expectedCompanyName,
-    `refused to use non-isolated company for ${label} regression tenant`);
+  assert(company?.id === login.user.companyId, `${label} identity resolves to its active company context`);
+  const expectedCompanyId = slot === "A"
+    ? "82920006-d0a8-464e-bbde-42de40a26d48"
+    : "5a72776a-a976-4d98-87e5-ea323fec61f8";
+  assert(login.user.companyId === expectedCompanyId, `${label} identity is mapped to its approved isolated test company`);
   return { userId: login.user.userId, companyId: login.user.companyId, token: login.token };
 }
 async function main() {
@@ -32,6 +33,7 @@ async function main() {
   assert(health.status === "ok" && health.database === "connected", "API and database healthy");
   const a = await tenant("owner", "A");
   const b = await tenant("other", "B");
+  assert(a.userId !== b.userId && a.companyId !== b.companyId, "two verified test identities map to separate company tenants");
   await request("GET", "/invoices", undefined, undefined, [401, 403]);
   assert(true, "invoice API requires authentication");
   const customer = await request("POST", "/customers", { name: `Payment Test Customer ${stamp}`, email: `customer-${stamp}@example.com` }, a.token, [201]);

@@ -14,9 +14,10 @@ try {
  for(let attempt=0;attempt<12;attempt++){try{h=await req("GET","/health");if(h.data?.status==="ok"&&h.data?.database==="connected")break;h=null}catch(e){lastHealthError=e}await new Promise(resolve=>setTimeout(resolve,5000))}
  if(!h)throw Error(`API health/database did not recover: ${String(lastHealthError||"unexpected health response")}`);
  ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
- const login = await neonTestLogin(base, { slot: "B", companyName: `Omega E2E ${stamp}` });
+ const login = await neonTestLogin(base, { slot: "B" });
  const token = login.token;
  ok(!!token&&!!login.refreshToken,"verified Neon Auth identity exchanged for Omega tokens");
+ ok(login.user.companyId === "5a72776a-a976-4d98-87e5-ea323fec61f8","test account B is mapped to its approved isolated company before any writes");
  const me=(await req("GET","/auth/me",undefined,token)).data;ok(me.userId===login.user.userId&&me.companyId===login.user.companyId,"authenticated /me and tenant identity");
  const supplier=(await req("POST","/suppliers",{name:`E2E Supplier ${stamp}`,email:`supplier-${stamp}@example.com`},token,[201])).data;ok(!!supplier.id,"create tenant supplier");
  const product=(await req("POST","/products",{sku:`E2E-${stamp}`,name:`E2E Stock ${stamp}`,sellingPrice:150,costPrice:100,stockQuantity:0,reorderLevel:0,isService:false,isActive:true},token,[201])).data;ok(!!product.id,"create physical product");

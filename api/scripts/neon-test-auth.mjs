@@ -8,6 +8,11 @@ export async function neonTestLogin(apiBase, options = {}) {
   const suffix = slot === "A" ? "A" : "B";
   const email = process.env[`OMEGA_SECURITY_TEST_${suffix}_EMAIL`];
   const password = process.env[`OMEGA_SECURITY_TEST_${suffix}_PASSWORD`];
+  const emailA = process.env.OMEGA_SECURITY_TEST_A_EMAIL?.trim().toLowerCase();
+  const emailB = process.env.OMEGA_SECURITY_TEST_B_EMAIL?.trim().toLowerCase();
+  if (emailA && emailB && emailA === emailB) {
+    throw new Error("Test-account configuration error: security test A and B secrets reference the same email. Refusing to run any test that writes data.");
+  }
   const authBase = (process.env.NEON_AUTH_BASE_URL || "https://ep-fragrant-bird-b4hie5sp.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth").replace(/\/$/, "");
   const origin = (process.env.OMEGA_SECURITY_TEST_ORIGIN || "https://omega-solutions-git-development-pestria72-2760.vercel.app").replace(/\/$/, "");
   if (!email || !password) throw new Error(`Missing existing verified test-account secrets OMEGA_SECURITY_TEST_${suffix}_EMAIL/PASSWORD.`);
