@@ -3,10 +3,11 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { JwtPayload, AuthenticatedUser } from '../interfaces/authenticated-user.js';
 import { AuthService } from '../auth.service.js';
+import { MfaService } from '../mfa.service.js';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(private readonly authService: AuthService) {
+  constructor(private readonly authService: AuthService, private readonly mfaService: MfaService) {
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       throw new Error('JWT_SECRET is missing from the environment.');
@@ -21,7 +22,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: JwtPayload & { mfaChallenge?: boolean }): Promise<AuthenticatedUser> {
     if (payload.mfaChallenge) throw new UnauthorizedException('MFA challenge token cannot be used as an access token.');
-    const mfaStatus = await this.authService['mfaService'].status(payload.sub);
+    const mfaStatus = await this.mfaService.status(payload.sub);
     if (mfaStatus.enabled && payload.mfaVerified !== true) throw new UnauthorizedException('Sign in again and complete MFA to access Omega.');
     const user = await this.authService.getUserProfile(payload.sub, payload.companyId);
 
