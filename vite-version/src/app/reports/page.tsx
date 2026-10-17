@@ -66,7 +66,7 @@ export default function ReportsPage() {
   const printReport = () => window.print();
 
   return <BaseLayout>
-    <div className="flex flex-col gap-6 px-4 lg:px-6">
+    <div className="print-report flex flex-col gap-6 px-4 lg:px-6">
       <PageHeader title="Reports" description="Review invoice activity for a date range and export accounting-friendly reports from your company's live records." action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={printReport}><Printer className="size-4" />Print report</Button><Button onClick={exportCsv} disabled={loading || filtered.length === 0}><Download className="size-4" />Export invoices CSV</Button></div>} />
       {error && <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/40 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0" /><span>{error}</span><Button variant="outline" size="sm" className="ml-auto" onClick={() => void load()}><RefreshCw className="size-4" />Retry</Button></div>}
       <Card><CardContent className="flex flex-col gap-4 p-4">
@@ -90,6 +90,6 @@ export default function ReportsPage() {
         </>}
       </CardContent></Card>
     </div>
-    <style>{'@media print { body * { visibility: hidden; } main, main * { visibility: visible; } button, input { display: none !important; } main { position: absolute; inset: 0; width: 100%; } }'}</style>
+    <style>{'@media print { body * { visibility: hidden; } .print-report, .print-report * { visibility: visible; } button, input { display: none !important; } .print-report { position: absolute; left: 0; top: 0; width: 100%; padding: 0; } }'}</style>
   </BaseLayout>;
 }
