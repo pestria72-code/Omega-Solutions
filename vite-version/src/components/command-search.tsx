@@ -1,6 +1,8 @@
 "use client"
 
+import * as React from "react"
 import { useNavigate } from "react-router-dom"
+import { api } from "@/lib/api-client"
 import {
   Search,
   LayoutPanelLeft,
@@ -40,6 +42,8 @@ interface SearchItem {
   icon?: LucideIcon
 }
 
+type SearchResult = { id: string; title: string; type: string; url: string; subtitle?: string }
+
 interface CommandSearchProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -47,6 +51,37 @@ interface CommandSearchProps {
 
 export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
   const navigate = useNavigate()
+  const [query, setQuery] = React.useState("")
+  const [results, setResults] = React.useState<SearchResult[]>([])
+  const [searchError, setSearchError] = React.useState("")
+
+  React.useEffect(() => {
+    const term = query.trim()
+    if (term.length < 2) {
+      setResults([])
+      setSearchError("")
+      return
+    }
+    let cancelled = false
+    const timeout = window.setTimeout(async () => {
+      try {
+        const found = await api.get<SearchResult[]>(`/search?q=${encodeURIComponent(term)}`)
+        if (!cancelled) {
+          setResults(Array.isArray(found) ? found : [])
+          setSearchError("")
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setResults([])
+          setSearchError(error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Search is unavailable.")
+        }
+      }
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [query])
 
   const searchItems: SearchItem[] = [
     // Dashboards
@@ -207,9 +242,20 @@ export function CommandSearch({ open, onOpenChange }: CommandSearchProps) {
       className="sm:max-w-[640px]"
     >
       <Command>
-        <CommandInput placeholder="What do you need?" autoFocus />
+        <CommandInput placeholder="Search pages and company records…" autoFocus value={query} onValueChange={setQuery} />
         <CommandList className="max-h-[400px]">
           <CommandEmpty>No results found.</CommandEmpty>
+          {query.trim().length >= 2 && searchError && <div className="px-3 py-2 text-sm text-destructive">{searchError}</div>}
+          {results.length > 0 && (
+            <CommandGroup heading="Company records">
+              {results.map((item) => (
+                <CommandItem key={`${item.type}:${item.id}`} value={`${item.type} ${item.title} ${item.subtitle ?? ""}`} onSelect={() => handleSelect(item.url)}>
+                  <Search className="mr-2 size-4" />
+                  <span className="flex min-w-0 flex-1 flex-col"><span>{item.title}</span><span className="text-xs text-muted-foreground">{item.type}{item.subtitle ? ` · ${item.subtitle}` : ""}</span></span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           {Object.entries(groupedItems).map(([group, items]) => (
             <CommandGroup key={group} heading={group}>
               {items.map((item) => {
