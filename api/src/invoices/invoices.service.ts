@@ -15,7 +15,7 @@ import { AccountingService } from '../accounting/accounting.service.js';
 const INVOICE_SELECT = `
   SELECT i.id, i.company_id, i.customer_id, c.name AS customer_name,
          i.invoice_number, i.issue_date, i.due_date, i.status,
-         i.currency, i.subtotal, i.tax_amount, i.total, i.amount_paid,
+         i.currency, i.subtotal, i.tax_amount, i.total, i.amount_paid, i.credited_amount,
          i.notes, i.created_at, i.updated_at,
          COUNT(ii.id)::int AS item_count
   FROM invoices i
@@ -265,8 +265,9 @@ export class InvoicesService {
         status: InvoiceStatus;
         total: string | number;
         amount_paid: string | number;
+        credited_amount: string | number;
       }>(
-        'SELECT status, total, amount_paid FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
+        'SELECT status, total, amount_paid, credited_amount FROM invoices WHERE id = $1 AND company_id = $2 FOR UPDATE',
         [invoiceId, membership.companyId],
       );
       const invoice = result.rows[0];
@@ -278,7 +279,7 @@ export class InvoicesService {
         "SELECT COALESCE(SUM(amount),0) AS amount FROM invoice_payments WHERE company_id=$1 AND invoice_id=$2 AND status='pending'",
         [membership.companyId, invoiceId],
       );
-      const outstandingCents = Math.round((Number(invoice.total) - Number(invoice.amount_paid)) * 100);
+      const outstandingCents = Math.round((Number(invoice.total) - Number(invoice.amount_paid) - Number(invoice.credited_amount)) * 100);
       const alreadyReportedCents = Math.round(Number(pending.rows[0].amount) * 100);
       const paymentCents = Math.round(paymentAmount * 100);
       if (paymentCents + alreadyReportedCents > outstandingCents) {
@@ -329,7 +330,7 @@ export class InvoicesService {
         throw new BadRequestException('Only pending payment reports can be confirmed.');
       }
       const invoiceResult = await client.query<{
-        status: InvoiceStatus; customer_id: string; total: string | number; amount_paid: string | number;
+        status: InvoiceStatus; customer_id: string; total: string | number; amount_paid: string | number; credited_amount: string | number;
       }>(
         'SELECT status, customer_id, total, amount_paid FROM invoices WHERE id=$1 AND company_id=$2 FOR UPDATE',
         [invoiceId, membership.companyId],
@@ -341,7 +342,7 @@ export class InvoicesService {
       const paymentAmount = Number(payment.amount);
       const paymentCents = Math.round(paymentAmount * 100);
       const newPaidCents = Math.round(Number(invoice.amount_paid) * 100) + paymentCents;
-      const totalCents = Math.round(Number(invoice.total) * 100);
+      const totalCents = Math.round((Number(invoice.total) - Number(invoice.credited_amount)) * 100);
       if (newPaidCents > totalCents) {
         throw new BadRequestException('The confirmed amount would exceed the invoice balance.');
       }
