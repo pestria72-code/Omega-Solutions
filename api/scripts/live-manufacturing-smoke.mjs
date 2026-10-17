@@ -34,8 +34,22 @@ try{
  const warehouse=await req("POST","/inventory/warehouses",{code:`MFG${String(stamp).slice(-8)}`,name:`MFG Test Warehouse ${stamp}`,location:"Automated manufacturing valuation regression",capacity:0,isActive:true},token,[201]);
  ok(!!warehouse.id,"create isolated manufacturing test warehouse");
 
- await req("POST","/inventory/receipts",{productId:material.id,warehouseId:warehouse.id,quantity:4,unitCost:100,reference:`MFG-RECEIPT-A-${stamp}`,notes:"First manufacturing weighted-average cost layer"},token,[201]);
- await req("POST","/inventory/receipts",{productId:material.id,warehouseId:warehouse.id,quantity:2,unitCost:200,reference:`MFG-RECEIPT-B-${stamp}`,notes:"Second manufacturing weighted-average cost layer"},token,[201]);
+ const supplier=await req("POST","/suppliers",{name:`MFG Test Supplier ${stamp}`,email:`mfg-supplier-${stamp}@example.com`},token,[201]);
+ ok(!!supplier.id,"create supplier for accounted material receipts");
+ async function receiveMaterial(quantity,unitCost,reference){
+  const po=await req("POST","/purchase-orders",{supplierId:supplier.id,expectedDate:new Date(Date.now()+86400000).toISOString().slice(0,10),notes:"Manufacturing valuation smoke test",items:[{productId:material.id,quantity,unitCost,taxRate:0}]},token,[201]);
+  const line=po.items?.[0];
+  ok(!!po.id&&!!line?.id,"create purchase order for material cost layer");
+  const ordered=await req("PATCH",`/purchase-orders/${po.id}/status`,{status:"ordered"},token);
+  ok(ordered.status==="ordered","order material purchase for receipt");
+  const receipt=await req("POST",`/purchase-orders/${po.id}/receive`,{warehouseId:warehouse.id,items:[{itemId:line.id,quantity}],reference},token,[201]);
+  ok(receipt.status==="received"&&!!receipt.receiptId,"receive material through purchasing with inventory/GRNI accounting");
+  const journals=rowsOf(await req("GET","/accounting/journals",undefined,token));
+  const journal=journals.find(x=>x.source_type==="purchase_order_receipt"&&x.source_id===receipt.receiptId);
+  ok(!!journal&&near(journal.total_debits,quantity*unitCost)&&near(journal.total_credits,quantity*unitCost),"purchasing receipt creates a balanced inventory/GRNI journal");
+ }
+ await receiveMaterial(4,100,`MFG-RECEIPT-A-${stamp}`);
+ await receiveMaterial(2,200,`MFG-RECEIPT-B-${stamp}`);
  let stock=rowsOf(await req("GET",`/inventory/stock?warehouseId=${warehouse.id}`,undefined,token));
  const materialBefore=stock.find(x=>(x.product_id||x.productId)===material.id);
  ok(!!materialBefore&&near(materialBefore.quantity,6,0.001)&&near(materialBefore.average_unit_cost,133.3333),"six material units carry weighted-average KES 133.33 after receipts at KES 100 and KES 200");
