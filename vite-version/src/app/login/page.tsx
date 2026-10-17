@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,11 @@ import { resendNeonVerification, verifyNeonEmailAndSignIn } from "@/lib/neon-aut
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from
+  const destination = from?.pathname?.startsWith("/") && !from.pathname.startsWith("//")
+    ? from.pathname + (from.search ?? "")
+    : "/dashboard"
   const { user, loading, loginEmail, registerUser, finishNeonRegistration } = useAuth()
   const [mode, setMode] = React.useState<"login" | "register">("login")
   const [email, setEmail] = React.useState("")
@@ -24,7 +29,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = React.useState(false)
 
   React.useEffect(() => {
-    if (!loading && user) navigate("/dashboard", { replace: true })
+    if (!loading && user) navigate(destination, { replace: true })
   }, [user, loading, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
