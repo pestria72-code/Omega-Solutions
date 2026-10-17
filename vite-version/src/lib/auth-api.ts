@@ -13,7 +13,12 @@ export interface LoginResponse {
   };
 }
 
-export interface MfaChallengeResponse {\n  mfaRequired: true;\n  mfaChallengeToken: string;\n}\n\nexport interface RegisterResponse {
+export interface MfaChallengeResponse {
+  mfaRequired: true;
+  mfaChallengeToken: string;
+}
+
+export interface RegisterResponse {
   userId: string;
 }
 
