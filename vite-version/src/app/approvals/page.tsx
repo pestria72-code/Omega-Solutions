@@ -1,0 +1,25 @@
+import * as React from "react";
+import { AlertCircle, Check, Loader2, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { BaseLayout } from "@/components/layouts/base-layout";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { api } from "@/lib/api-client";
+type Approval={id:string;requester_name:string;request_number:string;title:string;requested_at:string;required_by:string|null};
+function errorText(e:unknown){return e&&typeof e==="object"&&"message" in e?String((e as {message:unknown}).message):"Request failed. Please try again."}
+export default function ApprovalsPage(){
+ const [rows,setRows]=React.useState<Approval[]>([]);const [note,setNote]=React.useState("");const [loading,setLoading]=React.useState(true);const [busy,setBusy]=React.useState("");const [error,setError]=React.useState("");
+ const refresh=React.useCallback(async()=>{setLoading(true);setError("");try{setRows(await api.get<Approval[]>("/approvals"));}catch(e){setError(errorText(e));}finally{setLoading(false);}},[]);
+ React.useEffect(()=>{void refresh()},[refresh]);
+ const decide=async(id:string,decision:"approve"|"reject")=>{setBusy(id);setError("");try{await api.post("/approvals/"+id+"/"+decision,{note:note.trim()||undefined});setNote("");await refresh();}catch(e){setError(errorText(e));}finally{setBusy("");}};
+ return <BaseLayout><div className="flex flex-col gap-5 px-4 lg:px-6">
+  <PageHeader title="Approval Inbox" description="Review requests submitted by other users. Requesters cannot approve or reject their own requests." action={<Button variant="outline" onClick={()=>void refresh()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button>}/>
+  {error&&<div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 p-3 text-sm text-destructive"><AlertCircle className="mt-0.5 size-4 shrink-0"/>{error}</div>}
+  <Card><CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="size-4"/>Pending approvals</CardTitle></CardHeader><CardContent>
+   <div className="mb-4 grid gap-2"><Label htmlFor="decision-note">Decision note (optional)</Label><Input id="decision-note" value={note} onChange={e=>setNote(e.target.value)} placeholder="Reason for approval or rejection"/></div>
+   {loading?<div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin"/>Loading approval requests…</div>:rows.length===0?<div className="py-10 text-center"><ShieldCheck className="mx-auto mb-3 size-8 text-muted-foreground"/><p className="font-medium">Inbox is clear</p><p className="text-sm text-muted-foreground">No pending requests are available for your account.</p></div>:<div className="space-y-3">{rows.map(r=><div key={r.id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="font-semibold">{r.request_number} · {r.title}</p><p className="text-sm text-muted-foreground">Requested by {r.requester_name} · {new Date(r.requested_at).toLocaleString()}</p>{r.required_by&&<p className="text-sm text-muted-foreground">Required by {r.required_by}</p>}</div><div className="flex shrink-0 gap-2"><Button size="sm" onClick={()=>void decide(r.id,"approve")} disabled={busy===r.id}>{busy===r.id?<Loader2 className="mr-1 size-4 animate-spin"/>:<Check className="mr-1 size-4"/>}Approve</Button><Button size="sm" variant="destructive" onClick={()=>void decide(r.id,"reject")} disabled={busy===r.id}><X className="mr-1 size-4"/>Reject</Button></div></div>)}</div>}
+  </CardContent></Card>
+ </div></BaseLayout>;
+}

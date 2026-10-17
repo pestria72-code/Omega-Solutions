@@ -29,6 +29,7 @@ import {
   UserRound,
   Headset,
   Factory,
+  ShieldCheck,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { NavMain } from "@/components/nav-main"
@@ -76,6 +77,7 @@ const navGroups = [
     label: "Purchasing",
     items: [
       { title: "Suppliers", url: "/suppliers", icon: Briefcase },
+      { title: "Requisitions", url: "/requisitions", icon: ClipboardList },
       { title: "Purchase Orders", url: "/purchase-orders", icon: ClipboardList },
       { title: "Supplier Bills", url: "/supplier-bills", icon: FileText },
     ],
@@ -110,6 +112,7 @@ const navGroups = [
   {
     label: "Administration",
     items: [
+      { title: "Approval Inbox", url: "/approvals", icon: ShieldCheck },
       { title: "Companies & Branches", url: "/companies", icon: Building2 },
       { title: "Users & Roles", url: "/users-roles", icon: UserCog },
       { title: "Audit Logs", url: "/audit-logs", icon: ScrollText },
