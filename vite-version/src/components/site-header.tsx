@@ -132,7 +132,7 @@ export function SiteHeader() {
             <div className="hidden md:block max-w-sm flex-1">
               <SearchTrigger onClick={() => setSearchOpen(true)} />
             </div>
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => { if (open) void loadNotifications() }}>
               <DropdownMenuTrigger
                 render={
                   <Button variant="outline" size="icon" className="relative cursor-pointer" />
