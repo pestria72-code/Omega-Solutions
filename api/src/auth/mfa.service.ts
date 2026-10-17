@@ -79,7 +79,16 @@ export class MfaService {
     }
   }
 
+  private async assertSchemaAvailable(): Promise<void> {
+    const check = await this.db.query<{ table_name: string | null }>("SELECT to_regclass('public.user_mfa')::text AS table_name");
+    if (!check.rows[0]?.table_name) {
+      throw new ServiceUnavailableException('MFA schema is not yet installed on this environment.');
+    }
+  }
+
   async status(userId: string): Promise<{ enabled: boolean; recoveryCodesRemaining: number }> {
+    const check = await this.db.query<{ table_name: string | null }>("SELECT to_regclass('public.user_mfa')::text AS table_name");
+    if (!check.rows[0]?.table_name) return { enabled: false, recoveryCodesRemaining: 0 };
     const result = await this.db.query<{ enabled_at: Date | null; recovery_code_hashes: string[] }>(
       'SELECT enabled_at, recovery_code_hashes FROM user_mfa WHERE user_id=$1',
       [userId],
@@ -89,6 +98,7 @@ export class MfaService {
   }
 
   async beginEnrollment(userId: string, email: string): Promise<{ secret: string; otpauthUrl: string }> {
+    await this.assertSchemaAvailable();
     const secret = base32Encode(randomBytes(20));
     await this.db.query(
       `INSERT INTO user_mfa (user_id, pending_secret_encrypted, updated_at)
@@ -103,6 +113,7 @@ export class MfaService {
   }
 
   async confirmEnrollment(userId: string, code: string): Promise<{ enabled: true; recoveryCodes: string[] }> {
+    await this.assertSchemaAvailable();
     const result = await this.db.query<{ pending_secret_encrypted: string | null }>(
       'SELECT pending_secret_encrypted FROM user_mfa WHERE user_id=$1',
       [userId],
@@ -123,6 +134,7 @@ export class MfaService {
   }
 
   async verifyUserCode(userId: string, code: string): Promise<boolean> {
+    await this.assertSchemaAvailable();
     const result = await this.db.query<MfaRow>(
       'SELECT secret_encrypted, pending_secret_encrypted, enabled_at, recovery_code_hashes, failed_attempts, locked_until FROM user_mfa WHERE user_id=$1',
       [userId],
@@ -146,6 +158,7 @@ export class MfaService {
   }
 
   async useRecoveryCode(userId: string, code: string): Promise<boolean> {
+    await this.assertSchemaAvailable();
     const result = await this.db.query<{ recovery_code_hashes: string[]; locked_until: Date | null }>(
       'SELECT recovery_code_hashes, locked_until FROM user_mfa WHERE user_id=$1 AND enabled_at IS NOT NULL',
       [userId],
@@ -171,6 +184,7 @@ export class MfaService {
   }
 
   async disable(userId: string, code: string): Promise<void> {
+    await this.assertSchemaAvailable();
     const valid = (await this.verifyUserCode(userId, code)) || (await this.useRecoveryCode(userId, code));
     if (!valid) throw new UnauthorizedException('A valid authenticator or unused recovery code is required.');
     await this.db.query('DELETE FROM user_mfa WHERE user_id=$1', [userId]);
