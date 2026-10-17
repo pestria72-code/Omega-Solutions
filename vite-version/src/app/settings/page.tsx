@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "cn"
+import { getAccessToken } from "@/lib/api-client"
 
 const PREFS_KEY = "omega-demo-preferences"
 
@@ -41,6 +42,32 @@ export default function SettingsPage() {
     }
   })
   const [saved, setSaved] = React.useState(false)
+  const [mfaEnabled, setMfaEnabled] = React.useState(false)
+  const [mfaSecret, setMfaSecret] = React.useState("")
+  const [mfaCode, setMfaCode] = React.useState("")
+  const [recoveryCodes, setRecoveryCodes] = React.useState<string[]>([])
+  const [mfaError, setMfaError] = React.useState<string | null>(null)
+  const [mfaBusy, setMfaBusy] = React.useState(false)
+  const apiBase = import.meta.env.VITE_API_BASE_URL ?? "https://omega-solutions-api.onrender.com/api"
+
+  const mfaRequest = async (path: string, body?: unknown) => {
+    const token = getAccessToken()
+    if (!token) throw new Error("Please sign in again to manage account security.")
+    const response = await fetch(apiBase + path, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.message || "Could not update MFA settings.")
+    return data
+  }
+
+  React.useEffect(() => {
+    mfaRequest("/auth/mfa/status")
+      .then((data) => setMfaEnabled(Boolean(data.enabled)))
+      .catch((err) => setMfaError(err instanceof Error ? err.message : "Could not load MFA status."))
+  }, [])
 
   const handleSave = () => {
     localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
@@ -79,6 +106,48 @@ export default function SettingsPage() {
           }
         />
         <DemoBanner message="These preferences are stored locally in your browser only. They are demo settings and will be replaced by server-side preferences when the backend is connected." />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Two-step verification (MFA)</CardTitle>
+            <CardDescription>Protect sign-in with an authenticator app and single-use recovery codes.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm">{mfaEnabled ? "MFA is enabled for this account." : "MFA is currently disabled for this account."}</p>
+              {mfaError && <p role="alert" className="text-sm text-destructive">{mfaError}</p>}
+              {!mfaEnabled && !mfaSecret && <Button disabled={mfaBusy} onClick={async () => {
+                setMfaBusy(true); setMfaError(null)
+                try { const data = await mfaRequest("/auth/mfa/enroll", {}); setMfaSecret(data.secret); }
+                catch (err) { setMfaError(err instanceof Error ? err.message : "Could not start MFA enrollment.") }
+                finally { setMfaBusy(false) }
+              }}>{mfaBusy ? "Starting…" : "Set up authenticator"}</Button>}
+              {!mfaEnabled && mfaSecret && <>
+                <div className="rounded-md border p-3">
+                  <p className="mb-1 text-sm font-medium">Authenticator setup key</p>
+                  <code className="break-all text-sm">{mfaSecret}</code>
+                  <p className="mt-2 text-xs text-muted-foreground">Add this key to an authenticator app, then enter its current six-digit code below.</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="mfa-code">Authenticator code</Label>
+                  <Input id="mfa-code" value={mfaCode} onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" />
+                </div>
+                <Button disabled={mfaBusy || mfaCode.length !== 6} onClick={async () => {
+                  setMfaBusy(true); setMfaError(null)
+                  try { const data = await mfaRequest("/auth/mfa/confirm", { code: mfaCode }); setMfaEnabled(true); setMfaSecret(""); setRecoveryCodes(data.recoveryCodes || []); setMfaCode(""); }
+                  catch (err) { setMfaError(err instanceof Error ? err.message : "Could not confirm MFA.") }
+                  finally { setMfaBusy(false) }
+                }}>{mfaBusy ? "Verifying…" : "Confirm and enable MFA"}</Button>
+              </>}
+              {recoveryCodes.length > 0 && <div className="rounded-md border p-3">
+                <p className="font-medium text-sm">Save these recovery codes now</p>
+                <p className="text-xs text-muted-foreground">Each code works once. They will not be shown again.</p>
+                <pre className="mt-2 whitespace-pre-wrap text-sm">{recoveryCodes.join("\n")}</pre>
+                <Button variant="outline" onClick={() => { void navigator.clipboard?.writeText(recoveryCodes.join("\n")); }}>Copy recovery codes</Button>
+              </div>}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
