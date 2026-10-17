@@ -105,13 +105,13 @@ export class AccountingService {
     FROM chart_of_accounts a LEFT JOIN journal_entry_lines l ON l.account_id=a.id AND l.company_id=a.company_id
     LEFT JOIN journal_entries j ON j.id=l.journal_entry_id AND j.company_id=l.company_id AND j.status='posted'
     WHERE a.company_id=$1 AND a.system_code='accounts_receivable' GROUP BY a.id`,[companyId]),
-   this.db.query(`SELECT COALESCE(SUM(i.total-i.amount_paid),0)::numeric(14,2) AS balance
+   this.db.query(`SELECT COALESCE(SUM(GREATEST(i.total-i.amount_paid-i.credited_amount,0)),0)::numeric(14,2) AS balance
     FROM invoices i WHERE i.company_id=$1 AND i.status NOT IN ('draft','cancelled')`,[companyId]),
    this.db.query(`SELECT
-    COALESCE(SUM(CASE WHEN i.due_date>=CURRENT_DATE THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS current,
-    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE AND i.due_date>=CURRENT_DATE-30 THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS days_1_to_30,
-    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE-30 AND i.due_date>=CURRENT_DATE-60 THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS days_31_to_60,
-    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE-60 THEN i.total-i.amount_paid ELSE 0 END),0)::numeric(14,2) AS days_61_plus
+    COALESCE(SUM(CASE WHEN i.due_date>=CURRENT_DATE THEN GREATEST(i.total-i.amount_paid-i.credited_amount,0) ELSE 0 END),0)::numeric(14,2) AS current,
+    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE AND i.due_date>=CURRENT_DATE-30 THEN GREATEST(i.total-i.amount_paid-i.credited_amount,0) ELSE 0 END),0)::numeric(14,2) AS days_1_to_30,
+    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE-30 AND i.due_date>=CURRENT_DATE-60 THEN GREATEST(i.total-i.amount_paid-i.credited_amount,0) ELSE 0 END),0)::numeric(14,2) AS days_31_to_60,
+    COALESCE(SUM(CASE WHEN i.due_date<CURRENT_DATE-60 THEN GREATEST(i.total-i.amount_paid-i.credited_amount,0) ELSE 0 END),0)::numeric(14,2) AS days_61_plus
     FROM invoices i WHERE i.company_id=$1 AND i.status NOT IN ('draft','cancelled')`,[companyId])
   ]);
   const controlBalance=Number(control.rows[0]?.balance??0),invoiceBalance=Number(subledger.rows[0]?.balance??0);
