@@ -133,6 +133,6 @@ export interface InvoiceApiRow {
   issue_date: string; due_date: string;
   status: "draft" | "sent" | "paid" | "partially_paid" | "overdue" | "cancelled";
   currency: string; subtotal: number | string; tax_amount: number | string; total: number | string;
-  amount_paid: number | string; notes: string | null; created_at: string; updated_at: string;
+  amount_paid: number | string; credited_amount?: number | string; notes: string | null; created_at: string; updated_at: string;
   item_count?: number; items?: InvoiceItemApiRow[]; payments?: InvoicePaymentApiRow[];
 }
