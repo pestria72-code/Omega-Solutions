@@ -16,7 +16,9 @@ function errorMessage(error: unknown) {
   return "The request failed. Please try again.";
 }
 function csvCell(value: unknown) {
-  const text = value == null ? "" : String(value);
+  let text = value == null ? "" : String(value);
+  // Prevent spreadsheet formula execution when business-entered text is opened in Excel/Sheets.
+  if (/^[=+@\\t\\r]/.test(text) || /^-/.test(text)) text = "'" + text;
   return '"' + text.replaceAll('"', '""') + '"';
 }
 function downloadCsv(filename: string, rows: unknown[][]) {
