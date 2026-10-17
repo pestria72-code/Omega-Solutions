@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateInvitationDto {
   @IsEmail()
@@ -14,6 +14,7 @@ export class CreateInvitationDto {
 }
 
 export class AcceptInvitationDto {
+  @IsString()
   @MaxLength(256)
   token!: string;
 }
