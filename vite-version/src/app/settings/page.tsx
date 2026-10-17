@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header"
 import { DemoBanner } from "@/components/demo-banner"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
