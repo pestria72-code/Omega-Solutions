@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api-client";
 import { useMyCompany } from "@/hooks/use-company";
 import { formatDate, formatKES } from "@/lib/format";
-import { escapeDocumentText, printBusinessDocument } from "@/lib/printable-document";
+import { downloadBusinessDocument, escapeDocumentText, printBusinessDocument } from "@/lib/printable-document";
 import type { InvoiceApiRow } from "@/lib/api-types";
 
 type CreditNoteItem = { id?: string; description: string; quantity: number | string; unit_price: number | string; tax_rate: number | string; line_subtotal: number | string; tax_amount: number | string; line_total: number | string };
@@ -70,7 +70,7 @@ export default function CreditNotesPage() {
     finally { setSaving(false); }
   };
 
-  const printNote = async (note: CreditNote) => {
+  const printNote = async (note: CreditNote, download = false) => {
     setError("");
     try {
       const detail = await api.get<CreditNote>(`/credit-notes/${note.id}`);
@@ -78,7 +78,7 @@ export default function CreditNotesPage() {
       const address = [company?.address_line1, company?.address_line2, company?.city, company?.county].filter(Boolean).join(", ");
       const rows = (detail.items ?? []).map(item => `<tr><td>${escapeDocumentText(item.description)}</td><td class="num">${Number(item.quantity).toLocaleString()}</td><td class="num">${formatKES(Number(item.unit_price))}</td><td class="num">${Number(item.tax_rate).toFixed(2)}%</td><td class="num">${formatKES(Number(item.line_total))}</td></tr>`).join("");
       const content = `<header class="top"><div><div class="brand">${escapeDocumentText(companyName)}</div><div class="muted">${escapeDocumentText(address)}<br>${escapeDocumentText(company?.phone || "")}<br>${escapeDocumentText(company?.email || "")}</div><h1>Credit note</h1><div class="muted">Credit adjustment to a customer invoice</div></div><div class="meta"><strong>${escapeDocumentText(detail.credit_note_number)}</strong><div>Date: ${escapeDocumentText(formatDate(detail.issue_date))}</div><div>Original invoice: ${escapeDocumentText(detail.invoice_number)}</div></div></header><div class="columns"><section><div class="section-title">Customer</div><strong>${escapeDocumentText(detail.customer_name)}</strong></section><section><div class="section-title">Reason for credit</div><div>${escapeDocumentText(detail.reason)}</div></section></div><table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Tax rate</th><th class="num">Credit amount</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><div><span>Subtotal</span><span>${formatKES(Number(detail.subtotal))}</span></div><div><span>Tax adjustment</span><span>${formatKES(Number(detail.tax_amount))}</span></div><div class="grand"><span>Total credit</span><span>${formatKES(Number(detail.total))}</span></div></div><div class="note">This credit note is linked to invoice ${escapeDocumentText(detail.invoice_number)} and reduces the remaining receivable. It does not represent a cash refund.</div>`;
-      printBusinessDocument("Credit note", detail.credit_note_number, content);
+      if (download) downloadBusinessDocument("Credit note", detail.credit_note_number, content);\n      else printBusinessDocument("Credit note", detail.credit_note_number, content);
     } catch (e) { setError(message(e)); }
   };
 
@@ -102,7 +102,7 @@ export default function CreditNotesPage() {
         </form></CardContent>
       </Card>
       <Card><CardHeader><CardTitle>Credit note history</CardTitle><CardDescription>Credit notes from this company's live records.</CardDescription></CardHeader><CardContent>
-        {loading ? <div className="flex justify-center p-8"><Loader2 className="size-5 animate-spin" /></div> : notes.length === 0 ? <EmptyState icon={FilePlus2} title="No credit notes yet" description="Credit notes you create will appear here. No sample records are shown." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Credit note</TableHead><TableHead>Original invoice</TableHead><TableHead>Customer</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Credit total</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{notes.map(note => <TableRow key={note.id}><TableCell className="font-medium">{note.credit_note_number}</TableCell><TableCell>{note.invoice_number}</TableCell><TableCell>{note.customer_name}</TableCell><TableCell>{formatDate(note.issue_date)}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(note.total))}</TableCell><TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => void printNote(note)}><Download className="size-4" />Download / Print PDF</Button></TableCell></TableRow>)}</TableBody></Table></div>}
+        {loading ? <div className="flex justify-center p-8"><Loader2 className="size-5 animate-spin" /></div> : notes.length === 0 ? <EmptyState icon={FilePlus2} title="No credit notes yet" description="Credit notes you create will appear here. No sample records are shown." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Credit note</TableHead><TableHead>Original invoice</TableHead><TableHead>Customer</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Credit total</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{notes.map(note => <TableRow key={note.id}><TableCell className="font-medium">{note.credit_note_number}</TableCell><TableCell>{note.invoice_number}</TableCell><TableCell>{note.customer_name}</TableCell><TableCell>{formatDate(note.issue_date)}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(note.total))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => void printNote(note, true)}><Download className="size-4" />Download HTML</Button><Button variant="outline" size="sm" onClick={() => void printNote(note)}><FilePlus2 className="size-4" />Print / Save PDF</Button></div></TableCell></TableRow>)}</TableBody></Table></div>}
       </CardContent></Card>
     </div>
   </BaseLayout>;
