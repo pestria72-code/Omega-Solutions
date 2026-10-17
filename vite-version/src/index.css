@@ -54,7 +54,7 @@
   --radius: 0.625rem;
 
   /* Omega Solutions — Brilliance / Garish Green light theme */
-  --background: #fcfcfd;
+  --background: #f7f8fa;
   --foreground: #292d33;
   --card: #ffffff;
   --card-foreground: #292d33;
@@ -64,7 +64,7 @@
   --primary-foreground: #143c2d;
   --secondary: #e3e5ea;
   --secondary-foreground: #292d33;
-  --muted: #f1f2f5;
+  --muted: #eef0f4;
   --muted-foreground: #555b63;
   --accent: #e3e5ea;
   --accent-foreground: #292d33;
@@ -75,7 +75,7 @@
   --warning-foreground: #ffffff;
   --info: #315e91;
   --info-foreground: #ffffff;
-  --border: #e3e5ea;
+  --border: #d7dbe2;
   --input: #aeb2b9;
   --ring: #51bc8f;
   --chart-1: #51bc8f;
@@ -83,13 +83,13 @@
   --chart-3: #838589;
   --chart-4: #aeb2b9;
   --chart-5: #237653;
-  --sidebar: #f4f5f7;
+  --sidebar: #f1f3f6;
   --sidebar-foreground: #292d33;
   --sidebar-primary: #51bc8f;
   --sidebar-primary-foreground: #143c2d;
   --sidebar-accent: #e3e5ea;
   --sidebar-accent-foreground: #292d33;
-  --sidebar-border: #e3e5ea;
+  --sidebar-border: #d7dbe2;
   --sidebar-ring: #51bc8f;
 }
 
