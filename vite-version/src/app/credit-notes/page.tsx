@@ -1,5 +1,5 @@
 import * as React from "react";
-import { AlertCircle, Download, FilePlus2, Loader2, Printer, RefreshCw } from "lucide-react";
+import { AlertCircle, Download, FilePlus2, Loader2, RefreshCw } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
