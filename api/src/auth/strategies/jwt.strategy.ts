@@ -21,12 +21,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   async validate(payload: JwtPayload & { mfaChallenge?: boolean }): Promise<AuthenticatedUser> {
     if (payload.mfaChallenge) throw new UnauthorizedException('MFA challenge token cannot be used as an access token.');
+    const mfaStatus = await this.authService['mfaService'].status(payload.sub);
+    if (mfaStatus.enabled && payload.mfaVerified !== true) throw new UnauthorizedException('Sign in again and complete MFA to access Omega.');
     const user = await this.authService.getUserProfile(payload.sub, payload.companyId);
 
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    return user;
+    return { ...user, mfaVerified: payload.mfaVerified === true };
   }
 }
