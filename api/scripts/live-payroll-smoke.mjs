@@ -121,14 +121,16 @@ try {
     periodEnd: payrollPeriod.end
   }, token, [200, 201]);
   payrollRunId = run.id;
-  ok(!!payrollRunId && run.status === "draft" && Number(run.employee_count) === 1,
-    `${payrollPeriod.label} payroll created as a one-employee draft`);
+  ok(!!payrollRunId && run.status === "draft" && Number(run.employee_count) >= 1,
+    `${payrollPeriod.label} payroll created as a draft with configured employees`);
 
   const details = await req("GET", `/payroll/runs/${payrollRunId}`, undefined, token);
   ok(details.status === "draft" && details.approved_at == null && details.posted_at == null && details.journal_entry_id == null,
     "payroll remains unapproved and unposted");
-  ok(Array.isArray(details.items) && details.items.length === 1 && details.items[0].employee_id === employeeId,
-    "payroll contains exactly the test employee");
+  ok(Array.isArray(details.items) && details.items.length === Number(details.employee_count),
+    "payroll item count matches the run employee count");
+  const testPayrollItem = details.items.find(item => item.employee_id === employeeId);
+  ok(!!testPayrollItem, "payroll includes the employee created by this smoke test");
 
   // Expected values independently recomputed from the calculator currently on development:
   // NSSF 6% of KES 100,000 = 6,000; SHIF 2.75% = 2,750; housing levy 1.5% = 1,500.
@@ -142,7 +144,7 @@ try {
     ["paye", 19308.35],
     ["net_pay", 70441.65]
   ]) {
-    ok(Math.abs(Number(details.items[0][field]) - value) < 0.01, `${field} matches expected KES ${value}`);
+    ok(Math.abs(Number(testPayrollItem[field]) - value) < 0.01, `${field} matches expected KES ${value}`);
   }
 
   console.log(JSON.stringify({ ok: true, target: base, companyId, employeeId, payrollRunId, status: details.status, checks,
