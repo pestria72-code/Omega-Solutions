@@ -1,24 +1,48 @@
 name: Payment regression smoke test
 
 on:
-  workflow_dispatch:
+  # Run automatically for backend changes on the development branch.
+  # Keep the frontend out of this trigger while its work is paused.
   push:
     branches: [development]
     paths:
-      - 'api/scripts/live-payment-regression-smoke.mjs'
+      - 'api/**'
       - '.github/workflows/payment-regression-smoke.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: payment-regression-development
+  cancel-in-progress: false
+
 jobs:
   payment-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify required test credentials are configured
+        env:
+          OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
+          OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
+          OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
+          OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
+        run: |
+          missing=0
+          for name in OMEGA_SECURITY_TEST_A_EMAIL OMEGA_SECURITY_TEST_A_PASSWORD OMEGA_SECURITY_TEST_B_EMAIL OMEGA_SECURITY_TEST_B_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Required GitHub Actions secret $name is not configured."
+              missing=1
+            fi
+          done
+          exit "$missing"
       - name: Run authenticated payment regression against development API
         env:
           OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
