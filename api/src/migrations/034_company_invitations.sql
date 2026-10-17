@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS company_invitations (
   revoked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT company_invitations_branch_company_fk
-    FOREIGN KEY (branch_id, company_id) REFERENCES branches(id, company_id)
+  CONSTRAINT company_invitations_branch_fk
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
 );
 CREATE INDEX IF NOT EXISTS idx_company_invitations_company_created
   ON company_invitations(company_id, created_at DESC);
