@@ -68,7 +68,7 @@ export class AuthController {
     @Request() req: { user: AuthenticatedUser },
     @Body() dto: SwitchCompanyDto,
   ) {
-    return this.authService.switchCompany(req.user.userId, dto.companyId);
+    return this.authService.switchCompany(req.user.userId, dto.companyId, req.user.mfaVerified === true);
   }
 
   @Get('me')
