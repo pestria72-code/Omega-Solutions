@@ -70,6 +70,7 @@ const navGroups = [
       { title: "Quotations", url: "/quotations", icon: FileText },
       { title: "Sales Orders", url: "/sales-orders", icon: ShoppingCart },
       { title: "Invoices", url: "/invoices", icon: Receipt },
+      { title: "Credit Notes", url: "/credit-notes", icon: FileText },
       { title: "Payments", url: "/payments", icon: Banknote },
     ],
   },
