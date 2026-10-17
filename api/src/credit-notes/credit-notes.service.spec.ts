@@ -33,13 +33,15 @@ describe('CreditNotesService', () => {
 
   it('rejects credits that exceed the remaining unpaid balance before inserting a note or journal', async () => {
     const client = {
-      query: vi.fn().mockResolvedValueOnce({
-        rows: [{
-          id: 'invoice-a', customer_id: 'customer-a', invoice_number: 'INV-2026-00001',
-          issue_date: '2026-10-01', status: 'sent', total: '100.00',
-          amount_paid: '60.00', credited_amount: '10.00',
-        }], rowCount: 1,
-      }),
+      query: vi.fn()
+        .mockResolvedValueOnce({
+          rows: [{
+            id: 'invoice-a', customer_id: 'customer-a', invoice_number: 'INV-2026-00001',
+            issue_date: '2026-10-01', status: 'sent', total: '100.00',
+            amount_paid: '60.00', credited_amount: '10.00',
+          }], rowCount: 1,
+        })
+        .mockResolvedValueOnce({ rows: [{ amount: '0.00' }], rowCount: 1 }),
     };
     const db = {
       query: vi.fn(),
