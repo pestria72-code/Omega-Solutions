@@ -59,6 +59,8 @@ jobs:
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
           OMEGA_SECURITY_TEST_B_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_B_PASSWORD }}
+          OMEGA_SECURITY_TEST_APPROVER_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_APPROVER_EMAIL }}
+          OMEGA_SECURITY_TEST_APPROVER_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_APPROVER_PASSWORD }}
         run: node api/scripts/live-purchasing-smoke.mjs
 
       - name: Verify live payment, reconciliation, POS and tenant-isolation workflow
