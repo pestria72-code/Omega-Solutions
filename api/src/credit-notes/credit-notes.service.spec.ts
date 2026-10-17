@@ -64,4 +64,56 @@ describe('CreditNotesService', () => {
     expect(client.query).toHaveBeenCalledTimes(1);
     expect(client.query.mock.calls[0][1]).toEqual(['invoice-a', 'company-a']);
   });
+  it('posts a balanced revenue, tax, and receivables journal for a valid credit', async () => {
+    const journalLines: unknown[][] = [];
+    const client = {
+      query: vi.fn(async (sql: string, params: unknown[] = []) => {
+        if (sql.includes('FROM invoices WHERE id=$1 AND company_id=$2 FOR UPDATE')) {
+          return { rows: [{ id: 'invoice-a', customer_id: 'customer-a', invoice_number: 'INV-2026-00001', issue_date: '2026-10-01', status: 'sent', total: '500.00', amount_paid: '0.00', credited_amount: '0.00' }], rowCount: 1 };
+        }
+        if (sql.includes('INSERT INTO credit_note_sequences')) return { rows: [{ next_number: 1 }], rowCount: 1 };
+        if (sql.includes('INSERT INTO credit_notes(')) return { rows: [{ id: 'credit-a' }], rowCount: 1 };
+        if (sql.includes('INSERT INTO journal_entry_sequences')) return { rows: [{ next_number: 1 }], rowCount: 1 };
+        if (sql.includes('INSERT INTO journal_entries(')) return { rows: [{ id: 'journal-a' }], rowCount: 1 };
+        if (sql.includes('SELECT id FROM chart_of_accounts')) return { rows: [{ id: 'account-' + String(params[1]) }], rowCount: 1 };
+        if (sql.includes('INSERT INTO journal_entry_lines')) journalLines.push(params);
+        return { rows: [], rowCount: 1 };
+      }),
+    };
+    const detail = {
+      id: 'credit-a', company_id: 'company-a', invoice_id: 'invoice-a', customer_id: 'customer-a',
+      customer_name: 'Customer A', invoice_number: 'INV-2026-00001', credit_note_number: 'CN-2026-00001',
+      issue_date: '2026-10-17', reason: 'Price correction', subtotal: '100.00', tax_amount: '16.00', total: '116.00',
+      created_at: '2026-10-17T10:00:00Z',
+    };
+    const db = {
+      query: vi.fn(async (sql: string) => sql.includes('FROM credit_notes cn')
+        ? { rows: [detail], rowCount: 1 }
+        : { rows: [{ id: 'line-a', description: 'Adjustment', quantity: '1.000', unit_price: '100.00', tax_rate: '16.00', line_subtotal: '100.00', tax_amount: '16.00', line_total: '116.00' }], rowCount: 1 }),
+      transaction: vi.fn(async (callback: (client: unknown) => Promise<unknown>) => callback(client)),
+    };
+    const memberships = { getMembershipForCompany: vi.fn().mockResolvedValue({ companyId: 'company-a', branchId: null, role: 'owner' }), getMembership: vi.fn() };
+    const audit = { log: vi.fn().mockResolvedValue(undefined) };
+    const service = new CreditNotesService(
+      db as unknown as DatabaseService,
+      memberships as unknown as MembershipsService,
+      audit as unknown as AuditService,
+      { ensureDefaults: vi.fn().mockResolvedValue(undefined) } as unknown as AccountingService,
+    );
+
+    const result = await service.create(user, {
+      invoiceId: 'invoice-a', issueDate: '2026-10-17', reason: 'Price correction',
+      items: [{ description: 'Adjustment', quantity: 1, unitPrice: 100, taxRate: 16 }],
+    });
+
+    expect(result.credit_note_number).toBe('CN-2026-00001');
+    expect(result.total).toBe('116.00');
+    expect(journalLines).toHaveLength(3);
+    const debits = journalLines.reduce((sum, line) => sum + Number(line[4]), 0);
+    const credits = journalLines.reduce((sum, line) => sum + Number(line[5]), 0);
+    expect(debits).toBe(116);
+    expect(credits).toBe(116);
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'credit_note.create', companyId: 'company-a' }));
+  });
+
 });
