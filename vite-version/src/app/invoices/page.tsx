@@ -1,5 +1,5 @@
 import * as React from "react";
-import { AlertCircle, Eye, Loader2, Plus, Printer, Receipt, Search, Trash2 } from "lucide-react";
+import { AlertCircle, Download, Eye, Loader2, Plus, Printer, Receipt, Search, Trash2 } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
@@ -42,17 +42,12 @@ function errorMessage(error: unknown) {
 function escapeHtml(value: unknown): string {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
-function printInvoice(invoice: InvoiceApiRow, company: { name?: string; address_line1?: string | null; address_line2?: string | null; city?: string | null; county?: string | null; phone?: string | null; email?: string | null; website?: string | null; registration_number?: string | null; vat_number?: string | null } | null) {
-  const popup = window.open("", "_blank", "width=960,height=760");
-  if (!popup) {
-    window.alert("Your browser blocked the print window. Allow pop-ups for this ERP site, then try again.");
-    return;
-  }
+function printInvoice(invoice: InvoiceApiRow, company: { name?: string; address_line1?: string | null; address_line2?: string | null; city?: string | null; county?: string | null; phone?: string | null; email?: string | null; website?: string | null; registration_number?: string | null; vat_number?: string | null } | null, download = false) {
   const items = (invoice.items ?? []).map((item) => `<tr><td><strong>${escapeHtml(item.product_name)}</strong>${item.sku ? `<small>SKU: ${escapeHtml(item.sku)}</small>` : ""}</td><td class="num">${Number(item.quantity).toLocaleString()}</td><td class="num">${escapeHtml(formatKES(Number(item.unit_price)))}</td><td class="num">${escapeHtml(formatKES(Number(item.tax_amount)))}</td><td class="num">${escapeHtml(formatKES(Number(item.line_total)))}</td></tr>`).join("");
   const companyName = company?.name || "Omega Solutions";
   const address = [company?.address_line1, company?.address_line2, company?.city, company?.county].filter(Boolean).join(", ");
   const balance = Math.max(0, Number(invoice.total) - Number(invoice.amount_paid) - Number(invoice.credited_amount ?? 0));
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(invoice.invoice_number)}</title><style>
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(invoice.invoice_number)}</title><style>
     *{box-sizing:border-box}body{font:13px Arial,Helvetica,sans-serif;color:#222;margin:0;background:#fff}.page{max-width:900px;margin:0 auto;padding:42px}.top{display:flex;justify-content:space-between;gap:28px;border-bottom:3px solid #2f6b3f;padding-bottom:22px}.brand{font-size:24px;font-weight:700;color:#245c36}.muted{color:#666;line-height:1.55}.invoice-title{text-align:right}.invoice-title h1{font-size:30px;margin:0 0 8px;letter-spacing:2px;color:#333}.meta{margin-top:26px;display:grid;grid-template-columns:1fr 1fr;gap:24px}.label{font-size:10px;font-weight:bold;text-transform:uppercase;color:#666;letter-spacing:1px;margin-bottom:8px}.billto{font-size:15px;font-weight:bold;margin-bottom:6px}.summary{display:flex;justify-content:space-between;margin:25px 0;background:#f3f7f3;padding:15px 18px;border:1px solid #d9e5da}.summary strong{font-size:17px}.summary .due{color:#245c36}.table{width:100%;border-collapse:collapse;margin-top:25px}.table th{background:#f0f2f0;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:12px 10px;border-bottom:1px solid #d8ddd8}.table td{padding:13px 10px;border-bottom:1px solid #e5e7e5;vertical-align:top}.table small{display:block;color:#777;margin-top:4px}.num{text-align:right;white-space:nowrap}.totals{margin:20px 0 0 auto;width:290px}.totals div{display:flex;justify-content:space-between;padding:7px 0}.grand{font-size:18px;font-weight:bold;border-top:2px solid #333;margin-top:5px;padding-top:12px!important}.notes{margin-top:28px;border-top:1px solid #ddd;padding-top:16px;white-space:pre-wrap}.footer{margin-top:45px;border-top:1px solid #ddd;padding-top:15px;color:#666;font-size:11px}.actions{position:sticky;top:0;padding:12px;background:#f5f5f5;text-align:right}.actions button{border:0;border-radius:5px;background:#245c36;color:white;padding:10px 16px;font-weight:bold;cursor:pointer}@media print{.actions{display:none}.page{padding:0;margin:0;max-width:none}@page{size:A4;margin:16mm}}</style></head><body><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div><main class="page">
     <div class="top"><div><div class="brand">${escapeHtml(companyName)}</div><div class="muted">${escapeHtml(address)}<br>${escapeHtml(company?.phone || "")}<br>${escapeHtml(company?.email || "")}<br>${escapeHtml(company?.website || "")}</div></div><div class="invoice-title"><h1>INVOICE</h1><div><strong>${escapeHtml(invoice.invoice_number)}</strong></div><div class="muted">Issue date: ${escapeHtml(formatDate(invoice.issue_date))}<br>Due date: ${escapeHtml(formatDate(invoice.due_date))}<br>Status: ${escapeHtml(invoice.status.replaceAll("_", " ").toUpperCase())}</div></div></div>
     <div class="meta"><section><div class="label">Bill to</div><div class="billto">${escapeHtml(invoice.customer_name)}</div><div class="muted">Customer account</div></section><section><div class="label">Payment terms</div><div>Due by ${escapeHtml(formatDate(invoice.due_date))}</div><div class="muted">Currency: ${escapeHtml(invoice.currency || "KES")}</div></section></div>
@@ -61,7 +56,26 @@ function printInvoice(invoice: InvoiceApiRow, company: { name?: string; address_
     <div class="totals"><div><span>Subtotal</span><span>${escapeHtml(formatKES(Number(invoice.subtotal)))}</span></div><div><span>Tax</span><span>${escapeHtml(formatKES(Number(invoice.tax_amount)))}</span></div><div class="grand"><span>Total</span><span>${escapeHtml(formatKES(Number(invoice.total)))}</span></div><div><span>Paid</span><span>${escapeHtml(formatKES(Number(invoice.amount_paid)))}</span></div><div><span>Credits applied</span><span>${escapeHtml(formatKES(Number(invoice.credited_amount ?? 0)))}</span></div><div><strong>Balance due</strong><strong>${escapeHtml(formatKES(balance))}</strong></div></div>
     ${invoice.notes ? `<div class="notes"><div class="label">Notes / payment information</div>${escapeHtml(invoice.notes)}</div>` : ""}
     <div class="footer">Thank you for your business.${company?.registration_number ? ` Registration no: ${escapeHtml(company.registration_number)}.` : ""}${company?.vat_number ? ` VAT no: ${escapeHtml(company.vat_number)}.` : ""}</div>
-    </main></body></html>`);
+    </main></body></html>`;
+  if (download) {
+    const blob = new Blob(["\\uFEFF", html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${invoice.invoice_number.replace(/[^a-zA-Z0-9_-]/g, "_")}.html`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  const popup = window.open("", "_blank", "width=960,height=760");
+  if (!popup) {
+    window.alert("Your browser blocked the print window. Allow pop-ups for this ERP site, then try again.");
+    return;
+  }
+  popup.document.open();
+  popup.document.write(html);
   popup.document.close();
   popup.focus();
 }
@@ -240,7 +254,7 @@ export default function InvoicesPage() {
           <div className="flex flex-col gap-2"><h3 className="font-medium">Payment history</h3>{!viewingInvoice.payments?.length ? <p className="text-muted-foreground">No payments recorded.</p> : <div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Method</TableHead><TableHead>Reference</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{viewingInvoice.payments.map((payment: InvoicePaymentApiRow) => <TableRow key={payment.id}><TableCell>{formatDate(payment.status === "pending" ? payment.created_at : payment.paid_at)}</TableCell><TableCell className="capitalize">{payment.method}</TableCell><TableCell>{payment.reference || "—"}</TableCell><TableCell className="text-right">{formatKES(Number(payment.amount))}</TableCell><TableCell className="capitalize">{payment.status.replaceAll("_", " ")}</TableCell></TableRow>)}</TableBody></Table></div>}</div>
           {viewingInvoice.notes && <div><span className="text-muted-foreground">Notes</span><p>{viewingInvoice.notes}</p></div>}</div>}
         {actionError && <div role="alert" className="rounded-md border border-destructive/40 p-3 text-sm text-destructive">{actionError}</div>}
-        <DialogFooter>{viewingInvoice && <Button variant="outline" disabled={detailLoading} onClick={() => printInvoice(viewingInvoice, company)}><Printer className="size-4" />Print / Save PDF</Button>}{viewingInvoice && ["sent", "overdue", "partially_paid"].includes(viewingInvoice.status) && Number(viewingInvoice.total) > Number(viewingInvoice.amount_paid) + Number(viewingInvoice.credited_amount ?? 0) && <Button variant="outline" disabled={saving || detailLoading} onClick={openPaymentDialog}>Record payment</Button>}{viewingInvoice?.status === "draft" && <Button variant="outline" disabled={saving || detailLoading} onClick={() => void changeStatus("cancelled")}>Cancel invoice</Button>}{viewingInvoice?.status === "draft" && <Button disabled={saving || detailLoading} onClick={() => void changeStatus("sent")}>{saving && <Loader2 className="size-4 animate-spin" />}Mark as sent</Button>}<DialogClose render={<Button variant="outline">Close</Button>} /></DialogFooter>
+        <DialogFooter>{viewingInvoice && <Button variant="outline" disabled={detailLoading} onClick={() => printInvoice(viewingInvoice, company, true)}><Download className="size-4" />Download HTML</Button>}{viewingInvoice && <Button variant="outline" disabled={detailLoading} onClick={() => printInvoice(viewingInvoice, company)}><Printer className="size-4" />Print / Save PDF</Button>}{viewingInvoice && ["sent", "overdue", "partially_paid"].includes(viewingInvoice.status) && Number(viewingInvoice.total) > Number(viewingInvoice.amount_paid) + Number(viewingInvoice.credited_amount ?? 0) && <Button variant="outline" disabled={saving || detailLoading} onClick={openPaymentDialog}>Record payment</Button>}{viewingInvoice?.status === "draft" && <Button variant="outline" disabled={saving || detailLoading} onClick={() => void changeStatus("cancelled")}>Cancel invoice</Button>}{viewingInvoice?.status === "draft" && <Button disabled={saving || detailLoading} onClick={() => void changeStatus("sent")}>{saving && <Loader2 className="size-4 animate-spin" />}Mark as sent</Button>}<DialogClose render={<Button variant="outline">Close</Button>} /></DialogFooter>
       </DialogContent>
     </Dialog>
     <Dialog open={paymentOpen} onOpenChange={(open) => { setPaymentOpen(open); if (!open) setActionError(""); }}>
