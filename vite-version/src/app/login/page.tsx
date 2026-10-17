@@ -15,7 +15,7 @@ export default function LoginPage() {
   const destination = from?.pathname?.startsWith("/") && !from.pathname.startsWith("//")
     ? from.pathname + (from.search ?? "")
     : "/dashboard"
-  const { user, loading, loginEmail, registerUser, finishNeonRegistration } = useAuth()
+  const { user, loading, loginEmail, registerUser, finishNeonRegistration, mfaChallengePending, completeMfaCode } = useAuth()
   const [mode, setMode] = React.useState<"login" | "register">("login")
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
@@ -38,7 +38,15 @@ export default function LoginPage() {
     setNotice(null)
     setSubmitting(true)
     try {
-      if (verificationPending) {
+      if (mfaChallengePending) {
+        const code = otp.trim();
+        if (!/^(\\d{6}|[a-fA-F0-9]{10})$/.test(code)) {
+          setError("Enter the 6-digit authenticator code or one unused 10-character recovery code.");
+          return;
+        }
+        await completeMfaCode(code);
+        navigate(destination, { replace: true });
+      } else if (verificationPending) {
         if (!/^\d{6}$/.test(otp.trim())) {
           setError("Enter the 6-digit verification code sent to your email.")
           return
@@ -100,7 +108,7 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 rounded-xl border bg-card p-6 shadow-sm">
         <div className="space-y-1 text-center">
           <h2 className="text-lg font-semibold">
-            {verificationPending ? "Verify your email" : mode === "login" ? "Sign in to your account" : "Create a new account"}
+            {mfaChallengePending ? "Two-step verification" : verificationPending ? "Verify your email" : mode === "login" ? "Sign in to your account" : "Create a new account"}
           </h2>
           <p className="text-sm text-muted-foreground">
             {verificationPending
@@ -114,7 +122,7 @@ export default function LoginPage() {
         {error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
         {notice && <div role="status" className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">{notice}</div>}
 
-        {mode === "register" && !verificationPending && (
+        {mode === "register" && !verificationPending && !mfaChallengePending && (
           <>
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name</Label>
@@ -132,7 +140,7 @@ export default function LoginPage() {
           <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={verificationPending} placeholder="you@example.com" autoComplete="email" />
         </div>
 
-        {!verificationPending && (
+        {!verificationPending && !mfaChallengePending && (
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder={mode === "login" ? "Enter password" : "Min 8 characters"} autoComplete={mode === "login" ? "current-password" : "new-password"} />
@@ -157,7 +165,7 @@ export default function LoginPage() {
         )}
 
         <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? <LoadingSpinner className="size-4" /> : verificationPending ? "Verify email and continue" : mode === "login" ? "Sign In" : "Register"}
+          {submitting ? <LoadingSpinner className="size-4" /> : mfaChallengePending ? "Verify and Sign In" : verificationPending ? "Verify email and continue" : mode === "login" ? "Sign In" : "Register"}
         </Button>
 
         {!verificationPending && (
