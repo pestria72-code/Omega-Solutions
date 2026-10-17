@@ -55,7 +55,7 @@ describe('RequisitionsService approval submission', () => {
     expect(calls[0][0]).toContain('WHERE company_id=$1 AND id=$2 FOR UPDATE');
     expect(calls[0][1]).toEqual(['company-1', 'req-1']);
     expect(calls.some(([sql, params]) => sql.includes('INSERT INTO approval_requests') && sql.includes("'pending'") && params?.[2] === 'req-1' && params?.[3] === user.userId)).toBe(true);
-    expect(calls.some(([sql, params]) => sql.includes('UPDATE requisitions SET status=$1') && params?.[0] === 'pending_approval')).toBe(true);
+    expect(calls.some(([sql, params]) => sql.includes("UPDATE requisitions SET status='pending_approval'") && params?.[0] === 'company-1' && params?.[1] === 'req-1')).toBe(true);
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
       companyId: 'company-1', action: 'submit_for_approval', entityType: 'requisition', entityId: 'req-1',
     }));
