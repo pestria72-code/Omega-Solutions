@@ -57,7 +57,7 @@ describe('ApprovalsService', () => {
 
     const result = await service.decide(user, 'approval-1', decision, 'Reviewed by manager');
 
-    expect(result).toEqual({ id: 'approval-1', entityId: 'req-1', status: decision });
+    expect(result).toEqual({ id: 'approval-1', entityId: 'req-1', entityType: 'requisition', status: decision });
     const calls = client.query.mock.calls as unknown as [string, unknown[]?][];
     expect(calls[0][0]).toContain('WHERE company_id=$1 AND id=$2 FOR UPDATE');
     expect(calls[0][1]).toEqual(['company-1', 'approval-1']);
@@ -68,7 +68,7 @@ describe('ApprovalsService', () => {
       action,
       entityType: 'approval_request',
       entityId: 'approval-1',
-      newValues: { status: decision, entityId: 'req-1', note: 'Reviewed by manager' },
+      newValues: { status: decision, entityId: 'req-1', entityType: 'requisition', note: 'Reviewed by manager' },
     }));
   });
 
