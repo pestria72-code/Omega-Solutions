@@ -113,4 +113,40 @@ describe('InvitationsService', () => {
     expect(audit.log).not.toHaveBeenCalled();
   });
 
+  it('revokes a newly-created invitation when the email provider rejects delivery', async () => {
+    const oldEnv = {
+      key: process.env.RESEND_API_KEY,
+      from: process.env.EMAIL_FROM,
+      base: process.env.APP_BASE_URL,
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 503,
+    } as Response);
+    process.env.RESEND_API_KEY = 'test-resend-key';
+    process.env.EMAIL_FROM = 'Omega Solutions <no-reply@example.test>';
+    process.env.APP_BASE_URL = 'https://omega.example.test';
+    db.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ id: 'invite-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ name: 'Test Company' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+    try {
+      await expect(service.create(user, { email: 'new@example.com', role: 'staff' }))
+        .rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(db.query.mock.calls[2][0]).toContain('INSERT INTO company_invitations');
+      expect(db.query.mock.calls[2][1][5]).not.toBeUndefined();
+      expect(db.query.mock.calls[2][1][5]).not.toBe(fetchSpy.mock.calls[0]?.[1]);
+      expect(db.query.mock.calls[4][0]).toContain('SET revoked_at = NOW()');
+      expect(audit.log).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      if (oldEnv.key === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = oldEnv.key;
+      if (oldEnv.from === undefined) delete process.env.EMAIL_FROM; else process.env.EMAIL_FROM = oldEnv.from;
+      if (oldEnv.base === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = oldEnv.base;
+    }
+  });
+
 });
