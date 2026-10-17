@@ -70,7 +70,11 @@ export class PurchaseOrdersService {
     const state=await this.db.transaction(async client=>{
       const res=await client.query<{status:string}>('SELECT status FROM purchase_orders WHERE id=$1 AND company_id=$2 FOR UPDATE',[id,m.companyId]);
       const row=res.rows[0];if(!row)throw new NotFoundException('Purchase order not found.');
-      if(dto.status==='ordered'&&row.status==='draft') await client.query("UPDATE purchase_orders SET status='ordered',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
+      if(dto.status==='ordered'&&row.status==='draft') {
+        const approval=await client.query("SELECT id FROM approval_requests WHERE company_id=$1 AND entity_type='purchase_order' AND entity_id=$2 AND status='approved'",[m.companyId,id]);
+        if(!approval.rows[0]) throw new BadRequestException('Purchase orders must be approved before they can be ordered.');
+        await client.query("UPDATE purchase_orders SET status='ordered',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
+      }
       else if(dto.status==='cancelled'&&['draft','ordered'].includes(row.status)) await client.query("UPDATE purchase_orders SET status='cancelled',updated_at=NOW() WHERE id=$1 AND company_id=$2",[id,m.companyId]);
       else throw new BadRequestException(`Cannot change purchase order status from ${row.status} to ${dto.status}.`);
       return row.status;
