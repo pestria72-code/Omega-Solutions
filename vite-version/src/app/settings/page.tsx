@@ -16,6 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { useTheme } from "@/hooks/use-theme"
 import { cn } from "cn"
+import { QRCodeSVG } from "qrcode.react"
 import { getAccessToken } from "@/lib/api-client"
 
 const PREFS_KEY = "omega-demo-preferences"
@@ -45,6 +46,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = React.useState(false)
   const [mfaEnabled, setMfaEnabled] = React.useState(false)
   const [mfaSecret, setMfaSecret] = React.useState("")
+  const [mfaOtpAuthUrl, setMfaOtpAuthUrl] = React.useState("")
   const [mfaCode, setMfaCode] = React.useState("")
   const [recoveryCodes, setRecoveryCodes] = React.useState<string[]>([])
   const [mfaError, setMfaError] = React.useState<string | null>(null)
@@ -129,12 +131,16 @@ export default function SettingsPage() {
               </>}
               {!mfaEnabled && !mfaSecret && <Button disabled={mfaBusy} onClick={async () => {
                 setMfaBusy(true); setMfaError(null)
-                try { const data = await mfaRequest("/auth/mfa/enroll", {}); setMfaSecret(data.secret); }
+                try { const data = await mfaRequest("/auth/mfa/enroll", {}); setMfaSecret(data.secret); setMfaOtpAuthUrl(data.otpauthUrl); }
                 catch (err) { setMfaError(err instanceof Error ? err.message : "Could not start MFA enrollment.") }
                 finally { setMfaBusy(false) }
               }}>{mfaBusy ? "Starting…" : "Set up authenticator"}</Button>}
               {!mfaEnabled && mfaSecret && <>
                 <div className="rounded-md border p-3">
+                  {mfaOtpAuthUrl && <div className="mb-3 flex flex-col items-center gap-2">
+                    <QRCodeSVG value={mfaOtpAuthUrl} size={192} level="M" includeMargin aria-label="Authenticator setup QR code" />
+                    <p className="text-xs text-muted-foreground text-center">Scan this QR code with your authenticator app. It is generated locally in this browser.</p>
+                  </div>}
                   <p className="mb-1 text-sm font-medium">Authenticator setup key</p>
                   <code className="break-all text-sm">{mfaSecret}</code>
                   <p className="mt-2 text-xs text-muted-foreground">Add this key to an authenticator app, then enter its current six-digit code below.</p>
@@ -145,7 +151,7 @@ export default function SettingsPage() {
                 </div>
                 <Button disabled={mfaBusy || mfaCode.length !== 6} onClick={async () => {
                   setMfaBusy(true); setMfaError(null)
-                  try { const data = await mfaRequest("/auth/mfa/confirm", { code: mfaCode }); setMfaEnabled(true); setMfaSecret(""); setRecoveryCodes(data.recoveryCodes || []); setMfaCode(""); }
+                  try { const data = await mfaRequest("/auth/mfa/confirm", { code: mfaCode }); setMfaEnabled(true); setMfaSecret(""); setMfaOtpAuthUrl(""); setRecoveryCodes(data.recoveryCodes || []); setMfaCode(""); }
                   catch (err) { setMfaError(err instanceof Error ? err.message : "Could not confirm MFA.") }
                   finally { setMfaBusy(false) }
                 }}>{mfaBusy ? "Verifying…" : "Confirm and enable MFA"}</Button>
