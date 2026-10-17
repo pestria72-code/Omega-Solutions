@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "cn"
+import { api } from "@/lib/api-client"
 
 const routeLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -59,12 +60,51 @@ function Breadcrumb() {
 
 export function SiteHeader() {
   const [searchOpen, setSearchOpen] = React.useState(false)
-  const [notifications, setNotifications] = React.useState<{ id: string; title: string; message: string; time: string; read: boolean }[]>([])
+  const [notifications, setNotifications] = React.useState<{ id: string; title: string; message: string; time: string; read: boolean; href?: string | null }[]>([])
+  const [notificationsLoading, setNotificationsLoading] = React.useState(false)
+  const [notificationsError, setNotificationsError] = React.useState("")
+  const [unreadCount, setUnreadCount] = React.useState(0)
 
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const loadNotifications = React.useCallback(async () => {
+    setNotificationsLoading(true)
+    try {
+      const data = await api.get<{ items: { id: string; title: string; message: string; href?: string | null; read_at: string | null; created_at: string }[]; unreadCount: number }>("/notifications")
+      setNotifications(data.items.map((n) => ({
+        id: n.id, title: n.title, message: n.message,
+        time: new Date(n.created_at).toLocaleString(), read: Boolean(n.read_at), href: n.href,
+      })))
+      setUnreadCount(data.unreadCount ?? 0)
+      setNotificationsError("")
+    } catch (error) {
+      setNotificationsError(error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Notifications could not be loaded.")
+    } finally {
+      setNotificationsLoading(false)
+    }
+  }, [])
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+  React.useEffect(() => { void loadNotifications() }, [loadNotifications])
+
+  const markAllRead = async () => {
+    try {
+      await api.post("/notifications/read-all")
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+      setUnreadCount(0)
+      setNotificationsError("")
+    } catch (error) {
+      setNotificationsError(error instanceof Error ? error.message : "Could not mark notifications as read.")
+    }
+  }
+
+  const markRead = async (id: string) => {
+    const notification = notifications.find((n) => n.id === id)
+    if (!notification || notification.read) return
+    try {
+      await api.patch(`/notifications/${id}/read`)
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
+      setUnreadCount((count) => Math.max(0, count - 1))
+    } catch (error) {
+      setNotificationsError(error instanceof Error ? error.message : "Could not mark notification as read.")
+    }
   }
 
   React.useEffect(() => {
@@ -123,7 +163,9 @@ export function SiteHeader() {
                   )}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {notifications.map((n) => (
+                {notificationsError && <div className="px-3 py-2 text-xs text-destructive">{notificationsError}</div>}
+                {notificationsLoading && <div className="px-3 py-3 text-sm text-muted-foreground">Loading notifications…</div>}
+                {!notificationsLoading && notifications.map((n) => (
                   <DropdownMenuItem
                     key={n.id}
                     className={cn(
@@ -139,7 +181,7 @@ export function SiteHeader() {
                     <span className="text-xs text-muted-foreground/70">{n.time}</span>
                   </DropdownMenuItem>
                 ))}
-                {notifications.length === 0 && (
+                {!notificationsLoading && notifications.length === 0 && !notificationsError && (
                   <div className="py-6 text-center text-sm text-muted-foreground">
                     <Check className="mx-auto mb-2 size-5" />
                     All caught up
