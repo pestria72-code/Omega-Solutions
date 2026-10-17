@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InvitationsService } from './invitations.service.js';
 
 describe('InvitationsService', () => {
@@ -61,4 +61,56 @@ describe('InvitationsService', () => {
     expect(client.query).toHaveBeenCalledTimes(1);
     expect(audit.log).not.toHaveBeenCalled();
   });
+  it('rejects acceptance when the signed-in email does not match the invitation', async () => {
+    client.query.mockResolvedValueOnce({
+      rows: [{ id: 'invite-1', company_id: 'company-2', email: 'intended@example.com', role: 'staff', branch_id: null }],
+      rowCount: 1,
+    });
+    const invitee = { userId: 'invitee-1', email: 'other@example.com', companyId: 'company-1' } as any;
+
+    await expect(service.accept(invitee, 'one-time-token')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(client.query).toHaveBeenCalledTimes(1);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('creates a company-scoped membership and consumes a valid invitation atomically', async () => {
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 'invite-1', company_id: 'company-2', email: 'new@example.com', role: 'staff', branch_id: 'branch-2' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    const invitee = { userId: 'invitee-1', email: 'new@example.com', companyId: 'company-1' } as any;
+
+    const result = await service.accept(invitee, 'one-time-token');
+
+    expect(result).toEqual({ success: true, companyId: 'company-2', role: 'staff' });
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(client.query.mock.calls[1][1]).toEqual(['invitee-1', 'company-2']);
+    expect(client.query.mock.calls[2][0]).toContain('INSERT INTO company_memberships');
+    expect(client.query.mock.calls[2][1]).toEqual(['invitee-1', 'company-2', 'branch-2', 'staff']);
+    expect(client.query.mock.calls[3][0]).toContain('SET accepted_at = NOW()');
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'accept_invitation',
+      companyId: 'company-2',
+      entityId: 'invite-1',
+    }));
+  });
+
+  it('does not create a second membership if the invitee already belongs to the invited company', async () => {
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 'invite-1', company_id: 'company-2', email: 'new@example.com', role: 'staff', branch_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 'membership-existing' }], rowCount: 1 });
+    const invitee = { userId: 'invitee-1', email: 'new@example.com', companyId: 'company-1' } as any;
+
+    await expect(service.accept(invitee, 'one-time-token')).rejects.toBeInstanceOf(ConflictException);
+    expect(client.query).toHaveBeenCalledTimes(2);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
 });
