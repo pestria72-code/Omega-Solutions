@@ -9,6 +9,8 @@ export type Permission =
   | 'inventory:read' | 'inventory:write'
   | 'sales:read' | 'sales:write' | 'sales:team-read'
   | 'purchases:read' | 'purchases:write'
+  | 'requisitions:read' | 'requisitions:write'
+  | 'approvals:read' | 'approvals:approve'
   | 'payments:read' | 'payments:write' | 'payments:verify' | 'payments:reconcile'
   | 'expenses:read' | 'expenses:write'
   | 'reports:read'
