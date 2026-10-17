@@ -36,6 +36,8 @@ export class ApprovalsService {
       if (!row) throw new NotFoundException('Purchase order not found.');
       if (row.created_by !== user.userId) throw new BadRequestException('Only the purchase order creator can submit it for approval.');
       if (row.status !== 'draft') throw new BadRequestException('Only draft purchase orders can be submitted for approval.');
+      const existing = await client.query("SELECT status FROM approval_requests WHERE company_id=$1 AND entity_type='purchase_order' AND entity_id=$2", [membership.companyId, id]);
+      if (existing.rows[0]?.status === 'pending') throw new BadRequestException('This purchase order is already awaiting approval.');
       await client.query(
         "INSERT INTO approval_requests(company_id,branch_id,entity_type,entity_id,requester_user_id,status,decision_note,requested_at,decided_at,approver_user_id) " +
         "VALUES($1,$2,'purchase_order',$3,$4,'pending',NULL,NOW(),NULL,NULL) " +
