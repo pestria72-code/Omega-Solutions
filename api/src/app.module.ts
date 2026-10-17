@@ -31,6 +31,7 @@ import { RequisitionsModule } from './requisitions/requisitions.module.js';
 import { ApprovalsModule } from './approvals/approvals.module.js';
 import { UsersRolesModule } from './users-roles/users-roles.module.js';
 import { CreditNotesModule } from './credit-notes/credit-notes.module.js';
+import { SearchModule } from './search/search.module.js';
 
 @Module({
   imports: [
@@ -39,7 +40,7 @@ import { CreditNotesModule } from './credit-notes/credit-notes.module.js';
     CustomersModule, SuppliersModule, ProductsModule, InvoicesModule, QuotationsModule,
     SalesOrdersModule, CrmModule, InventoryModule, PurchaseOrdersModule, SupplierBillsModule,
     AccountingModule, ManufacturingModule, EmployeesModule, ExpensesModule, PayrollModule,
-    WorkforceModule, PosModule, RequisitionsModule, ApprovalsModule, UsersRolesModule, CreditNotesModule,
+    WorkforceModule, PosModule, RequisitionsModule, ApprovalsModule, UsersRolesModule, CreditNotesModule, SearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],
