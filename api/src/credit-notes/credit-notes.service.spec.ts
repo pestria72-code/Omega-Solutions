@@ -61,8 +61,9 @@ describe('CreditNotesService', () => {
       items: [{ description: 'Credit adjustment', quantity: 1, unitPrice: 30, taxRate: 10 }],
     })).rejects.toThrow(BadRequestException);
 
-    expect(client.query).toHaveBeenCalledTimes(1);
+    expect(client.query).toHaveBeenCalledTimes(2);
     expect(client.query.mock.calls[0][1]).toEqual(['invoice-a', 'company-a']);
+    expect(client.query.mock.calls[1][1]).toEqual(['company-a', 'invoice-a']);
   });
   it('posts a balanced revenue, tax, and receivables journal for a valid credit', async () => {
     const journalLines: unknown[][] = [];
