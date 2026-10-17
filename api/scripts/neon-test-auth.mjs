@@ -20,7 +20,7 @@ export async function neonTestLogin(apiBase, options = {}) {
     const tokenResult = await tokenResponse.json().catch(() => ({}));
     const identityToken = tokenResult?.token ?? tokenResult?.data?.token;
     if (!tokenResponse.ok || typeof identityToken !== "string" || identityToken.split(".").length !== 3) throw new Error(`Neon Auth JWT endpoint failed (HTTP ${tokenResponse.status}); expected a JWT token.`);
-    const exchange = await fetch(`${apiBase.replace(/\/$/, "")}/auth/neon/exchange`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: identityToken }) });
+    const exchange = await fetch(`${apiBase.replace(/\/$/, "")}/auth/neon/exchange`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: identityToken, companyName: options.companyName }) });
     const result = await exchange.json().catch(() => ({}));
     if (!exchange.ok || !result.accessToken) throw new Error(`Omega Neon identity exchange failed (HTTP ${exchange.status}): ${JSON.stringify(result).slice(0, 250)}`);
     return { email, token: result.accessToken, refreshToken: result.refreshToken, user: result.user };
