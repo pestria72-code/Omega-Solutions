@@ -33,6 +33,10 @@ jobs:
           npm ci
           npm run build
 
+      - name: Run purchase-order approval regression tests
+        working-directory: api
+        run: npx vitest run src/approvals/approvals.service.spec.ts
+
       - name: Test API
         working-directory: api
         run: npm test
