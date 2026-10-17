@@ -36,6 +36,7 @@ export interface InvoiceRow {
   tax_amount: string | number;
   total: string | number;
   amount_paid: string | number;
+  credited_amount: string | number;
   notes: string | null;
   created_at: string;
   updated_at: string;
