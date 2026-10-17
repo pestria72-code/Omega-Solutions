@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
   branchId: string | null;
   role: string;
   permissions: string[];
+  mfaVerified?: boolean;
 }
 
 export interface JwtPayload {
@@ -14,6 +15,7 @@ export interface JwtPayload {
   companyId: string | null;
   branchId: string | null;
   role: string;
+  mfaVerified?: boolean;
 }
 
 export interface TokenPair {
