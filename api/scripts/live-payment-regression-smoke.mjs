@@ -101,7 +101,21 @@ async function main() {
   const posSku = `POS-${stamp}`;
   const posProduct = await request("POST", "/products", { sku: posSku, name: `TEMP POS Product ${stamp}`, sellingPrice: 100, costPrice: 60, stockQuantity: 0, reorderLevel: 0, isService: false, isActive: true, unit: "each" }, a.token, [201]);
   assert(!!posProduct.id, "created temporary POS stock product");
-  await request("POST", "/inventory/receipts", { productId: posProduct.id, warehouseId: warehouse.id, quantity: 5, unitCost: 60, reference: `POS-OPEN-${stamp}`, notes: "Temporary POS regression" }, a.token, [201]);
+  // Seed POS stock through the purchase-order receipt flow so opening stock and the
+  // inventory subledger are accompanied by a balanced Inventory/GRNI journal.
+  const posSupplier = await request("POST", "/suppliers", { name: `POS Regression Supplier ${stamp}`, email: `pos-supplier-${stamp}@example.com` }, a.token, [201]);
+  assert(!!posSupplier.id, "created temporary POS stock supplier");
+  const posPo = await request("POST", "/purchase-orders", { supplierId: posSupplier.id, expectedDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10), notes: "POS regression opening stock with accounting integration", items: [{ productId: posProduct.id, quantity: 5, unitCost: 60, taxRate: 0 }] }, a.token, [201]);
+  const posPoLine = posPo.items?.[0];
+  assert(!!posPo.id && !!posPoLine?.id, "created purchase order for POS opening stock");
+  const orderedPosPo = await request("PATCH", `/purchase-orders/${posPo.id}/status`, { status: "ordered" }, a.token);
+  assert(orderedPosPo.status === "ordered", "POS stock purchase order moved to ordered");
+  const posReceipt = await request("POST", `/purchase-orders/${posPo.id}/receive`, { warehouseId: warehouse.id, items: [{ itemId: posPoLine.id, quantity: 5 }], reference: `POS-OPEN-${stamp}` }, a.token, [201]);
+  assert(posReceipt.status === "received" && !!posReceipt.receiptId, "POS opening stock received through accounting-integrated purchase flow");
+  const openingStockJournalsResponse = await request("GET", "/accounting/journals", undefined, a.token);
+  const openingStockJournals = Array.isArray(openingStockJournalsResponse) ? openingStockJournalsResponse : (openingStockJournalsResponse.items || openingStockJournalsResponse.data || []);
+  const openingStockJournal = openingStockJournals.find(j => j.source_type === "purchase_order_receipt" && j.source_id === posReceipt.receiptId);
+  assert(!!openingStockJournal && Math.abs(Number(openingStockJournal.total_debits) - 300) < 0.005 && Math.abs(Number(openingStockJournal.total_credits) - 300) < 0.005, "POS opening stock creates balanced KES 300 Inventory/GRNI journal");
   const register = await request("POST", "/pos/registers", { code: `POS-${stamp % 100000000}`, name: `TEMP POS Register ${stamp}` }, a.token, [201]);
   assert(!!register.id, "created temporary POS register");
   const shift = await request("POST", "/pos/shifts/open", { registerId: register.id, openingFloat: 100 }, a.token, [201]);
