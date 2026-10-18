@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173";
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:4173";
 const useLocalServer = !process.env.E2E_BASE_URL;
 
 export default defineConfig({
@@ -21,12 +21,14 @@ export default defineConfig({
   },
   ...(useLocalServer ? {
     webServer: {
-      command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
+      // Use localhost rather than 127.0.0.1 so Neon Auth's localhost origin
+      // allowance matches the browser Origin header during local E2E sign-in.
+      command: "npm run dev -- --host localhost --port 4173 --strictPort",
       url: baseURL,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        VITE_API_BASE_URL: process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000/api",
+        VITE_API_BASE_URL: process.env.E2E_API_BASE_URL ?? "http://localhost:3000/api",
         VITE_NEON_AUTH_URL: process.env.E2E_NEON_AUTH_URL ?? "",
       },
     },
