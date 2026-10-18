@@ -319,21 +319,22 @@ export class ProductsService {
     }
     const key = this.imageStorage.newKey(membership.companyId, productId, imageType.ext);
     await this.imageStorage.upload(key, file.buffer, imageType.type);
+    let result;
     try {
-      const result = await this.db.query<ProductRow>(
+      result = await this.db.query<ProductRow>(
         'UPDATE products SET image_storage_key = $1, image_url = NULL, updated_at = NOW() WHERE id = $2 AND company_id = $3 RETURNING ' + PRODUCT_COLUMNS,
         [key, productId, membership.companyId],
       );
       if (!result.rows[0]) throw new NotFoundException('Product not found.');
-      await this.audit.log({ userId: user.userId, companyId: membership.companyId, branchId: null, action: 'product.image.upload', entityType: 'product', entityId: productId, oldValues: { hadImage: !!existing.image_url || !!existing.image_storage_key }, newValues: { imageType: imageType.type }, ipAddress: null });
-      if (existing.image_storage_key) {
-        try { await this.imageStorage.remove(String(existing.image_storage_key)); } catch { /* New key is committed; old object cleanup can be retried safely. */ }
-      }
-      return this.withImageUrl(result.rows[0]);
     } catch (error) {
-      try { await this.imageStorage.remove(key); } catch { /* Preserve original DB/audit error. */ }
+      try { await this.imageStorage.remove(key); } catch { /* Preserve the database error. */ }
       throw error;
     }
+    await this.audit.log({ userId: user.userId, companyId: membership.companyId, branchId: null, action: 'product.image.upload', entityType: 'product', entityId: productId, oldValues: { hadImage: !!existing.image_url || !!existing.image_storage_key }, newValues: { imageType: imageType.type }, ipAddress: null });
+    if (existing.image_storage_key) {
+      try { await this.imageStorage.remove(String(existing.image_storage_key)); } catch { /* New key is committed; old object cleanup can be retried safely. */ }
+    }
+    return this.withImageUrl(result.rows[0]);
   }
 
   async removeImage(user: AuthenticatedUser, productId: string) {
