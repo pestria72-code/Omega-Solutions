@@ -32,11 +32,6 @@ export class CreateProductDto {
 
   @IsString()
   @IsOptional()
-  @MaxLength(2048)
-  imageUrl?: string;
-
-  @IsString()
-  @IsOptional()
   @MaxLength(100)
   category?: string;
 
@@ -90,6 +85,11 @@ export class UpdateProductDto {
   @IsOptional()
   @MaxLength(2000)
   description?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2048)
+  imageUrl?: string;
 
   @IsString()
   @IsOptional()
