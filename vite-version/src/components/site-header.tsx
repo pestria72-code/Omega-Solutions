@@ -12,6 +12,7 @@ import { ModeToggle } from "@/components/mode-toggle"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -158,17 +159,19 @@ export function SiteHeader() {
                 align="end"
                 sideOffset={8}
               >
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  <span>Notifications</span>
-                  {unreadCount > 0 && (
-                    <button
-                      onClick={markAllRead}
-                      className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                    >
-                      Mark all read
-                    </button>
-                  )}
-                </DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="flex items-center justify-between">
+                    <span>Notifications</span>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllRead}
+                        className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 {notificationsError && <div className="px-3 py-2 text-xs text-destructive">{notificationsError}</div>}
                 {notificationsLoading && <div className="px-3 py-3 text-sm text-muted-foreground">Loading notifications…</div>}
