@@ -181,7 +181,11 @@ export function SiteHeader() {
                     )}
                   >
                     <div className="flex w-full items-center justify-between gap-2">
-                      <span className="text-sm font-medium">{n.title}</span>
+                      {n.href && /^\/(?!\/)/.test(n.href) ? (
+                        <a href={n.href} className="text-sm font-medium hover:underline" onClick={() => void markRead(n.id)}>{n.title}</a>
+                      ) : (
+                        <span className="text-sm font-medium">{n.title}</span>
+                      )}
                       {!n.read && (
                         <button
                           type="button"
