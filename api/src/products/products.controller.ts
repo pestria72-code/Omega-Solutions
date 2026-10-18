@@ -9,7 +9,11 @@ import {
   Query,
   UseGuards,
   Req,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service.js';
 import { CreateProductDto, UpdateProductDto } from './dto/product.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -32,6 +36,24 @@ export class ProductsController {
   @RequirePermissions('products:read')
   getById(@Req() req: { user: AuthenticatedUser }, @Param('id') id: string) {
     return this.products.getById(req.user, id);
+  }
+
+  @Post(':id/image')
+  @RequirePermissions('products:write')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024, files: 1 } }))
+  uploadImage(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+    @UploadedFile() file?: { buffer: Buffer; mimetype: string; size: number },
+  ) {
+    if (!file) throw new BadRequestException('Select an image file to upload.');
+    return this.products.uploadImage(req.user, id, file);
+  }
+
+  @Delete(':id/image')
+  @RequirePermissions('products:write')
+  removeImage(@Req() req: { user: AuthenticatedUser }, @Param('id') id: string) {
+    return this.products.removeImage(req.user, id);
   }
 
   @Post()
