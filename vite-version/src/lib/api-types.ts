@@ -76,6 +76,7 @@ export interface ProductRow {
   sku: string;
   name: string;
   description: string | null;
+  image_url: string | null;
   category: string | null;
   unit: string;
   selling_price: number;
