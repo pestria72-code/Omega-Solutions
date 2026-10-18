@@ -11,9 +11,10 @@ import type { ProductRow } from './product.types.js';
 import type { CreateProductDto, UpdateProductDto } from './dto/product.dto.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import { AccountingService } from '../accounting/accounting.service.js';
+import { ProductImageStorageService } from './product-image-storage.service.js';
 
 const PRODUCT_COLUMNS = `
-  id, company_id, sku, name, description, image_url, category, unit,
+  id, company_id, sku, name, description, image_url, image_storage_key, category, unit,
   selling_price, cost_price, stock_quantity, reorder_level,
   is_service, is_active, created_at, updated_at
 `;
@@ -25,6 +26,7 @@ export class ProductsService {
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
     private readonly accounting: AccountingService,
+    private readonly imageStorage: ProductImageStorageService,
   ) {}
 
   private async resolveMembership(user: AuthenticatedUser) {
@@ -46,7 +48,7 @@ export class ProductsService {
          ORDER BY created_at DESC`,
         [membership.companyId, `%${search}%`],
       );
-      return result.rows;
+      return Promise.all(result.rows.map((row) => this.withImageUrl(row)));
     }
 
     const result = await this.db.query<ProductRow>(
@@ -54,12 +56,12 @@ export class ProductsService {
        WHERE company_id = $1 ORDER BY created_at DESC`,
       [membership.companyId],
     );
-    return result.rows;
+    return Promise.all(result.rows.map((row) => this.withImageUrl(row)));
   }
 
   async getById(user: AuthenticatedUser, productId: string): Promise<ProductRow> {
     const membership = await this.resolveMembership(user);
-    return this.getByIdInternal(membership.companyId, productId);
+    return this.withImageUrl(await this.getByIdInternal(membership.companyId, productId));
   }
 
   async create(user: AuthenticatedUser, dto: CreateProductDto): Promise<ProductRow> {
@@ -212,7 +214,7 @@ export class ProductsService {
       ipAddress: null,
     });
 
-    return product;
+    return this.withImageUrl(product);
   }
 
   async update(
@@ -265,7 +267,7 @@ export class ProductsService {
     }
 
     if (fields.length === 0) {
-      return existing;
+      return this.withImageUrl(existing);
     }
 
     fields.push('updated_at = NOW()');
@@ -297,7 +299,55 @@ export class ProductsService {
       ipAddress: null,
     });
 
-    return updated;
+    return this.withImageUrl(updated);
+  }
+
+  async uploadImage(user: AuthenticatedUser, productId: string, file: { buffer: Buffer; mimetype: string; size: number }) {
+    const membership = await this.resolveMembership(user);
+    const existing = await this.getByIdInternal(membership.companyId, productId);
+    if (!file?.buffer || file.size < 1 || file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('Choose an image between 1 byte and 5 MB.');
+    }
+    const signatures: Array<{ type: string; ext: 'jpg' | 'png' | 'webp'; ok: (b: Buffer) => boolean }> = [
+      { type: 'image/jpeg', ext: 'jpg', ok: (b) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+      { type: 'image/png', ext: 'png', ok: (b) => b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) },
+      { type: 'image/webp', ext: 'webp', ok: (b) => b.length >= 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP' },
+    ];
+    const imageType = signatures.find((item) => item.ok(file.buffer));
+    if (!imageType || file.mimetype !== imageType.type) {
+      throw new BadRequestException('Only valid JPEG, PNG, and WebP images are supported. SVG and other file types are not allowed.');
+    }
+    const key = this.imageStorage.newKey(membership.companyId, productId, imageType.ext);
+    await this.imageStorage.upload(key, file.buffer, imageType.type);
+    try {
+      const result = await this.db.query<ProductRow>(
+        'UPDATE products SET image_storage_key = $1, image_url = NULL, updated_at = NOW() WHERE id = $2 AND company_id = $3 RETURNING ' + PRODUCT_COLUMNS,
+        [key, productId, membership.companyId],
+      );
+      if (!result.rows[0]) throw new NotFoundException('Product not found.');
+      await this.audit.log({ userId: user.userId, companyId: membership.companyId, branchId: null, action: 'product.image.upload', entityType: 'product', entityId: productId, oldValues: { hadImage: !!existing.image_url || !!existing.image_storage_key }, newValues: { imageType: imageType.type }, ipAddress: null });
+      if (existing.image_storage_key) {
+        try { await this.imageStorage.remove(String(existing.image_storage_key)); } catch { /* New key is committed; old object cleanup can be retried safely. */ }
+      }
+      return this.withImageUrl(result.rows[0]);
+    } catch (error) {
+      try { await this.imageStorage.remove(key); } catch { /* Preserve original DB/audit error. */ }
+      throw error;
+    }
+  }
+
+  async removeImage(user: AuthenticatedUser, productId: string) {
+    const membership = await this.resolveMembership(user);
+    const existing = await this.getByIdInternal(membership.companyId, productId);
+    await this.db.query('UPDATE products SET image_storage_key = NULL, image_url = NULL, updated_at = NOW() WHERE id = $1 AND company_id = $2', [productId, membership.companyId]);
+    await this.audit.log({ userId: user.userId, companyId: membership.companyId, branchId: null, action: 'product.image.remove', entityType: 'product', entityId: productId, oldValues: { hadImage: !!existing.image_url || !!existing.image_storage_key }, newValues: null, ipAddress: null });
+    if (existing.image_storage_key) await this.imageStorage.remove(String(existing.image_storage_key));
+    return this.withImageUrl({ ...existing, image_url: null, image_storage_key: null });
+  }
+
+  private withImageUrl(row: ProductRow): ProductRow {
+    const { image_storage_key: storageKey, ...publicRow } = row;
+    return { ...publicRow, image_url: storageKey ? this.imageStorage.signedReadUrl(String(storageKey)) : row.image_url } as ProductRow;
   }
 
   async delete(user: AuthenticatedUser, productId: string): Promise<void> {
