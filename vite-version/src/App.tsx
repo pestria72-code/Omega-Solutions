@@ -3,7 +3,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarConfigProvider } from "@/contexts/sidebar-context"
 import { AuthProvider } from "@/contexts/auth-context"
 import { Toaster } from "@/components/ui/toast"
-import { RootFallback, RootLayout } from "@/components/router/root-layout"
+import { RootErrorBoundary, RootFallback, RootLayout } from "@/components/router/root-layout"
 import { routes } from "@/config/routes"
 import { useEffect } from "react"
 import { initGTM } from "@/utils/analytics"
@@ -15,6 +15,7 @@ const router = createBrowserRouter(
   [
     {
       element: <RootLayout />,
+      ErrorBoundary: RootErrorBoundary,
       HydrateFallback: RootFallback,
       children: routes,
     },
