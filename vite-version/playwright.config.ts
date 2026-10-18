@@ -26,7 +26,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: {
-        VITE_API_BASE_URL: process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000/api",
+        VITE_API_BASE_URL: process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000/api",\n        VITE_NEON_AUTH_URL: process.env.E2E_NEON_AUTH_URL ?? "",
       },
     },
   } : {}),
