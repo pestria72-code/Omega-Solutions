@@ -44,6 +44,37 @@ describe('PosService', () => {
     expect(db.query.mock.calls[0][1]).toEqual(['company-1', 'warehouse-1', '%tea%']);
   });
 
+  it('forces a salesperson product search to their assigned warehouse', async () => {
+    const salesperson = { ...user, permissions: [] };
+    db.query
+      .mockResolvedValueOnce({ rows: [{ warehouse_id: 'warehouse-2' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'product-1' }], rowCount: 1 });
+
+    const result = await service.searchProducts(salesperson, 'tea', 'warehouse-2');
+
+    expect(result).toHaveLength(1);
+    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(db.query.mock.calls[1][1]).toEqual(['company-1', 'warehouse-2', '%tea%']);
+  });
+
+  it('rejects salesperson product searches for another warehouse', async () => {
+    const salesperson = { ...user, permissions: [] };
+    db.query.mockResolvedValueOnce({ rows: [{ warehouse_id: 'warehouse-2' }], rowCount: 1 });
+
+    await expect(service.searchProducts(salesperson, 'tea', 'warehouse-1'))
+      .rejects.toThrow('You can only sell from your assigned warehouse.');
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks salesperson product searches until a manager assigns stock', async () => {
+    const salesperson = { ...user, permissions: [] };
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    await expect(service.searchProducts(salesperson, 'tea'))
+      .rejects.toThrow('Your manager must assign a stock warehouse before selling.');
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the current shift lookup company- and cashier-scoped', async () => {
     db.query.mockResolvedValue({ rows: [], rowCount: 0 });
     expect(await service.currentShift(user)).toBeNull();
