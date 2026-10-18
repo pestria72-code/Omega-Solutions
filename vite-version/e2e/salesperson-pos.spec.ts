@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const email = process.env.E2E_SALESPERSON_EMAIL;
-const password = process.env.E2E_SALESPERSON_PASSWORD;
+const password = process.env.E2E_SALESPERSON_PASSWORD;\nconst apiBase = process.env.E2E_API_BASE_URL;
 const allowMutations = process.env.E2E_ALLOW_MUTATIONS === "true";
 const productSearch = process.env.E2E_CHECKOUT_PRODUCT;
 
@@ -14,7 +14,7 @@ test.describe("Omega salesperson POS", () => {
   });
 
   test("signs in and confirms salesperson assignment and POS access", async ({ page }) => {
-    test.skip(!email || !password, "Set E2E_SALESPERSON_EMAIL and E2E_SALESPERSON_PASSWORD to run authenticated tests.");
+    test.skip(!email || !password || !apiBase, "Set E2E_SALESPERSON_EMAIL, E2E_SALESPERSON_PASSWORD, and E2E_API_BASE_URL for authenticated tests.");
     await page.goto("/login");
     await page.getByLabel("Email").fill(email!);
     await page.getByLabel("Password").fill(password!);
@@ -33,7 +33,7 @@ test.describe("Omega salesperson POS", () => {
   });
 
   test("completes a real cash checkout only when explicitly enabled for development", async ({ page }) => {
-    test.skip(!email || !password, "Set E2E_SALESPERSON_EMAIL and E2E_SALESPERSON_PASSWORD.");
+    test.skip(!email || !password || !apiBase, "Set salesperson credentials and E2E_API_BASE_URL.");
     test.skip(!allowMutations, "Read-only by default. Set E2E_ALLOW_MUTATIONS=true only for an isolated development test company.");
     test.skip(!productSearch, "Set E2E_CHECKOUT_PRODUCT to a known, in-stock product name in the isolated development company.");
 
