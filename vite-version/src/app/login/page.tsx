@@ -53,7 +53,8 @@ export default function LoginPage() {
         }
         const token = await verifyNeonEmailAndSignIn({ email, password, otp })
         await finishNeonRegistration(token, fullName || email.split("@")[0], phone || undefined, companyName || undefined)
-        navigate("/dashboard", { replace: true })
+        // Preserve the protected destination so a new invitee returns to the invitation link after email verification.
+        navigate(destination, { replace: true })
       } else if (mode === "login") {
         await loginEmail(email, password)
       } else {
