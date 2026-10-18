@@ -24,7 +24,9 @@ jobs:
       E2E_SALESPERSON_EMAIL: ${{ secrets.E2E_SALESPERSON_EMAIL }}
       E2E_SALESPERSON_PASSWORD: ${{ secrets.E2E_SALESPERSON_PASSWORD }}
       E2E_API_BASE_URL: ${{ secrets.E2E_API_BASE_URL }}
+      VITE_API_BASE_URL: ${{ secrets.E2E_API_BASE_URL }}
       E2E_NEON_AUTH_URL: ${{ vars.E2E_NEON_AUTH_URL || 'https://ep-fragrant-bird-b4hie5sp.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth' }}
+      VITE_NEON_AUTH_URL: ${{ vars.E2E_NEON_AUTH_URL || 'https://ep-fragrant-bird-b4hie5sp.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth' }}
       E2E_CHECKOUT_PRODUCT: ${{ vars.E2E_CHECKOUT_PRODUCT }}
       E2E_ALLOW_MUTATIONS: "false"
     steps:
@@ -34,6 +36,27 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: vite-version/package-lock.json
+      - name: Validate development-only E2E API target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${E2E_API_BASE_URL}" ]]; then
+            echo "::error::E2E_API_BASE_URL secret is required for the salesperson E2E workflow."
+            exit 1
+          fi
+          if [[ "${E2E_API_BASE_URL}" != */api ]]; then
+            echo "::error::E2E_API_BASE_URL must end in /api."
+            exit 1
+          fi
+          if [[ "${E2E_API_BASE_URL,,}" == *"omega-solutions-api.onrender.com"* ]]; then
+            echo "::error::Refusing to run E2E against the live Omega API."
+            exit 1
+          fi
+          if [[ "${E2E_API_BASE_URL}" != https://* ]]; then
+            echo "::error::E2E_API_BASE_URL must use HTTPS."
+            exit 1
+          fi
+          echo "E2E API target passed the basic safety checks (URL not printed)."
       - name: Install frontend dependencies
         run: npm ci
       - name: Install Playwright test runner
