@@ -45,6 +45,7 @@ export function updateProduct(productId: string, data: {
   sku?: string
   name?: string
   description?: string
+  imageUrl?: string
   category?: string
   unit?: string
   sellingPrice?: number
