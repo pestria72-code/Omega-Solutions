@@ -13,7 +13,7 @@ describe('PosService', () => {
   let memberships: { getMembership: Mock; getMembershipForCompany: Mock };
   let audit: { log: Mock };
   let accounting: { ensureDefaults: Mock };
-  const user = { userId: 'cashier-1', companyId: 'company-1' } as any;
+  const user = { userId: 'cashier-1', companyId: 'company-1', permissions: ['sales:team-read'] } as any;
 
   beforeEach(async () => {
     db = { query: vi.fn(), transaction: vi.fn() };
