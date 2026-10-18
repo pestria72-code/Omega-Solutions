@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173";
+const useLocalServer = !process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,5 +19,16 @@ export default defineConfig({
     video: "retain-on-failure",
     ...devices["Desktop Chrome"],
   },
+  ...(useLocalServer ? {
+    webServer: {
+      command: "npm run dev -- --host 127.0.0.1 --port 4173 --strictPort",
+      url: baseURL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        VITE_API_BASE_URL: process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:3000/api",
+      },
+    },
+  } : {}),
   outputDir: "test-results",
 });
