@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { PoolClient } from 'pg';
 import { AccountingService } from '../accounting/accounting.service.js';
+import { ProductImageStorageService } from '../products/product-image-storage.service.js';
 import type { PosCheckoutDto } from './dto/pos-checkout.dto.js';
 
 export function buildCogsJournalLines(costCents: number) {
@@ -29,6 +30,7 @@ export class PosService {
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
     private readonly accounting: AccountingService,
+    private readonly imageStorage: ProductImageStorageService,
   ) {}
 
   private async company(user: AuthenticatedUser) {
@@ -159,7 +161,7 @@ export class PosService {
     }
     const term=search?.trim();
     const result=await this.db.query(
-      `SELECT p.id,p.sku,p.name,p.unit,p.selling_price,p.cost_price,p.is_service,
+      `SELECT p.id,p.sku,p.name,p.unit,p.selling_price,p.cost_price,p.is_service,p.image_url,p.image_storage_key,
         COALESCE(SUM(s.quantity-s.reserved_quantity),0)::numeric(16,3) AS available_quantity
        FROM products p
        LEFT JOIN inventory_stock_levels s ON s.product_id=p.id AND s.company_id=p.company_id
@@ -168,7 +170,10 @@ export class PosService {
          AND ($3::text IS NULL OR p.name ILIKE $3 OR p.sku ILIKE $3)
        GROUP BY p.id ORDER BY p.name LIMIT 100`,
       [companyId,warehouseId??null,term?`%${term}%`:null]);
-    return result.rows;
+    return result.rows.map((row: Record<string, unknown>) => {
+      const { image_storage_key: storageKey, ...product } = row;
+      return { ...product, image_url: storageKey ? this.imageStorage.signedReadUrl(String(storageKey)) : product.image_url };
+    });
   }
 
   async checkout(user:AuthenticatedUser,dto:PosCheckoutDto) {
