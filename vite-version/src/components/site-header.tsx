@@ -175,7 +175,21 @@ export function SiteHeader() {
                   >
                     <div className="flex w-full items-center justify-between gap-2">
                       <span className="text-sm font-medium">{n.title}</span>
-                      {!n.read && <span className="size-2 rounded-full bg-primary" />}
+                      {!n.read && (
+                        <button
+                          type="button"
+                          aria-label={`Mark ${n.title} as read`}
+                          title="Mark as read"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            void markRead(n.id)
+                          }}
+                          className="inline-flex size-7 items-center justify-center rounded hover:bg-muted"
+                        >
+                          <Check className="size-4" />
+                        </button>
+                      )}
                     </div>
                     <span className="text-xs text-muted-foreground">{n.message}</span>
                     <span className="text-xs text-muted-foreground/70">{n.time}</span>
