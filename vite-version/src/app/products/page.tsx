@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Plus, Search, Pencil, Trash2, Eye, AlertCircle, Package, AlertTriangle } from "lucide-react"
+import { Plus, Search, Pencil, Trash2, Eye, AlertCircle, Package, AlertTriangle, Image as ImageIcon } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -61,6 +61,7 @@ export default function ProductsPage() {
   const [formData, setFormData] = React.useState({
     sku: "",
     name: "",
+    imageUrl: "",
     category: "",
     unit: "pcs",
     sellingPrice: 0,
@@ -89,7 +90,7 @@ export default function ProductsPage() {
 
   const openAddDialog = () => {
     setEditingProduct(null)
-    setFormData({ sku: "", name: "", category: "", unit: "pcs", sellingPrice: 0, costPrice: 0, stockQuantity: 0, reorderLevel: 0, isService: false })
+    setFormData({ sku: "", name: "", imageUrl: "", category: "", unit: "pcs", sellingPrice: 0, costPrice: 0, stockQuantity: 0, reorderLevel: 0, isService: false })
     setFormErrors({})
     setFormError(null)
     setDialogOpen(true)
@@ -100,6 +101,7 @@ export default function ProductsPage() {
     setFormData({
       sku: product.sku,
       name: product.name,
+      imageUrl: product.image_url ?? "",
       category: product.category ?? "",
       unit: product.unit,
       sellingPrice: Number(product.selling_price),
@@ -130,6 +132,7 @@ export default function ProductsPage() {
       const payload = {
         sku: formData.sku.trim(),
         name: formData.name.trim(),
+        imageUrl: formData.imageUrl.trim() || undefined,
         category: formData.category.trim() || undefined,
         unit: formData.unit.trim() || "pcs",
         sellingPrice: formData.sellingPrice,
@@ -256,7 +259,7 @@ export default function ProductsPage() {
                     return (
                       <TableRow key={p.id}>
                         <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                        <TableCell className="font-medium">{p.name}</TableCell>
+                        <TableCell><div className="flex items-center gap-2 font-medium">{p.image_url ? <img src={p.image_url} alt="" className="size-9 rounded-md border object-cover" loading="lazy" /> : <span className="flex size-9 items-center justify-center rounded-md border bg-muted text-muted-foreground"><ImageIcon className="size-4" /></span>}<span>{p.name}</span></div></TableCell>
                         <TableCell className="hidden sm:table-cell text-muted-foreground">{p.category ?? "—"}</TableCell>
                         <TableCell className="text-right font-medium tabular-nums">{formatKES(Number(p.selling_price))}</TableCell>
                         <TableCell className="text-right tabular-nums hidden md:table-cell">
@@ -307,6 +310,12 @@ export default function ProductsPage() {
               <Label htmlFor="prod-name">Product Name *</Label>
               <Input id="prod-name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} aria-invalid={!!formErrors.name} />
               {formErrors.name && <span className="text-xs text-destructive">{formErrors.name}</span>}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="prod-image-url">Product Image URL</Label>
+              <Input id="prod-image-url" type="url" placeholder="https://example.com/product-image.jpg" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} />
+              {formData.imageUrl.trim() && <img src={formData.imageUrl} alt="Product preview" className="h-28 w-28 rounded-md border object-cover" onError={(e) => { e.currentTarget.style.display = "none" }} onLoad={(e) => { e.currentTarget.style.display = "block" }} />}
+              <p className="text-xs text-muted-foreground">Paste a direct image link. Image upload from your device requires storage setup.</p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
@@ -364,6 +373,7 @@ export default function ProductsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div><span className="text-muted-foreground">SKU:</span> <span className="font-mono">{viewingProduct.sku}</span></div>
                 <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{viewingProduct.name}</span></div>
+                {viewingProduct.image_url && <div className="col-span-2"><span className="text-muted-foreground">Product image:</span><img src={viewingProduct.image_url} alt={viewingProduct.name} className="mt-2 max-h-48 max-w-full rounded-md border object-contain" /></div>}
                 <div><span className="text-muted-foreground">Category:</span> {viewingProduct.category ?? "—"}</div>
                 <div><span className="text-muted-foreground">Unit:</span> {viewingProduct.unit}</div>
                 <div><span className="text-muted-foreground">Selling Price:</span> <span className="font-medium tabular-nums">{formatKES(Number(viewingProduct.selling_price))}</span></div>
