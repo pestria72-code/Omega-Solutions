@@ -67,6 +67,11 @@ export function SiteHeader() {
 
   const loadNotifications = React.useCallback(async () => {
     setNotificationsLoading(true)
+    // Clear previous-company data while reloading so a failed request cannot leave
+    // stale notifications visible after a company switch or token refresh.
+    setNotifications([])
+    setUnreadCount(0)
+    setNotificationsError("")
     try {
       const data = await api.get<{ items: { id: string; title: string; message: string; href?: string | null; read_at: string | null; created_at: string }[]; unreadCount: number }>("/notifications")
       setNotifications(data.items.map((n) => ({
@@ -76,6 +81,8 @@ export function SiteHeader() {
       setUnreadCount(data.unreadCount ?? 0)
       setNotificationsError("")
     } catch (error) {
+      setNotifications([])
+      setUnreadCount(0)
       setNotificationsError(error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Notifications could not be loaded.")
     } finally {
       setNotificationsLoading(false)
