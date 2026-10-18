@@ -2,6 +2,22 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 
+type SearchRow = Record<string, unknown> & {
+  title?: unknown;
+  subtitle?: unknown;
+};
+
+function relevance(row: SearchRow, term: string): number {
+  const normalized = term.toLocaleLowerCase();
+  const title = String(row.title ?? '').toLocaleLowerCase();
+  const subtitle = String(row.subtitle ?? '').toLocaleLowerCase();
+  if (title === normalized) return 0;
+  if (title.startsWith(normalized)) return 1;
+  if (title.includes(normalized)) return 2;
+  if (subtitle.includes(normalized)) return 3;
+  return 4;
+}
+
 @Injectable()
 export class SearchService {
   constructor(private readonly db: DatabaseService) {}
@@ -9,9 +25,9 @@ export class SearchService {
   async search(user: AuthenticatedUser, rawQuery: string) {
     const term = rawQuery.trim().slice(0, 100);
     if (!term || !user.companyId) return [];
-    const pattern = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
+    const pattern = `%${term.replace(/[\\\\%_]/g, '\\\\$&')}%`;
     const permissions = new Set(user.permissions ?? []);
-    const jobs: Promise<{ rows: Record<string, unknown>[] }>[] = [];
+    const jobs: Promise<{ rows: SearchRow[] }>[] = [];
     const add = (allowed: boolean, sql: string, params: unknown[]) => {
       if (allowed) jobs.push(this.db.query(sql, params as (string | number | boolean | Date | null)[]));
     };
@@ -40,6 +56,9 @@ export class SearchService {
          (first_name ILIKE $2 OR last_name ILIKE $2 OR employee_number ILIKE $2 OR work_email ILIKE $2)
        ORDER BY first_name, last_name LIMIT 5`, [user.companyId, pattern]);
     const results = await Promise.all(jobs);
-    return results.flatMap((result) => result.rows);
+    return results.flatMap((result) => result.rows)
+      .map((row, index) => ({ row, index, score: relevance(row, term) }))
+      .sort((a, b) => a.score - b.score || a.index - b.index)
+      .map(({ row }) => row);
   }
 }
