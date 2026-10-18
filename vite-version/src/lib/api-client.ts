@@ -90,8 +90,9 @@ export async function apiRequest<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(!isFormData ? { "Content-Type": "application/json" } : {}),
     ...(options.headers as Record<string, string>),
   };
   const token = getAccessToken();
@@ -183,4 +184,9 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     }),
   delete: <T>(path: string) => apiRequest<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest<T>(path, { method: "POST", body });
+  },
 };
