@@ -7,11 +7,12 @@ import { RbacModule } from '../rbac/rbac.module.js';
 import { AccountingModule } from '../accounting/accounting.module.js';
 import { PosController } from './pos.controller.js';
 import { PosService } from './pos.service.js';
+import { ProductImageStorageService } from '../products/product-image-storage.service.js';
 
 @Module({
   imports: [DatabaseModule, MembershipsModule, AuditModule, AuthModule, RbacModule, AccountingModule],
   controllers: [PosController],
-  providers: [PosService],
+  providers: [PosService, ProductImageStorageService],
   exports: [PosService],
 })
 export class PosModule {}
