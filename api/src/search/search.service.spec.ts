@@ -51,4 +51,17 @@ describe('SearchService', () => {
     expect(db.query.mock.calls[0][0]).toContain('i.company_id=$1');
     expect(db.query.mock.calls[0][1]?.[0]).toBe('company-a');
   });
+
+  it('ranks exact title matches before partial matches across permitted modules', async () => {
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 'customer-1', title: 'Acme Holdings', type: 'Customer', subtitle: 'hello@example.test' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'product-1', title: 'Acme', type: 'Product', subtitle: 'AC-01' }], rowCount: 1 });
+    const results = await service.search(user({ permissions: ['customers:read', 'products:read'] }), 'Acme');
+
+    expect(results.map(row => row.id)).toEqual(['product-1', 'customer-1']);
+    expect(db.query).toHaveBeenCalledTimes(2);
+    for (const call of db.query.mock.calls) {
+      expect(call[1]?.[0]).toBe('company-a');
+    }
+  });
 });
