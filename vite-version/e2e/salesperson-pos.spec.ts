@@ -39,8 +39,12 @@ test.describe("Omega salesperson POS", () => {
     test.skip(!productSearch, "Set E2E_CHECKOUT_PRODUCT to a known, in-stock product name in the isolated development company.");
 
     const target = new URL(process.env.E2E_BASE_URL ?? "http://127.0.0.1:4173");
+    const apiTarget = new URL(apiBase!);
     if (target.hostname !== "localhost" && target.hostname !== "127.0.0.1" && !target.hostname.includes("development")) {
       throw new Error("Refusing to create a sale outside localhost or a development preview URL.");
+    }
+    if (apiTarget.hostname === "omega-solutions-api.onrender.com") {
+      throw new Error("Refusing to create a sale against the known live Omega API. Use an isolated development API.");
     }
 
     await page.goto("/login");
