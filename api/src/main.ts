@@ -18,6 +18,7 @@ async function bootstrap() {
     configuredOrigins.length ? configuredOrigins : ['http://localhost:5173'],
   );
   const isTrustedVercelOrigin = (origin: string) =>
+    origin === 'https://omega-solutions-nine.vercel.app' ||
     /^https:\/\/omega-solutions-[a-z0-9-]+-pestria72-2760\.vercel\.app$/.test(origin);
 
   app.enableCors({
