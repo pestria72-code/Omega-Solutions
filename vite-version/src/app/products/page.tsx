@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Plus, Search, Pencil, Trash2, Eye, AlertCircle, Package, AlertTriangle, Image as ImageIcon } from "lucide-react"
+import { Plus, Search, Pencil, Trash2, Eye, AlertCircle, Package, AlertTriangle, Image as ImageIcon, X } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -33,7 +33,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog"
 import { Card, CardContent } from "@/components/ui/card"
-import { useProducts, createProduct, updateProduct, deleteProduct } from "@/hooks/use-products"
+import { useProducts, createProduct, updateProduct, deleteProduct, uploadProductImage, removeProductImage } from "@/hooks/use-products"
 import { formatKES } from "@/lib/format"
 import type { ProductRow } from "@/lib/api-types"
 
@@ -57,6 +57,8 @@ export default function ProductsPage() {
   const [submitting, setSubmitting] = React.useState(false)
   const [deleting, setDeleting] = React.useState(false)
   const [formError, setFormError] = React.useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = React.useState<File | null>(null)
+  const [imagePreview, setImagePreview] = React.useState<string | null>(null)
 
   const [formData, setFormData] = React.useState({
     sku: "",
@@ -71,6 +73,13 @@ export default function ProductsPage() {
     isService: false,
   })
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
+
+  React.useEffect(() => {
+    if (!selectedImage) { setImagePreview(null); return }
+    const url = URL.createObjectURL(selectedImage)
+    setImagePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [selectedImage])
 
   const categories = React.useMemo(() => {
     const set = new Set<string>()
@@ -90,6 +99,7 @@ export default function ProductsPage() {
 
   const openAddDialog = () => {
     setEditingProduct(null)
+    setSelectedImage(null)
     setFormData({ sku: "", name: "", imageUrl: "", category: "", unit: "pcs", sellingPrice: 0, costPrice: 0, stockQuantity: 0, reorderLevel: 0, isService: false })
     setFormErrors({})
     setFormError(null)
@@ -98,6 +108,7 @@ export default function ProductsPage() {
 
   const openEditDialog = (product: ProductRow) => {
     setEditingProduct(product)
+    setSelectedImage(null)
     setFormData({
       sku: product.sku,
       name: product.name,
@@ -132,7 +143,7 @@ export default function ProductsPage() {
       const payload = {
         sku: formData.sku.trim(),
         name: formData.name.trim(),
-        imageUrl: formData.imageUrl.trim() || undefined,
+        imageUrl: selectedImage ? undefined : (formData.imageUrl.trim() || undefined),
         category: formData.category.trim() || undefined,
         unit: formData.unit.trim() || "pcs",
         sellingPrice: formData.sellingPrice,
@@ -141,10 +152,17 @@ export default function ProductsPage() {
         reorderLevel: formData.reorderLevel,
         isService: formData.isService,
       }
-      if (editingProduct) {
-        await updateProduct(editingProduct.id, payload)
-      } else {
-        await createProduct(payload)
+      const savedProduct = editingProduct
+        ? await updateProduct(editingProduct.id, payload)
+        : await createProduct(payload)
+      if (selectedImage) {
+        if (!editingProduct) setEditingProduct(savedProduct)
+        try {
+          await uploadProductImage(savedProduct.id, selectedImage)
+          setSelectedImage(null)
+        } catch (imageErr) {
+          throw new Error(`Product details were saved, but the image upload failed: ${imageErr instanceof Error ? imageErr.message : "Please try the upload again."}`)
+        }
       }
       await refetch()
       setDialogOpen(false)
@@ -311,11 +329,39 @@ export default function ProductsPage() {
               <Input id="prod-name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} aria-invalid={!!formErrors.name} />
               {formErrors.name && <span className="text-xs text-destructive">{formErrors.name}</span>}
             </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="prod-image-url">Product Image URL</Label>
-              <Input id="prod-image-url" type="url" placeholder="https://example.com/product-image.jpg" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} />
-              {formData.imageUrl.trim() && <img src={formData.imageUrl} alt="Product preview" className="h-28 w-28 rounded-md border object-cover" onError={(e) => { e.currentTarget.style.display = "none" }} onLoad={(e) => { e.currentTarget.style.display = "block" }} />}
-              <p className="text-xs text-muted-foreground">Paste a direct image link. Image upload from your device requires storage setup.</p>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="prod-image-file">Product Photo</Label>
+              {(imagePreview || formData.imageUrl.trim()) && <img src={imagePreview || formData.imageUrl} alt="Product preview" className="h-28 w-28 rounded-md border object-cover" />}
+              <Input id="prod-image-file" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => {
+                const file = e.target.files?.[0] ?? null
+                if (file && file.size > 5 * 1024 * 1024) {
+                  setFormError("Choose an image smaller than 5 MB.")
+                  e.currentTarget.value = ""
+                  return
+                }
+                setFormError(null)
+                setSelectedImage(file)
+                if (file) setFormData((current) => ({ ...current, imageUrl: "" }))
+              }} aria-label="Choose product image from device" />
+              <p className="text-xs text-muted-foreground">Choose a JPEG, PNG, or WebP photo up to 5 MB. Uploaded photos are stored privately and shown securely in your company catalog.</p>
+              {(selectedImage || formData.imageUrl || editingProduct?.image_url) && <div className="flex flex-wrap gap-2">
+                {formData.imageUrl && !selectedImage && <Button type="button" variant="outline" size="sm" onClick={() => setFormData((current) => ({ ...current, imageUrl: "" }))}><X className="size-3.5" /> Clear image URL</Button>}
+                {selectedImage && <Button type="button" variant="outline" size="sm" onClick={() => setSelectedImage(null)}><X className="size-3.5" /> Cancel selected photo</Button>}
+                {!selectedImage && editingProduct?.image_url && <Button type="button" variant="outline" size="sm" disabled={submitting} onClick={async () => {
+                  setSubmitting(true)
+                  setFormError(null)
+                  try {
+                    await removeProductImage(editingProduct.id)
+                    setFormData((current) => ({ ...current, imageUrl: "" }))
+                    await refetch()
+                    setEditingProduct((current) => current ? { ...current, image_url: null } : current)
+                  } catch (err) {
+                    setFormError(err instanceof Error ? err.message : "Could not remove product image")
+                  } finally {
+                    setSubmitting(false)
+                  }
+                }}><X className="size-3.5" /> Remove saved photo</Button>}
+              </div>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
