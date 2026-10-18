@@ -3,6 +3,7 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AccountingService } from '../accounting/accounting.service.js';
+import { ProductImageStorageService } from '../products/product-image-storage.service.js';
 import { PosService, buildCogsJournalLines } from './pos.service.js';
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -30,6 +31,7 @@ describe('PosService', () => {
         { provide: MembershipsService, useValue: memberships },
         { provide: AuditService, useValue: audit },
         { provide: AccountingService, useValue: accounting },
+        { provide: ProductImageStorageService, useValue: { signedReadUrl: vi.fn((key: string) => 'signed:' + key) } },
       ],
     }).compile();
     service = module.get(PosService);
