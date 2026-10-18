@@ -5,7 +5,7 @@ const password = process.env.E2E_SALESPERSON_PASSWORD;
 const allowMutations = process.env.E2E_ALLOW_MUTATIONS === "true";
 const productSearch = process.env.E2E_CHECKOUT_PRODUCT;
 
-test.describe("Omega salesperson POS", () => {
+test.describe("Omega salesperson POS", () => {\n  test("renders the sign-in form", async ({ page }) => {\n    await page.goto("/login");\n    await expect(page.getByRole("heading", { name: "Sign in to your account" })).toBeVisible();\n    await expect(page.getByLabel("Email")).toBeVisible();\n    await expect(page.getByLabel("Password")).toBeVisible();\n  });\n
   test.skip(!email || !password, "Set E2E_SALESPERSON_EMAIL and E2E_SALESPERSON_PASSWORD to run authenticated tests.");
 
   test("signs in and confirms salesperson assignment and POS access", async ({ page }) => {
