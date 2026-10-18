@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import {
   AlertCircle, ArrowDownRight, ArrowUpRight, Banknote, Boxes, FilePlus2,
-  Loader2, Package, Receipt, RefreshCw, Users,
+  Loader2, Package, Receipt, RefreshCw, Store, Users,
 } from "lucide-react";
 import { BaseLayout } from "@/components/layouts/base-layout";
 import { PageHeader } from "@/components/page-header";
