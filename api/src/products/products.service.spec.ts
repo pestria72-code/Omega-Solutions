@@ -15,6 +15,7 @@ describe('ProductsService initial stock', () => {
   let memberships: { getMembership: Mock; getMembershipForCompany: Mock };
   let audit: { log: Mock };
   let accounting: { ensureDefaults: Mock };
+  let imageStorage: { signedReadUrl: Mock; newKey: Mock; upload: Mock; remove: Mock };
   let client: { query: Mock };
 
   const user = { userId: 'user-1' } as any;
@@ -68,6 +69,12 @@ describe('ProductsService initial stock', () => {
     };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
     accounting = { ensureDefaults: vi.fn().mockResolvedValue(undefined) };
+    imageStorage = {
+      signedReadUrl: vi.fn((key: string) => 'signed:' + key),
+      newKey: vi.fn(() => 'companies/company-1/products/product-1/new.jpg'),
+      upload: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -76,7 +83,7 @@ describe('ProductsService initial stock', () => {
         { provide: MembershipsService, useValue: memberships },
         { provide: AuditService, useValue: audit },
         { provide: AccountingService, useValue: accounting },
-        { provide: ProductImageStorageService, useValue: { signedReadUrl: vi.fn((key: string) => `signed:${key}`), newKey: vi.fn(), upload: vi.fn(), remove: vi.fn() } },
+        { provide: ProductImageStorageService, useValue: imageStorage },
       ],
     }).compile();
     service = module.get(ProductsService);
@@ -128,5 +135,40 @@ describe('ProductsService initial stock', () => {
     expect(client.query.mock.calls.some(([sql]) => String(sql).includes('inventory_stock_levels'))).toBe(false);
     expect(client.query.mock.calls.some(([sql]) => String(sql).includes('inventory_stock_movements'))).toBe(false);
     expect(accounting.ensureDefaults).not.toHaveBeenCalled();
+  });
+  it('rejects unsupported image content before writing to storage', async () => {
+    db.query.mockResolvedValue({ rows: [{ id: 'product-1', company_id: 'company-1', image_url: null, image_storage_key: null }], rowCount: 1 });
+    await expect(service.uploadImage(user, 'product-1', { buffer: Buffer.from('<svg></svg>'), mimetype: 'image/svg+xml', size: 11 })).rejects.toThrow(BadRequestException);
+    expect(imageStorage.upload).not.toHaveBeenCalled();
+  });
+
+  it('blocks image upload when the product is outside the selected company', async () => {
+    memberships.getMembershipForCompany.mockResolvedValue({ companyId: 'company-2', branchId: null, role: 'owner' });
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    await expect(service.uploadImage({ ...user, companyId: 'company-2' }, 'foreign-product', { buffer: Buffer.from([0xff, 0xd8, 0xff]), mimetype: 'image/jpeg', size: 3 })).rejects.toThrow('Product not found');
+    expect(imageStorage.upload).not.toHaveBeenCalled();
+  });
+
+  it('stores a replacement image and returns a short-lived signed URL', async () => {
+    const existing = { id: 'product-1', company_id: 'company-1', image_url: null, image_storage_key: 'old-key', name: 'Photo product' };
+    const updated = { ...existing, image_storage_key: 'companies/company-1/products/product-1/new.jpg', image_url: null };
+    db.query.mockImplementation(async (sql: string) => sql.includes('SELECT') ? { rows: [existing], rowCount: 1 } : { rows: [updated], rowCount: 1 });
+    const result = await service.uploadImage(user, 'product-1', { buffer: Buffer.from([0xff, 0xd8, 0xff]), mimetype: 'image/jpeg', size: 3 });
+    expect(imageStorage.upload).toHaveBeenCalledWith(updated.image_storage_key, expect.any(Buffer), 'image/jpeg');
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('WHERE id = $2 AND company_id = $3'), [updated.image_storage_key, 'product-1', 'company-1']);
+    expect(result.image_url).toBe('signed:' + updated.image_storage_key);
+    expect('image_storage_key' in result).toBe(false);
+    expect(imageStorage.remove).toHaveBeenCalledWith('old-key');
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'product.image.upload', entityId: 'product-1' }));
+  });
+
+  it('clears the image reference and removes the saved object', async () => {
+    const existing = { id: 'product-1', company_id: 'company-1', image_url: null, image_storage_key: 'old-key', name: 'Photo product' };
+    db.query.mockImplementation(async (sql: string) => sql.includes('SELECT') ? { rows: [existing], rowCount: 1 } : { rows: [], rowCount: 1 });
+    const result = await service.removeImage(user, 'product-1');
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('SET image_storage_key = NULL, image_url = NULL'), ['product-1', 'company-1']);
+    expect(imageStorage.remove).toHaveBeenCalledWith('old-key');
+    expect(result.image_url).toBeNull();
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'product.image.remove', entityId: 'product-1' }));
   });
 });
