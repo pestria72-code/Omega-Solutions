@@ -24,7 +24,11 @@ export class PosController {
 
   @Get('salesperson-assignment/me')
   @RequirePermissions('sales:read')
-  mySalespersonAssignment(@Req() req: { user: AuthenticatedUser }) { return this.pos.mySalespersonAssignment(req.user); }
+  async mySalespersonAssignment(@Req() req: { user: AuthenticatedUser }, @Res() response: Response) {
+    // Nest sends an empty body for null handler results. The salesperson dashboard expects JSON null when no assignment exists.
+    const assignment = await this.pos.mySalespersonAssignment(req.user);
+    return response.status(200).json(assignment);
+  }
   @Get('salesperson-assignments')
   @RequirePermissions('sales:stock-assign')
   listSalespersonAssignments(@Req() req: { user: AuthenticatedUser }) { return this.pos.listSalespersonAssignments(req.user); }
