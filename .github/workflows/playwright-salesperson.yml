@@ -24,7 +24,7 @@ jobs:
       E2E_SALESPERSON_EMAIL: ${{ secrets.E2E_SALESPERSON_EMAIL }}
       E2E_SALESPERSON_PASSWORD: ${{ secrets.E2E_SALESPERSON_PASSWORD }}
       E2E_API_BASE_URL: ${{ secrets.E2E_API_BASE_URL }}
-      E2E_NEON_AUTH_URL: ${{ vars.E2E_NEON_AUTH_URL }}
+      E2E_NEON_AUTH_URL: ${{ vars.E2E_NEON_AUTH_URL || 'https://ep-fragrant-bird-b4hie5sp.neonauth.c-6.us-east-2.aws.neon.tech/neondb/auth' }}
       E2E_CHECKOUT_PRODUCT: ${{ vars.E2E_CHECKOUT_PRODUCT }}
       E2E_ALLOW_MUTATIONS: "false"
     steps:
