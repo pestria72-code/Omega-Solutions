@@ -61,3 +61,11 @@ export function updateProduct(productId: string, data: {
 export function deleteProduct(productId: string) {
   return api.delete<{ success: boolean }>(`/products/${productId}`)
 }
+
+export function uploadProductImage(productId: string, file: File) {
+  return api.upload<ProductRow>(`/products/${productId}/image`, file)
+}
+
+export function removeProductImage(productId: string) {
+  return api.delete<ProductRow>(`/products/${productId}/image`)
+}
