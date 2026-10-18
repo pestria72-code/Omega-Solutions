@@ -13,7 +13,7 @@ import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js
 import { AccountingService } from '../accounting/accounting.service.js';
 
 const PRODUCT_COLUMNS = `
-  id, company_id, sku, name, description, category, unit,
+  id, company_id, sku, name, description, image_url, category, unit,
   selling_price, cost_price, stock_quantity, reorder_level,
   is_service, is_active, created_at, updated_at
 `;
@@ -86,16 +86,17 @@ export class ProductsService {
 
       const result = await client.query<ProductRow>(
         `INSERT INTO products
-          (company_id, sku, name, description, category, unit,
+          (company_id, sku, name, description, image_url, category, unit,
            selling_price, cost_price, stock_quantity, reorder_level,
            is_service, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING ${PRODUCT_COLUMNS}`,
         [
           membership.companyId,
           dto.sku,
           dto.name,
           dto.description ?? null,
+          dto.imageUrl ?? null,
           dto.category ?? null,
           dto.unit ?? 'pcs',
           dto.sellingPrice,
@@ -244,6 +245,7 @@ export class ProductsService {
       sku: 'sku',
       name: 'name',
       description: 'description',
+      imageUrl: 'image_url',
       category: 'category',
       unit: 'unit',
       sellingPrice: 'selling_price',
