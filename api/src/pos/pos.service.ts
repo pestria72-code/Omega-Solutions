@@ -231,7 +231,9 @@ export class PosService {
         const p=productResult.rows[0];
         if(!p||!p.is_active) throw new BadRequestException('Every checkout item must be an active product from this company.');
         if(!Number.isFinite(item.quantity)||item.quantity<=0||Math.round(item.quantity*1000)!==item.quantity*1000) throw new BadRequestException('Product quantities must be positive with at most three decimal places.');
-        const unitPriceCents=Math.round(Number(item.unitPrice??p.selling_price)*100);
+        const requestedUnitPrice=Number(item.unitPrice??p.selling_price);
+        if(!user.permissions.includes('sales:team-read')&&requestedUnitPrice<Number(p.selling_price)) throw new BadRequestException('Salespeople cannot sell below the standard selling price.');
+        const unitPriceCents=Math.round(requestedUnitPrice*100);
         const qtyMilli=Math.round(item.quantity*1000);
         const lineSubtotal=Math.round(unitPriceCents*qtyMilli/1000);
         const taxRate=item.taxRate??0;
