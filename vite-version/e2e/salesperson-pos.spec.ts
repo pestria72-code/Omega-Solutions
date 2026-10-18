@@ -1,7 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 const email = process.env.E2E_SALESPERSON_EMAIL;
-const password = process.env.E2E_SALESPERSON_PASSWORD;\nconst apiBase = process.env.E2E_API_BASE_URL;
+const password = process.env.E2E_SALESPERSON_PASSWORD;
+const apiBase = process.env.E2E_API_BASE_URL;
 const allowMutations = process.env.E2E_ALLOW_MUTATIONS === "true";
 const productSearch = process.env.E2E_CHECKOUT_PRODUCT;
 
