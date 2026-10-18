@@ -16,6 +16,7 @@ import type { CustomerRow, InvoiceApiRow, ProductRow } from "@/lib/api-types";
 
 type SalesData = { invoices: InvoiceApiRow[]; customers: CustomerRow[]; products: ProductRow[] };
 type TeamMember = { user_id: string; full_name: string; role: string; invoice_count: number; sales_total: number | string; collected_total: number | string; outstanding_total: number | string };
+type SalespersonAssignment = { warehouse_id: string; warehouse_name: string; warehouse_code: string; salesperson_name: string } | null;
 function message(error: unknown) {
   return error && typeof error === "object" && "message" in error && typeof error.message === "string"
     ? error.message : "Unable to load sales data. Please try again.";
@@ -39,17 +40,20 @@ export default function SalesDashboardPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [team, setTeam] = React.useState<TeamMember[]>([]);
+  const [assignment, setAssignment] = React.useState<SalespersonAssignment>(null);
   const load = React.useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [invoices, customers, products, teamSummary] = await Promise.all([
+      const [invoices, customers, products, teamSummary, salespersonAssignment] = await Promise.all([
         api.get<InvoiceApiRow[]>("/invoices"),
         api.get<CustomerRow[]>("/customers"),
         api.get<ProductRow[]>("/products"),
         canViewTeam ? api.get<TeamMember[]>("/invoices/team-summary") : Promise.resolve([] as TeamMember[]),
+        canViewTeam ? Promise.resolve(null) : api.get<SalespersonAssignment>("/pos/salesperson-assignment/me"),
       ]);
       setData({ invoices, customers, products });
       setTeam(teamSummary);
+      setAssignment(salespersonAssignment);
     } catch (err) { setError(message(err)); }
     finally { setLoading(false); }
   }, [canViewTeam]);
@@ -68,6 +72,15 @@ export default function SalesDashboardPage() {
       <PageHeader title="Sales Dashboard" description="Work with live company customers, invoices, collections and stock alerts." action={<div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />Refresh</Button><Link to="/invoices" className={buttonVariants()}><FilePlus2 className="mr-2 size-4" />Create invoice</Link>{canViewTeam && <Link to="/salesperson-stock" className={buttonVariants({variant:"outline"})}><Boxes className="mr-2 size-4"/>Salesperson stock</Link>}</div>} />
       {error && <div role="alert" className="flex flex-col gap-3 rounded-lg border border-destructive/30 p-4 text-sm text-destructive sm:flex-row sm:items-center"><AlertCircle className="size-4 shrink-0" /><span className="flex-1">{error}</span><Button variant="outline" size="sm" onClick={() => void load()}>Retry</Button></div>}
       {loading ? <div className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading live sales data…</div> : !error && <>
+        {!canViewTeam && <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Store className="size-5" />Your selling workspace</CardTitle><CardDescription>Sell from the stock location assigned to you. Your assigned warehouse is enforced by the API.</CardDescription></CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              {assignment ? <><p className="font-medium">{assignment.warehouse_name}</p><p className="text-sm text-muted-foreground">Warehouse code: {assignment.warehouse_code}</p></> : <p className="text-sm text-muted-foreground">No warehouse has been assigned to your account yet. Ask your manager to assign your stock before starting a sale.</p>}
+            </div>
+            <Link to="/pos" className={buttonVariants({ className: "shrink-0" })}><Store className="mr-2 size-4" />Open point of sale</Link>
+          </CardContent>
+        </Card>}
         <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric title="Invoices" value={formatNumber(data.invoices.filter((invoice) => invoice.status !== "cancelled").length)} detail="All invoice statuses" icon={Receipt} href="/invoices" />
           <Metric title="Outstanding" value={formatKES(outstanding)} detail="Unpaid balance on sent invoices" icon={Banknote} href="/payments" />
