@@ -1,5 +1,10 @@
 import { neonTestLogin } from "./neon-test-auth.mjs";
-const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api.onrender.com/api").replace(/\/$/, "");
+const configuredBase = process.env.OMEGA_API_URL;
+if (!configuredBase) throw new Error("OMEGA_API_URL is required; refusing to default to any shared or production API.");
+const parsedBase = new URL(configuredBase);
+if (parsedBase.hostname === "omega-solutions-api.onrender.com") throw new Error("Production API is forbidden for this development smoke test.");
+if (!parsedBase.pathname.replace(/\/$/, "").endsWith("/api")) throw new Error("OMEGA_API_URL must end in /api.");
+const base = configuredBase.replace(/\/$/, "");
 const stamp = Date.now();
 const checks = [];
 async function req(method,path,body,token,expected=[200,201]) {
