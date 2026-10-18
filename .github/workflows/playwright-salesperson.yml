@@ -36,27 +36,31 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: vite-version/package-lock.json
-      - name: Validate development-only E2E API target
+      - name: Validate E2E API target and mutation safety
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "${E2E_API_BASE_URL}" ]]; then
-            echo "::error::E2E_API_BASE_URL secret is required for the salesperson E2E workflow."
+            echo "::error::E2E_API_BASE_URL secret is required."
             exit 1
           fi
           if [[ "${E2E_API_BASE_URL}" != */api ]]; then
             echo "::error::E2E_API_BASE_URL must end in /api."
             exit 1
           fi
-          if [[ "${E2E_API_BASE_URL,,}" == *"omega-solutions-api.onrender.com"* ]]; then
-            echo "::error::Refusing to run E2E against the live Omega API."
-            exit 1
-          fi
           if [[ "${E2E_API_BASE_URL}" != https://* ]]; then
             echo "::error::E2E_API_BASE_URL must use HTTPS."
             exit 1
           fi
-          echo "E2E API target passed the basic safety checks (URL not printed)."
+          if [[ "${E2E_API_BASE_URL,,}" == *"omega-solutions-api.onrender.com"* && "${E2E_ALLOW_MUTATIONS}" != "false" ]]; then
+            echo "::error::Refusing to run mutating E2E tests against the live Omega API."
+            exit 1
+          fi
+          if [[ "${E2E_ALLOW_MUTATIONS}" != "false" ]]; then
+            echo "::error::Salesperson E2E checkout mutations must remain disabled until a verified development API is configured."
+            exit 1
+          fi
+          echo "API URL format validated; checkout mutations are disabled."
       - name: Install frontend dependencies
         run: npm ci
       - name: Install Playwright test runner
