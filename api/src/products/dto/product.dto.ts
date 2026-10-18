@@ -27,6 +27,16 @@ export class CreateProductDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(2048)
+  imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2048)
+  imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
   @MaxLength(100)
   category?: string;
 
