@@ -5,6 +5,7 @@ import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AccountingService } from '../accounting/accounting.service.js';
 import { ProductsService } from './products.service.js';
+import { ProductImageStorageService } from './product-image-storage.service.js';
 
 type Mock = ReturnType<typeof vi.fn>;
 
@@ -75,6 +76,7 @@ describe('ProductsService initial stock', () => {
         { provide: MembershipsService, useValue: memberships },
         { provide: AuditService, useValue: audit },
         { provide: AccountingService, useValue: accounting },
+        { provide: ProductImageStorageService, useValue: { signedReadUrl: vi.fn((key: string) => `signed:${key}`), newKey: vi.fn(), upload: vi.fn(), remove: vi.fn() } },
       ],
     }).compile();
     service = module.get(ProductsService);
