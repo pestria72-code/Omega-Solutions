@@ -3,11 +3,6 @@ run-name: Salesperson E2E on ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
-  push:
-    branches: [development]
-    paths:
-      - "vite-version/**"
-      - ".github/workflows/playwright-salesperson.yml"
 
 permissions:
   contents: read
