@@ -29,7 +29,9 @@ export class ProductImageStorageService {
       host: url.host, 'content-type': contentType, 'x-amz-content-sha256': payloadHash, 'x-amz-date': now,
     };
     headers.authorization = this.authorization('PUT', url.pathname, '', headers, payloadHash, cfg, date, now);
-    const response = await fetch(url, { method: 'PUT', headers, body: bytes });
+    const requestHeaders = { ...headers };
+    delete requestHeaders.host;
+    const response = await fetch(url, { method: 'PUT', headers: requestHeaders, body: new Uint8Array(bytes) });
     if (!response.ok) throw new ServiceUnavailableException(`Image storage upload failed (HTTP ${response.status}).`);
   }
 
@@ -41,7 +43,9 @@ export class ProductImageStorageService {
     const payloadHash = createHash('sha256').update('').digest('hex');
     const headers: Record<string, string> = { host: url.host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': now };
     headers.authorization = this.authorization('DELETE', url.pathname, '', headers, payloadHash, cfg, date, now);
-    const response = await fetch(url, { method: 'DELETE', headers });
+    const requestHeaders = { ...headers };
+    delete requestHeaders.host;
+    const response = await fetch(url, { method: 'DELETE', headers: requestHeaders });
     if (!response.ok && response.status !== 404) throw new ServiceUnavailableException(`Image storage removal failed (HTTP ${response.status}).`);
   }
 
