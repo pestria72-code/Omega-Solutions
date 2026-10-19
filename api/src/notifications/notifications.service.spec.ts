@@ -67,7 +67,7 @@ describe('NotificationsService', () => {
       invoiceRemindersEmail: true, invoiceRemindersBrowser: false, invoiceRemindersApp: true,
       promotionalOffersEmail: false, promotionalOffersBrowser: true, promotionalOffersApp: false,
       systemMaintenanceEmail: true, systemMaintenanceBrowser: true, systemMaintenanceApp: false,
-      notificationTiming: 'online',
+      notificationTiming: 'never',
     };
     db.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
     expect(await service.savePreferences(user(), preferences)).toEqual({ success: true, preferences });
