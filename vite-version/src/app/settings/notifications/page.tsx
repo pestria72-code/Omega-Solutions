@@ -147,6 +147,22 @@ export default function NotificationSettings() {
     }
   }
 
+  async function requestBrowserPermission() {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setStatusError(true)
+      setStatusMessage("Browser notifications are not supported in this browser.")
+      return
+    }
+    try {
+      const permission = await window.Notification.requestPermission()
+      setStatusError(permission !== "granted")
+      setStatusMessage(permission === "granted" ? "Browser notification permission granted." : permission === "denied" ? "Browser notifications are blocked in browser settings." : "Browser notification permission was not granted.")
+    } catch {
+      setStatusError(true)
+      setStatusMessage("Could not request browser notification permission.")
+    }
+  }
+
   function cancelChanges() {
     if (savedValues) form.reset(savedValues)
     else form.reset()
@@ -477,7 +493,7 @@ export default function NotificationSettings() {
               <CardTitle>Notification Preferences</CardTitle>
               <CardDescription>
                 We need permission from your browser to show notifications.{" "}
-                <Button variant="link" className="p-0 h-auto text-primary">
+                <Button type="button" variant="link" className="p-0 h-auto text-primary" onClick={requestBrowserPermission}>
                   Request Permission
                 </Button>
               </CardDescription>
