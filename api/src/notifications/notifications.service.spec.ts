@@ -45,4 +45,48 @@ describe('NotificationsService', () => {
     expect(await service.markAllRead(user())).toEqual({ updated: 2 });
     expect(db.query.mock.calls[0][1]).toEqual(['company-a', 'user-a']);
   });
+  it('loads saved preferences scoped to the active company and user', async () => {
+    const preferences = { emailSecurity: true };
+    db.query.mockResolvedValueOnce({ rows: [{ preferences }], rowCount: 1 });
+    expect(await service.getPreferences(user())).toEqual({ preferences });
+    expect(db.query.mock.calls[0][1]).toEqual(['company-a', 'user-a']);
+  });
+
+  it('does not read preferences without an active company', async () => {
+    expect(await service.getPreferences(user('user-a', null))).toEqual({ preferences: null });
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('saves the complete preference set with company and user isolation', async () => {
+    const preferences = {
+      emailSecurity: true, emailUpdates: true, emailMarketing: false,
+      pushMessages: true, pushMentions: true, pushTasks: false,
+      emailFrequency: 'instant', quietHoursStart: '22:00', quietHoursEnd: '06:00',
+      channelEmail: true, channelPush: true, channelSms: false,
+      orderUpdatesEmail: true, orderUpdatesBrowser: true, orderUpdatesApp: true,
+      invoiceRemindersEmail: true, invoiceRemindersBrowser: false, invoiceRemindersApp: true,
+      promotionalOffersEmail: false, promotionalOffersBrowser: true, promotionalOffersApp: false,
+      systemMaintenanceEmail: true, systemMaintenanceBrowser: true, systemMaintenanceApp: false,
+      notificationTiming: 'online',
+    };
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    expect(await service.savePreferences(user(), preferences)).toEqual({ success: true, preferences });
+    expect(db.query.mock.calls[0][1]).toEqual(['company-a', 'user-a', JSON.stringify(preferences)]);
+    expect(db.query.mock.calls[0][0]).toContain('ON CONFLICT (company_id, user_id)');
+  });
+
+  it('rejects incomplete preferences without writing to the database', async () => {
+    expect(await service.savePreferences(user(), { emailSecurity: true })).toEqual({
+      success: false, message: 'Some notification preferences are missing.',
+    });
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid preference values without writing to the database', async () => {
+    expect(await service.savePreferences(user(), { emailSecurity: 'yes' })).toEqual({
+      success: false, message: 'Invalid value for emailSecurity.',
+    });
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
 });
