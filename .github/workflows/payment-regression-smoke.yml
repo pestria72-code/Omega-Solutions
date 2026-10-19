@@ -45,13 +45,15 @@ jobs:
           exit "$missing"
       - name: Require an explicitly configured development-only API URL
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          # API URLs are configuration, so accept either an Actions variable or secret.
+          # Prefer the variable when both are present; never silently fall back to production.
+          OMEGA_API_URL: ${{ vars.OMEGA_DEVELOPMENT_API_URL || secrets.OMEGA_DEVELOPMENT_API_URL }}
         run: |
-          node --input-type=module -e 'const value=process.env.OMEGA_API_URL; if (!value) throw new Error("Set OMEGA_DEVELOPMENT_API_URL to the verified development-only API URL ending in /api; refusing to run without it."); const url=new URL(value); if (url.hostname === "omega-solutions-api.onrender.com") throw new Error("Production API URL is forbidden in development smoke tests."); if (!url.pathname.endsWith("/api") && !url.pathname.endsWith("/api/")) throw new Error("OMEGA_DEVELOPMENT_API_URL must end in /api."); console.log("Development API target configured:", url.origin + url.pathname);'
+          node --input-type=module -e 'const value=process.env.OMEGA_API_URL; if (!value) throw new Error("Set OMEGA_DEVELOPMENT_API_URL as a GitHub Actions variable or secret to the verified development-only API URL ending in /api; refusing to run without it."); const url=new URL(value); if (url.hostname === "omega-solutions-api.onrender.com") throw new Error("Production API URL is forbidden in development smoke tests."); if (!url.pathname.endsWith("/api") && !url.pathname.endsWith("/api/")) throw new Error("OMEGA_DEVELOPMENT_API_URL must end in /api."); console.log("Development API target configured:", url.origin + url.pathname);'
 
       - name: Run authenticated payment regression against development API
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          OMEGA_API_URL: ${{ vars.OMEGA_DEVELOPMENT_API_URL || secrets.OMEGA_DEVELOPMENT_API_URL }}
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
