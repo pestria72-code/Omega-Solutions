@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Bell, Check } from "lucide-react"
-import { useLocation } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -60,13 +60,16 @@ function Breadcrumb() {
 }
 
 export function SiteHeader() {
+  const navigate = useNavigate()
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [notifications, setNotifications] = React.useState<{ id: string; title: string; message: string; time: string; read: boolean; href?: string | null }[]>([])
   const [notificationsLoading, setNotificationsLoading] = React.useState(false)
   const [notificationsError, setNotificationsError] = React.useState("")
   const [unreadCount, setUnreadCount] = React.useState(0)
 
+  const loadRequestId = React.useRef(0)
   const loadNotifications = React.useCallback(async () => {
+    const requestId = ++loadRequestId.current
     setNotificationsLoading(true)
     // Clear previous-company data while reloading so a failed request cannot leave
     // stale notifications visible after a company switch or token refresh.
@@ -75,6 +78,7 @@ export function SiteHeader() {
     setNotificationsError("")
     try {
       const data = await api.get<{ items: { id: string; title: string; message: string; href?: string | null; read_at: string | null; created_at: string }[]; unreadCount: number }>("/notifications")
+      if (requestId !== loadRequestId.current) return
       setNotifications(data.items.map((n) => ({
         id: n.id, title: n.title, message: n.message,
         time: new Date(n.created_at).toLocaleString(), read: Boolean(n.read_at), href: n.href,
@@ -82,11 +86,12 @@ export function SiteHeader() {
       setUnreadCount(data.unreadCount ?? 0)
       setNotificationsError("")
     } catch (error) {
+      if (requestId !== loadRequestId.current) return
       setNotifications([])
       setUnreadCount(0)
       setNotificationsError(error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Notifications could not be loaded.")
     } finally {
-      setNotificationsLoading(false)
+      if (requestId === loadRequestId.current) setNotificationsLoading(false)
     }
   }, [])
 
@@ -103,15 +108,19 @@ export function SiteHeader() {
     }
   }
 
-  const markRead = async (id: string) => {
+  const markRead = async (id: string): Promise<boolean> => {
     const notification = notifications.find((n) => n.id === id)
-    if (!notification || notification.read) return
+    if (!notification) return false
+    if (notification.read) return true
     try {
       await api.patch(`/notifications/${id}/read`)
       setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
       setUnreadCount((count) => Math.max(0, count - 1))
+      setNotificationsError("")
+      return true
     } catch (error) {
       setNotificationsError(error instanceof Error ? error.message : "Could not mark notification as read.")
+      return false
     }
   }
 
@@ -185,7 +194,7 @@ export function SiteHeader() {
                   >
                     <div className="flex w-full items-center justify-between gap-2">
                       {n.href && /^\/(?!\/)/.test(n.href) ? (
-                        <a href={n.href} className="text-sm font-medium hover:underline" onClick={() => void markRead(n.id)}>{n.title}</a>
+                        <a href={n.href} className="text-sm font-medium hover:underline" onClick={async (event) => { event.preventDefault(); if (await markRead(n.id)) navigate(n.href!) }}>{n.title}</a>
                       ) : (
                         <span className="text-sm font-medium">{n.title}</span>
                       )}
