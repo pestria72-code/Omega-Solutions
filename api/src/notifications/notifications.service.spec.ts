@@ -89,4 +89,14 @@ describe('NotificationsService', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
+  it('rejects unsupported string options and unknown preference keys', async () => {
+    expect(await service.savePreferences(user(), { emailFrequency: 'sometimes' })).toEqual({
+      success: false, message: 'Invalid value for emailFrequency.',
+    });
+    expect(await service.savePreferences(user(), { unexpectedPreference: true })).toEqual({
+      success: false, message: 'Unknown notification preference: unexpectedPreference.',
+    });
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
 });
