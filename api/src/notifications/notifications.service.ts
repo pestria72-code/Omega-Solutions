@@ -6,14 +6,25 @@ import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js
 export class NotificationsService {
   constructor(private readonly db: DatabaseService) {}
 
-  private readonly preferenceKeys = new Set([
+  private readonly booleanPreferenceKeys = new Set([
     'emailSecurity', 'emailUpdates', 'emailMarketing', 'pushMessages', 'pushMentions',
-    'pushTasks', 'emailFrequency', 'quietHoursStart', 'quietHoursEnd', 'channelEmail',
-    'channelPush', 'channelSms', 'orderUpdatesEmail', 'orderUpdatesBrowser',
-    'orderUpdatesApp', 'invoiceRemindersEmail', 'invoiceRemindersBrowser',
-    'invoiceRemindersApp', 'promotionalOffersEmail', 'promotionalOffersBrowser',
-    'promotionalOffersApp', 'systemMaintenanceEmail', 'systemMaintenanceBrowser',
-    'systemMaintenanceApp', 'notificationTiming',
+    'pushTasks', 'channelEmail', 'channelPush', 'channelSms', 'orderUpdatesEmail',
+    'orderUpdatesBrowser', 'orderUpdatesApp', 'invoiceRemindersEmail',
+    'invoiceRemindersBrowser', 'invoiceRemindersApp', 'promotionalOffersEmail',
+    'promotionalOffersBrowser', 'promotionalOffersApp', 'systemMaintenanceEmail',
+    'systemMaintenanceBrowser', 'systemMaintenanceApp',
+  ]);
+
+  private readonly stringPreferenceValues: Record<string, Set<string>> = {
+    emailFrequency: new Set(['instant', 'hourly', 'daily', 'weekly', 'never']),
+    quietHoursStart: new Set(['22:00', '23:00', '00:00', '06:00', '07:00', '08:00']),
+    quietHoursEnd: new Set(['22:00', '23:00', '00:00', '06:00', '07:00', '08:00']),
+    notificationTiming: new Set(['online', 'always']),
+  };
+
+  private readonly preferenceKeys = new Set([
+    ...this.booleanPreferenceKeys,
+    ...Object.keys(this.stringPreferenceValues),
   ]);
 
   async getPreferences(user: AuthenticatedUser) {
@@ -33,14 +44,20 @@ export class NotificationsService {
     }
     const preferences: Record<string, boolean | string> = {};
     for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-      if (!this.preferenceKeys.has(key)) continue;
-      if (typeof value !== 'boolean' && typeof value !== 'string') {
-        return { success: false, message: `Invalid value for ${key}.` };
+      if (!this.preferenceKeys.has(key)) {
+        return { success: false, message: `Unknown notification preference: ${key}.` };
       }
-      if (typeof value === 'string' && value.length > 40) {
-        return { success: false, message: `Invalid value for ${key}.` };
+      if (this.booleanPreferenceKeys.has(key)) {
+        if (typeof value !== 'boolean') {
+          return { success: false, message: `Invalid value for ${key}.` };
+        }
+      } else {
+        const allowedValues = this.stringPreferenceValues[key];
+        if (typeof value !== 'string' || !allowedValues?.has(value)) {
+          return { success: false, message: `Invalid value for ${key}.` };
+        }
       }
-      preferences[key] = value;
+      preferences[key] = value as boolean | string;
     }
     if (Object.keys(preferences).length !== this.preferenceKeys.size) {
       return { success: false, message: 'Some notification preferences are missing.' };
