@@ -2,6 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
+import { useEffect, useState } from "react"
+import { api } from "@/lib/api-client"
 import { z } from "zod"
 import { BaseLayout } from "@/components/layouts/base-layout"
 import {
@@ -72,6 +74,11 @@ const notificationsFormSchema = z.object({
 type NotificationsFormValues = z.infer<typeof notificationsFormSchema>
 
 export default function NotificationSettings() {
+  const [savedValues, setSavedValues] = useState<NotificationsFormValues | null>(null)
+  const [loadingPreferences, setLoadingPreferences] = useState(true)
+  const [savingPreferences, setSavingPreferences] = useState(false)
+  const [statusMessage, setStatusMessage] = useState("")
+  const [statusError, setStatusError] = useState(false)
   const form = useForm<NotificationsFormValues>({
     resolver: zodResolver(notificationsFormSchema),
     defaultValues: {
@@ -104,9 +111,47 @@ export default function NotificationSettings() {
     },
   })
 
-  function onSubmit(data: NotificationsFormValues) {
-    console.log("Notifications settings submitted:", data)
-    // Here you would typically save the settings
+  useEffect(() => {
+    let active = true
+    api.get<{ preferences: NotificationsFormValues | null }>("/notifications/preferences")
+      .then(({ preferences }) => {
+        if (!active || !preferences) return
+        form.reset(preferences)
+        setSavedValues(preferences)
+      })
+      .catch(() => {
+        if (active) {
+          setStatusError(true)
+          setStatusMessage("Could not load saved preferences. Your existing settings have not been changed.")
+        }
+      })
+      .finally(() => { if (active) setLoadingPreferences(false) })
+    return () => { active = false }
+  }, [form])
+
+  async function onSubmit(data: NotificationsFormValues) {
+    setSavingPreferences(true)
+    setStatusMessage("")
+    setStatusError(false)
+    try {
+      const result = await api.put<{ success: boolean; preferences?: NotificationsFormValues; message?: string }>("/notifications/preferences", data)
+      if (!result.success || !result.preferences) throw new Error(result.message || "The server did not save your preferences.")
+      form.reset(result.preferences)
+      setSavedValues(result.preferences)
+      setStatusMessage("Notification preferences saved.")
+    } catch (error) {
+      setStatusError(true)
+      setStatusMessage(error instanceof Error ? error.message : "Could not save notification preferences. Please try again.")
+    } finally {
+      setSavingPreferences(false)
+    }
+  }
+
+  function cancelChanges() {
+    if (savedValues) form.reset(savedValues)
+    else form.reset()
+    setStatusMessage("")
+    setStatusError(false)
   }
 
   return (
@@ -118,6 +163,8 @@ export default function NotificationSettings() {
             Configure how you receive notifications.
           </p>
         </div>
+        {statusMessage && <p role="status" aria-live="polite" className={statusError ? "text-sm text-destructive" : "text-sm text-green-700"}>{statusMessage}</p>}
+        {loadingPreferences && <p role="status" className="text-sm text-muted-foreground">Loading saved notification preferences…</p>}
         <form
           onSubmit={form.handleSubmit(onSubmit)}
           className="flex flex-col gap-6"
@@ -837,10 +884,10 @@ export default function NotificationSettings() {
           </Card>
 
           <div className="flex gap-2">
-            <Button type="submit" className="cursor-pointer">
-              Save Preferences
+            <Button type="submit" disabled={savingPreferences || loadingPreferences} className="cursor-pointer">
+              {savingPreferences ? "Saving…" : "Save Preferences"}
             </Button>
-            <Button variant="outline" type="reset" className="cursor-pointer">
+            <Button variant="outline" type="button" onClick={cancelChanges} disabled={savingPreferences} className="cursor-pointer">
               Cancel
             </Button>
           </div>
