@@ -19,7 +19,7 @@ export class NotificationsService {
     emailFrequency: new Set(['instant', 'hourly', 'daily', 'weekly', 'never']),
     quietHoursStart: new Set(['22:00', '23:00', '00:00', '06:00', '07:00', '08:00']),
     quietHoursEnd: new Set(['22:00', '23:00', '00:00', '06:00', '07:00', '08:00']),
-    notificationTiming: new Set(['online', 'always']),
+    notificationTiming: new Set(['online', 'always', 'never']),
   };
 
   private readonly preferenceKeys = new Set([
