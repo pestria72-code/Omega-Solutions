@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Post, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Param, Post, Put, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import { NotificationsService } from './notifications.service.js';
@@ -7,6 +7,16 @@ import { NotificationsService } from './notifications.service.js';
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
+
+  @Get('preferences')
+  getPreferences(@Req() req: { user: AuthenticatedUser }) {
+    return this.notifications.getPreferences(req.user);
+  }
+
+  @Put('preferences')
+  savePreferences(@Req() req: { user: AuthenticatedUser }, @Body() body: unknown) {
+    return this.notifications.savePreferences(req.user, body);
+  }
 
   @Get()
   list(@Req() req: { user: AuthenticatedUser }) {
