@@ -194,7 +194,7 @@ export function SiteHeader() {
                   >
                     <div className="flex w-full items-center justify-between gap-2">
                       {n.href && /^\/(?!\/)/.test(n.href) ? (
-                        <a href={n.href} className="text-sm font-medium hover:underline" onClick={async (event) => { event.preventDefault(); if (await markRead(n.id)) navigate(n.href!) }}>{n.title}</a>
+                        <a href={n.href || "#"} className="text-sm font-medium hover:underline" onClick={async (event) => { event.preventDefault(); if (await markRead(n.id) && n.href) navigate(n.href) }}>{n.title}</a>
                       ) : (
                         <span className="text-sm font-medium">{n.title}</span>
                       )}
