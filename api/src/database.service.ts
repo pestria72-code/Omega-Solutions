@@ -37,6 +37,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     try {
       await this.pool.query('SELECT 1');
+      const connectionUrl = new URL(process.env.DATABASE_URL!);
+      console.log('Database connection target:', {
+        host: connectionUrl.hostname,
+        database: decodeURIComponent(connectionUrl.pathname.replace(/^\\/+/, '')),
+      });
       console.log('Neon PostgreSQL connection successful.');
     } catch (err) {
       console.error('Database connection failed:', err);
