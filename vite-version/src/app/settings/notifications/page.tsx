@@ -80,6 +80,7 @@ export default function NotificationSettings() {
   const [statusMessage, setStatusMessage] = useState("")
   const [statusError, setStatusError] = useState(false)
   const form = useForm<NotificationsFormValues>({
+    // Keep reset stable for the preference-loading effect.
     resolver: zodResolver(notificationsFormSchema),
     defaultValues: {
       emailSecurity: false,
@@ -111,12 +112,14 @@ export default function NotificationSettings() {
     },
   })
 
+  const { reset } = form
+
   useEffect(() => {
     let active = true
     api.get<{ preferences: NotificationsFormValues | null }>("/notifications/preferences")
       .then(({ preferences }) => {
         if (!active || !preferences) return
-        form.reset(preferences)
+        reset(preferences)
         setSavedValues(preferences)
       })
       .catch(() => {
@@ -127,7 +130,7 @@ export default function NotificationSettings() {
       })
       .finally(() => { if (active) setLoadingPreferences(false) })
     return () => { active = false }
-  }, [form])
+  }, [reset])
 
   async function onSubmit(data: NotificationsFormValues) {
     setSavingPreferences(true)
