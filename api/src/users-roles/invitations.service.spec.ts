@@ -32,15 +32,18 @@ describe('InvitationsService', () => {
     const old = {
       auth: process.env.NEON_AUTH_BASE_URL,
       base: process.env.APP_BASE_URL,
+      cors: process.env.CORS_ORIGIN,
     };
     delete process.env.NEON_AUTH_BASE_URL;
     delete process.env.APP_BASE_URL;
+    delete process.env.CORS_ORIGIN;
     try {
       await expect(service.create(user, { email: 'new@example.com', role: 'staff' })).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(db.query).not.toHaveBeenCalled();
     } finally {
       if (old.auth === undefined) delete process.env.NEON_AUTH_BASE_URL; else process.env.NEON_AUTH_BASE_URL = old.auth;
       if (old.base === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = old.base;
+      if (old.cors === undefined) delete process.env.CORS_ORIGIN; else process.env.CORS_ORIGIN = old.cors;
     }
   });
 
