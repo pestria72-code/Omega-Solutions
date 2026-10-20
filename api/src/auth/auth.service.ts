@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../database.service.js';
 import { RegisterDto, LoginDto, RefreshDto, NeonExchangeDto } from './dto/auth.dto.js';
@@ -158,6 +158,104 @@ export class AuthService {
         companyId: membership.companyId,
         branchId: membership.branchId,
         role: membership.role,
+      },
+    };
+  }
+
+
+  async exchangeNeonInvitation(dto: { token: string; invitationToken: string }): Promise<(TokenPair & { user: Omit<AuthenticatedUser, 'permissions'> }) | { mfaRequired: true; mfaChallengeToken: string }> {
+    const identity = await verifyNeonIdentityToken(dto.token);
+    const neonUserResult = await this.db.query<{
+      id: string; email: string; emailVerified: boolean; name: string | null;
+    }>(
+      'SELECT id, email, "emailVerified" AS "emailVerified", name FROM neon_auth."user" WHERE id = $1 LIMIT 1',
+      [identity.sub],
+    );
+    const neonUser = neonUserResult.rows[0];
+    if (!neonUser || neonUser.emailVerified !== true || !neonUser.email) {
+      throw new UnauthorizedException('Verify your email address before accepting this invitation.');
+    }
+    const email = neonUser.email.trim().toLowerCase();
+    const tokenHash = createHash('sha256').update(dto.invitationToken).digest('hex');
+    const joined = await this.db.transaction(async (client) => {
+      const found = await client.query<{
+        id: string; company_id: string; email: string; role: string; branch_id: string | null;
+      }>(
+        `SELECT id, company_id, email, role::text AS role, branch_id
+         FROM company_invitations
+         WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+         FOR UPDATE`,
+        [tokenHash],
+      );
+      const invitation = found.rows[0];
+      if (!invitation) throw new NotFoundException('Invitation is invalid, expired, or already used.');
+      if (invitation.email.trim().toLowerCase() !== email) {
+        throw new UnauthorizedException('This invitation was sent to a different email address.');
+      }
+      const company = await client.query<{ id: string }>(
+        'SELECT id FROM companies WHERE id = $1 AND is_active = true',
+        [invitation.company_id],
+      );
+      if (!company.rows.length) throw new UnauthorizedException('The invited company is inactive.');
+      if (invitation.branch_id) {
+        const branch = await client.query(
+          'SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_active = true',
+          [invitation.branch_id, invitation.company_id],
+        );
+        if (!branch.rows.length) throw new ConflictException('The invited branch is no longer active.');
+      }
+      let omegaUser = (await client.query<{
+        id: string; email: string; full_name: string; is_active: boolean;
+      }>(
+        'SELECT id, email, full_name, is_active FROM users WHERE lower(email) = $1 FOR UPDATE',
+        [email],
+      )).rows[0];
+      if (omegaUser && !omegaUser.is_active) throw new UnauthorizedException('Account is deactivated.');
+      if (!omegaUser) {
+        const userId = uuidv4();
+        const fullName = neonUser.name?.trim() || email.split('@')[0] || 'Omega User';
+        const passwordHash = await bcrypt.hash(randomBytes(48).toString('hex'), BCRYPT_ROUNDS);
+        const inserted = await client.query<{
+          id: string; email: string; full_name: string; is_active: boolean;
+        }>(
+          `INSERT INTO users (id, email, password_hash, full_name, phone, is_active)
+           VALUES ($1, $2, $3, $4, NULL, true)
+           RETURNING id, email, full_name, is_active`,
+          [userId, email, passwordHash, fullName],
+        );
+        omegaUser = inserted.rows[0];
+      }
+      const membership = await client.query(
+        'SELECT id FROM company_memberships WHERE user_id = $1 AND company_id = $2 FOR UPDATE',
+        [omegaUser.id, invitation.company_id],
+      );
+      if (membership.rows.length) throw new ConflictException('This account already belongs to the invited company.');
+      await client.query(
+        `INSERT INTO company_memberships (user_id, company_id, branch_id, role, is_active)
+         VALUES ($1, $2, $3, $4, true)`,
+        [omegaUser.id, invitation.company_id, invitation.branch_id, invitation.role],
+      );
+      await client.query(
+        'UPDATE company_invitations SET accepted_at = NOW(), updated_at = NOW() WHERE id = $1',
+        [invitation.id],
+      );
+      return {
+        userId: omegaUser.id, email: omegaUser.email, fullName: omegaUser.full_name,
+        companyId: invitation.company_id, branchId: invitation.branch_id, role: invitation.role,
+      };
+    });
+    const mfaStatus = await this.mfaService.status(joined.userId);
+    if (mfaStatus.enabled) return this.createMfaChallenge(joined.userId, joined.email);
+    const payload: JwtPayload = {
+      sub: joined.userId, email: joined.email, companyId: joined.companyId,
+      branchId: joined.branchId, role: joined.role,
+    };
+    return {
+      accessToken: this.issueToken(payload, false),
+      refreshToken: this.issueToken(payload, true),
+      user: {
+        userId: joined.userId, email: joined.email, fullName: joined.fullName,
+        companyId: joined.companyId, branchId: joined.branchId, role: joined.role,
       },
     };
   }
