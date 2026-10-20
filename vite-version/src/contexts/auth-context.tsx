@@ -13,7 +13,8 @@ interface AuthContextValue {
   completeMfaCode: (code: string) => Promise<void>;
   loginEmail: (email: string, password: string) => Promise<void>;
   registerUser: (email: string, password: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;
-  finishNeonRegistration: (token: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;\n  finishNeonInvitation: (token: string, invitationToken: string) => Promise<boolean>;
+  finishNeonRegistration: (token: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;
+  finishNeonInvitation: (token: string, invitationToken: string) => Promise<boolean>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -130,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loginEmail,
     registerUser,
     finishNeonRegistration,
+    finishNeonInvitation,
     logout,
     refreshUser,
   };
