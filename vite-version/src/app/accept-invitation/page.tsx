@@ -62,7 +62,7 @@ export default function AcceptInvitationPage() {
         return;
       }
       if (verificationPending) {
-        if (!/^\\d{6}$/.test(otp.trim())) {
+        if (!/^\d{6}$/.test(otp.trim())) {
           setError("Enter the 6-digit verification code sent to your email.");
           return;
         }
@@ -129,7 +129,7 @@ export default function AcceptInvitationPage() {
         </div>}
         {verificationPending && <div className="space-y-2">
           <Label htmlFor="invite-otp">Email verification code</Label>
-          <Input id="invite-otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={event=>setOtp(event.target.value.replace(/\\D/g, "").slice(0,6))} required placeholder="6-digit code"/>
+          <Input id="invite-otp" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={event=>setOtp(event.target.value.replace(/\D/g, "").slice(0,6))} required placeholder="6-digit code"/>
           <div className="text-right"><button type="button" onClick={resendCode} disabled={busy} className="text-sm font-medium text-primary hover:underline">Resend code</button></div>
         </div>}
         <Button type="submit" disabled={busy || !invitationToken}>{busy && <Loader2 className="mr-2 size-4 animate-spin"/>}{user ? "Accept invitation" : verificationPending ? "Verify email and accept invitation" : mode === "register" ? "Send verification code" : "Sign in and accept invitation"}</Button>
