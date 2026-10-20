@@ -46,7 +46,7 @@ export class InvitationsService {
 
     // Fail closed: never create an invitation that cannot be delivered.
     const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\/$/, '');
-    const appBaseUrl = process.env.APP_BASE_URL;
+    const appBaseUrl = process.env.APP_BASE_URL || process.env.CORS_ORIGIN?.split(',')[0]?.trim();
     if (!neonAuthBaseUrl || !appBaseUrl) {
       throw new ServiceUnavailableException(
         'Invitation email is not configured. Set NEON_AUTH_BASE_URL and APP_BASE_URL.',
