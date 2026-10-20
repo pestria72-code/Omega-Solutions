@@ -17,14 +17,13 @@ export default function AcceptInvitationPage() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [accepted, setAccepted] = React.useState(false);
+  const [retryAttempt, setRetryAttempt] = React.useState(0);
 
-  // Magic-link callback: exchange the verified Neon identity and consume the
-  // invitation in one server-side transaction. Existing Omega sessions can
-  // still explicitly accept through the regular guarded endpoint below.
   React.useEffect(() => {
     if (!invitationToken || user) return;
     let cancelled = false;
     setBusy(true);
+    setError("");
     (async () => {
       try {
         const neonToken = await getNeonIdentityToken();
@@ -46,7 +45,7 @@ export default function AcceptInvitationPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [invitationToken, user, finishNeonInvitation, refreshUser, navigate]);
+  }, [invitationToken, user, finishNeonInvitation, refreshUser, navigate, retryAttempt]);
 
   const accept = async () => {
     if (!invitationToken) { setError("This invitation link does not contain a token."); return; }
@@ -54,8 +53,8 @@ export default function AcceptInvitationPage() {
     setError("");
     try {
       await api.post("/users-roles/invitations/accept", { token: invitationToken });
-      navigate("/accept-invitation", { replace: true });
       setAccepted(true);
+      navigate("/dashboard", { replace: true });
     } catch (e) {
       setError(e && typeof e === "object" && "message" in e
         ? String((e as { message: unknown }).message)
@@ -65,12 +64,21 @@ export default function AcceptInvitationPage() {
     }
   };
 
+  const handleAction = () => {
+    if (user) {
+      void accept();
+      return;
+    }
+    setError("");
+    setRetryAttempt((attempt) => attempt + 1);
+  };
+
   return <BaseLayout><div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 lg:px-6">
     <PageHeader title="Accept company invitation" description="Join a company workspace using the email address the invitation was sent to."/>
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><MailCheck className="size-5"/>Invitation details</CardTitle><CardDescription>Neon verifies the invited email address before Omega adds the membership.</CardDescription></CardHeader><CardContent className="space-y-4">
       {error && <div role="alert" className="flex gap-2 rounded-md border border-destructive/30 p-3 text-sm text-destructive"><AlertCircle className="size-4 shrink-0"/>{error}</div>}
       {accepted ? <div role="status" className="space-y-3"><p className="flex items-center gap-2 text-sm"><CheckCircle2 className="size-5 text-emerald-600"/>Invitation accepted. Your company membership is active.</p><p className="text-sm text-muted-foreground">Switch to the invited company from your company selector if it is not your current workspace.</p><Button onClick={()=>navigate("/dashboard",{replace:true})}>Continue to dashboard</Button></div>
-      : <><p className="text-sm text-muted-foreground">Invitation links are single-use and expire after seven days. Open the email link in the same browser so Neon Auth can complete sign-in. The server verifies the invited email, company, role, and branch.</p><Button onClick={()=>void accept()} disabled={busy||!invitationToken||!user}>{busy&&<Loader2 className="mr-2 size-4 animate-spin"/>}{user ? "Accept invitation" : "Completing secure invitation sign-in…"}</Button></>}
+      : <><p className="text-sm text-muted-foreground">Invitation links are single-use and expire after seven days. Open the email link in the same browser so Neon Auth can complete sign-in. The server verifies the invited email, company, role, and branch.</p><Button onClick={handleAction} disabled={busy||!invitationToken}>{busy&&<Loader2 className="mr-2 size-4 animate-spin"/>}{user ? "Accept invitation" : error ? "Retry secure sign-in" : "Completing secure invitation sign-in…"}</Button></>}
     </CardContent></Card>
   </div></BaseLayout>;
 }
