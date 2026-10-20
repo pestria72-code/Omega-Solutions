@@ -91,13 +91,33 @@ export class InvitationsService {
     acceptUrl.searchParams.set('invitationToken', token);
 
     try {
+      // Managed Better Auth's magic-link route applies Origin/CSRF checks.
+      // This is a server-to-server request, so explicitly provide the trusted
+      // frontend origin rather than relying on a browser to add it.
+      const appUrl = new URL(appBaseUrl);
       const response = await fetch(`${neonAuthBaseUrl}/sign-in/magic-link`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email, callbackURL: acceptUrl.toString() }),
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Origin: appUrl.origin,
+          Referer: appUrl.toString(),
+        },
+        body: JSON.stringify({
+          email,
+          callbackURL: acceptUrl.toString(),
+          newUserCallbackURL: acceptUrl.toString(),
+          errorCallbackURL: acceptUrl.toString(),
+        }),
         signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new Error(`Neon Auth returned HTTP ${response.status}`);
+      if (!response.ok) {
+        // Log only status and a short provider response for diagnosis. Never
+        // log the invite token, email address, or the complete callback URL.
+        const providerMessage = (await response.text()).replace(/https?:\\/\\/[^\\s"'<>]+/g, '[url]').slice(0, 300);
+        console.error(`Neon Auth magic-link request failed: HTTP ${response.status}; response=${providerMessage}`);
+        throw new Error(`Neon Auth returned HTTP ${response.status}`);
+      }
     } catch {
       await this.db.query(
         'UPDATE company_invitations SET revoked_at = NOW(), updated_at = NOW() WHERE id = $1 AND accepted_at IS NULL',
