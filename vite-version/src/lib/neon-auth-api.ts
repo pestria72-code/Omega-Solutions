@@ -4,7 +4,9 @@ type NeonResponse = {
   message?: string;
   error?: string;
   token?: string;
-  data?: { token?: string };
+  data?: { token?: string; session?: { token?: string } };
+  /** JWT exposed by Neon Auth on the response, as consumed by the official SDK. */
+  jwt?: string;
 };
 
 function authUrl(): string {
@@ -49,7 +51,7 @@ async function neonRequest(path: string, body?: unknown): Promise<NeonResponse> 
   if (!response.ok || result.error) {
     throw new Error(result.message || result.error || "Email authentication failed. Check your details and try again.");
   }
-  return result;
+  return { ...result, jwt: response.headers.get("set-auth-jwt") || undefined };
 }
 
 export async function registerWithNeon(input: {
@@ -85,8 +87,8 @@ export async function verifyNeonEmailAndSignIn(input: {
 
   // Verification deliberately does not sign the user in; perform an explicit password sign-in.
   await neonRequest("/sign-in/email", { email, password: input.password });
-  const tokenResponse = await neonRequest("/token");
-  const token = tokenResponse.token || tokenResponse.data?.token;
+  const tokenResponse = await neonRequest("/get-session");
+  const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
   if (!token) {
     throw new Error("Email verified, but a secure sign-in token was not returned. Please sign in again.");
   }
@@ -96,8 +98,8 @@ export async function verifyNeonEmailAndSignIn(input: {
 export async function signInWithNeon(emailInput: string, password: string): Promise<string> {
   const email = emailInput.trim().toLowerCase();
   await neonRequest("/sign-in/email", { email, password });
-  const tokenResponse = await neonRequest("/token");
-  const token = tokenResponse.token || tokenResponse.data?.token;
+  const tokenResponse = await neonRequest("/get-session");
+  const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
   if (!token) {
     throw new Error("Email sign-in succeeded, but the secure sign-in token was not returned.");
   }
@@ -105,8 +107,8 @@ export async function signInWithNeon(emailInput: string, password: string): Prom
 }
 
 export async function getNeonIdentityToken(): Promise<string> {
-  const tokenResponse = await neonRequest("/token");
-  const token = tokenResponse.token || tokenResponse.data?.token;
+  const tokenResponse = await neonRequest("/get-session");
+  const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
   if (!token) throw new Error("Neon sign-in completed, but no identity token was returned. Please sign in to Neon in this browser, then retry the invitation.");
   return token;
 }
