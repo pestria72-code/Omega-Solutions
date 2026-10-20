@@ -90,3 +90,10 @@ export async function signInWithNeon(emailInput: string, password: string): Prom
   }
   return token;
 }
+
+export async function getNeonIdentityToken(): Promise<string> {
+  const tokenResponse = await neonRequest("/token");
+  const token = tokenResponse.token || tokenResponse.data?.token;
+  if (!token) throw new Error("Neon sign-in completed, but no identity token was returned. Please reopen the invitation link.");
+  return token;
+}
