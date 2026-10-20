@@ -30,19 +30,16 @@ describe('InvitationsService', () => {
 
   it('fails closed when delivery is not configured', async () => {
     const old = {
-      key: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM,
+      auth: process.env.NEON_AUTH_BASE_URL,
       base: process.env.APP_BASE_URL,
     };
-    delete process.env.RESEND_API_KEY;
-    delete process.env.EMAIL_FROM;
+    delete process.env.NEON_AUTH_BASE_URL;
     delete process.env.APP_BASE_URL;
     try {
       await expect(service.create(user, { email: 'new@example.com', role: 'staff' })).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(db.query).not.toHaveBeenCalled();
     } finally {
-      if (old.key === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = old.key;
-      if (old.from === undefined) delete process.env.EMAIL_FROM; else process.env.EMAIL_FROM = old.from;
+      if (old.auth === undefined) delete process.env.NEON_AUTH_BASE_URL; else process.env.NEON_AUTH_BASE_URL = old.auth;
       if (old.base === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = old.base;
     }
   });
