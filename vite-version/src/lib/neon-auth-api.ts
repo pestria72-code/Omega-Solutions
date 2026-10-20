@@ -43,7 +43,13 @@ async function neonRequest(path: string, body?: unknown): Promise<NeonResponse> 
   const raw = await response.text();
   let result: NeonResponse = {};
   try {
-    result = raw ? JSON.parse(raw) as NeonResponse : {};
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    // Some auth endpoints (notably an unauthenticated /get-session) can return JSON null.
+    // Normalize that response before reading error/message fields so the invitation page
+    // can show the intended sign-in guidance instead of crashing on null.error.
+    result = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as NeonResponse
+      : {};
   } catch {
     throw new Error("The email authentication service returned an invalid response. Please try again.");
   }
