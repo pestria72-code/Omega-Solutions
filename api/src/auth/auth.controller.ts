@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Body, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
-import { LoginDto, RefreshDto, NeonExchangeDto, SwitchCompanyDto } from './dto/auth.dto.js';
+import { LoginDto, RefreshDto, NeonExchangeDto, NeonInvitationExchangeDto, SwitchCompanyDto } from './dto/auth.dto.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from './interfaces/authenticated-user.js';
 import { MfaService } from './mfa.service.js';
@@ -18,6 +18,11 @@ export class AuthController {
   @Post('neon/exchange')
   async exchangeNeonIdentity(@Body() dto: NeonExchangeDto) {
     return this.authService.exchangeNeonIdentity(dto);
+  }
+
+  @Post('neon/exchange-invitation')
+  async exchangeNeonInvitation(@Body() dto: NeonInvitationExchangeDto) {
+    return this.authService.exchangeNeonInvitation(dto);
   }
 
   @Post('login')
