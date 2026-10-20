@@ -15,15 +15,28 @@ function authUrl(): string {
 }
 
 async function neonRequest(path: string, body?: unknown): Promise<NeonResponse> {
-  const response = await fetch(`${authUrl()}${path}`, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  let response: Response;
+  try {
+    response = await fetch(`${authUrl()}${path}`, {
     method: body === undefined ? "GET" : "POST",
     credentials: "include",
+    signal: controller.signal,
     headers: body === undefined ? { Accept: "application/json" } : {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error("Neon sign-in is taking too long. Your invitation has not been accepted yet. Retry secure sign-in, or sign in to Neon in this browser and reopen the invitation.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const raw = await response.text();
   let result: NeonResponse = {};
@@ -94,6 +107,6 @@ export async function signInWithNeon(emailInput: string, password: string): Prom
 export async function getNeonIdentityToken(): Promise<string> {
   const tokenResponse = await neonRequest("/token");
   const token = tokenResponse.token || tokenResponse.data?.token;
-  if (!token) throw new Error("Neon sign-in completed, but no identity token was returned. Please reopen the invitation link.");
+  if (!token) throw new Error("Neon sign-in completed, but no identity token was returned. Please sign in to Neon in this browser, then retry the invitation.");
   return token;
 }
