@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { AuthenticatedUser } from "@/lib/api-types";
 import { getAccessToken, setTokens, clearTokens } from "@/lib/api-client";
-import { getCurrentUser, login, exchangeNeonToken, completeMfaChallenge } from "@/lib/auth-api";
+import { getCurrentUser, login, exchangeNeonToken, exchangeNeonInvitationToken, completeMfaChallenge } from "@/lib/auth-api";
 import { signInWithNeon } from "@/lib/neon-auth-api";
 import type { LoginResponse, MfaChallengeResponse } from "@/lib/auth-api";
 
@@ -13,7 +13,7 @@ interface AuthContextValue {
   completeMfaCode: (code: string) => Promise<void>;
   loginEmail: (email: string, password: string) => Promise<void>;
   registerUser: (email: string, password: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;
-  finishNeonRegistration: (token: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;
+  finishNeonRegistration: (token: string, fullName: string, phone?: string, companyName?: string) => Promise<void>;\n  finishNeonInvitation: (token: string, invitationToken: string) => Promise<boolean>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -100,6 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     const result = await exchangeNeonToken(token, fullName, phone, companyName);
     await applyOmegaSession(result);
+  }, [applyOmegaSession]);
+
+  const finishNeonInvitation = React.useCallback(async (token: string, invitationToken: string) => {
+    setError(null);
+    const result = await exchangeNeonInvitationToken(token, invitationToken);
+    await applyOmegaSession(result);
+    return "mfaRequired" in result;
   }, [applyOmegaSession]);
 
   const logout = React.useCallback(() => {
