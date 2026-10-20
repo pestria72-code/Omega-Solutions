@@ -29,7 +29,6 @@ export default function AcceptInvitationPage() {
       try {
         const neonToken = await getNeonIdentityToken();
         const needsMfa = await finishNeonInvitation(neonToken, invitationToken);
-        if (cancelled) return;
         if (needsMfa) {
           navigate("/login?mfa=1", { replace: true });
           return;
