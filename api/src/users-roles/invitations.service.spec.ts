@@ -136,8 +136,8 @@ describe('InvitationsService', () => {
     try {
       await expect(service.create(user, { email: 'new@example.com', role: 'staff' }))
         .rejects.toBeInstanceOf(ServiceUnavailableException);
-      expect(db.query.mock.calls[3][0]).toContain('INSERT INTO company_invitations');
-      expect(db.query.mock.calls[3][1][5]).toMatch(/^[a-f0-9]{64}$/);
+      expect(db.query.mock.calls[2][0]).toContain('INSERT INTO company_invitations');
+      expect(db.query.mock.calls[2][1][5]).toMatch(/^[a-f0-9]{64}$/);
       expect(fetchSpy).toHaveBeenCalledWith(
         'https://auth.example.test/sign-in/magic-link',
         expect.objectContaining({
@@ -148,8 +148,8 @@ describe('InvitationsService', () => {
       const magicLinkPayload = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
       expect(magicLinkPayload.email).toBe('new@example.com');
       expect(magicLinkPayload.callbackURL).toContain('invitationToken=');
-      expect(magicLinkPayload.callbackURL).not.toContain(String(db.query.mock.calls[3][1][5]));
-      expect(db.query.mock.calls[4][0]).toContain('SET revoked_at = NOW()');
+      expect(magicLinkPayload.callbackURL).not.toContain(String(db.query.mock.calls[2][1][5]));
+      expect(db.query.mock.calls[3][0]).toContain('SET revoked_at = NOW()');
       expect(audit.log).not.toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();
