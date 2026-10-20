@@ -6,11 +6,16 @@ type NeonResponse = {
   token?: string;
   data?: {
     token?: string;
-    session?: { token?: string; access_token?: string };
+    jwt?: string;
+    accessToken?: string;
     access_token?: string;
+    session?: { token?: string; access_token?: string; accessToken?: string };
   };
   /** JWT exposed by Neon Auth on the response, as consumed by the official SDK. */
   jwt?: string;
+  accessToken?: string;
+  access_token?: string;
+  session?: { token?: string; access_token?: string; accessToken?: string };
 };
 
 function authUrl(): string {
@@ -117,17 +122,30 @@ export async function signInWithNeon(emailInput: string, password: string): Prom
 }
 
 export async function getNeonIdentityToken(): Promise<string> {
-  // Neon Auth's /get-session response describes the browser session; its session.token
-  // may be an opaque cookie/session identifier rather than a JWT. The dedicated /token
-  // endpoint issues the signed identity JWT expected by Omega's server-side verifier.
+  // Confirm the magic-link callback actually established a browser session before
+  // asking the JWT plugin for a token. This distinguishes a missing session cookie
+  // from a token response that the client cannot parse.
+  const sessionResponse = await neonRequest("/get-session");
+  const session = sessionResponse.data?.session || sessionResponse.session;
+  const hasSession = Boolean(session || sessionResponse.data?.token || sessionResponse.token);
+  if (!hasSession) {
+    throw new Error("Neon did not find a signed-in browser session. Open the newest invitation email link in this same browser, complete the Neon sign-in, and retry acceptance.");
+  }
+
+  // Do not use session.token as an identity JWT: it may be an opaque session ID.
   const tokenResponse = await neonRequest("/token");
   const token = tokenResponse.jwt
+    || tokenResponse.accessToken
+    || tokenResponse.access_token
+    || tokenResponse.data?.jwt
     || tokenResponse.data?.token
+    || tokenResponse.data?.accessToken
     || tokenResponse.data?.access_token
     || tokenResponse.data?.session?.access_token
+    || tokenResponse.data?.session?.accessToken
     || tokenResponse.token;
   if (!token) {
-    throw new Error("Neon sign-in is active, but Neon Auth did not issue an identity JWT. Confirm JWT token support is enabled for this Neon Auth branch, then retry the invitation.");
+    throw new Error("Neon session exists, but its token endpoint did not return an identity JWT. The invitation is still pending; retry after the Neon Auth session is established.");
   }
   return token;
 }
