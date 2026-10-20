@@ -114,7 +114,7 @@ export class InvitationsService {
       if (!response.ok) {
         // Log only status and a short provider response for diagnosis. Never
         // log the invite token, email address, or the complete callback URL.
-        const providerMessage = (await response.text()).replace(/https?:\\/\\/[^\\s"'<>]+/g, '[url]').slice(0, 300);
+        const providerMessage = (await response.text()).split(/\r?\n/).join(' ').slice(0, 300);
         console.error(`Neon Auth magic-link request failed: HTTP ${response.status}; response=${providerMessage}`);
         throw new Error(`Neon Auth returned HTTP ${response.status}`);
       }
