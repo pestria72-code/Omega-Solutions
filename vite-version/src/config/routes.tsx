@@ -8,7 +8,8 @@ function page(load: () => Promise<{ default: ComponentType }>) {
 
 export const routes: RouteObject[] = [
   { path: "/", lazy: page(() => import("@/app/landing/page")) },
-  { path: "/login", lazy: page(() => import("@/app/login/page")) },\n  { path: "/accept-invitation", lazy: page(() => import("@/app/accept-invitation/page")) },
+  { path: "/login", lazy: page(() => import("@/app/login/page")) },
+  { path: "/accept-invitation", lazy: page(() => import("@/app/accept-invitation/page")) },
   {
     element: <ProtectedLayout />,
     children: [
