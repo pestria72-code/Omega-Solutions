@@ -68,3 +68,15 @@ export class SwitchCompanyDto {
   @IsUUID()
   companyId!: string;
 }
+
+export class NeonInvitationExchangeDto {
+  @IsString()
+  @MinLength(20)
+  @MaxLength(8192)
+  token!: string;
+
+  @IsString()
+  @MinLength(20)
+  @MaxLength(256)
+  invitationToken!: string;
+}
