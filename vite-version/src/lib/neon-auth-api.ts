@@ -101,7 +101,18 @@ export async function verifyNeonEmailAndSignIn(input: {
   await neonRequest("/email-otp/verify-email", { email, otp: input.otp.trim() });
 
   // Verification deliberately does not sign the user in; perform an explicit password sign-in.
-  await neonRequest("/sign-in/email", { email, password: input.password });
+  const signInResponse = await neonRequest("/sign-in/email", { email, password: input.password });
+  // Managed Neon Auth can expose the identity JWT directly on the sign-in response.
+  // Prefer that token so invitation acceptance does not depend solely on a follow-up
+  // session-cookie read across the app and Neon Auth origins.
+  const directToken = signInResponse.jwt
+    || signInResponse.accessToken
+    || signInResponse.access_token
+    || signInResponse.data?.jwt
+    || signInResponse.data?.accessToken
+    || signInResponse.data?.access_token;
+  if (directToken) return directToken;
+
   const tokenResponse = await neonRequest("/get-session");
   const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
   if (!token) {
@@ -112,7 +123,17 @@ export async function verifyNeonEmailAndSignIn(input: {
 
 export async function signInWithNeon(emailInput: string, password: string): Promise<string> {
   const email = emailInput.trim().toLowerCase();
-  await neonRequest("/sign-in/email", { email, password });
+  const signInResponse = await neonRequest("/sign-in/email", { email, password });
+  // Prefer the JWT returned by Neon Auth itself when available. This avoids
+  // making a successful sign-in depend on a second cross-origin session request.
+  const directToken = signInResponse.jwt
+    || signInResponse.accessToken
+    || signInResponse.access_token
+    || signInResponse.data?.jwt
+    || signInResponse.data?.accessToken
+    || signInResponse.data?.access_token;
+  if (directToken) return directToken;
+
   const tokenResponse = await neonRequest("/get-session");
   const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
   if (!token) {
