@@ -77,3 +77,13 @@ export async function completeMfaChallenge(challengeToken: string, code: string)
   if (!res.ok) throw await readError(res, "MFA verification failed");
   return res.json();
 }
+
+export async function exchangeNeonInvitationToken(token: string, invitationToken: string): Promise<LoginResponse | MfaChallengeResponse> {
+  const res = await fetch(`${API_BASE}/auth/neon/exchange-invitation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, invitationToken }),
+  });
+  if (!res.ok) throw await readError(res, "Could not accept this company invitation");
+  return res.json();
+}
