@@ -45,12 +45,11 @@ export class InvitationsService {
     }
 
     // Fail closed: never create an invitation that cannot be delivered.
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
+    const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\/$/, '');
     const appBaseUrl = process.env.APP_BASE_URL;
-    if (!apiKey || !from || !appBaseUrl) {
+    if (!neonAuthBaseUrl || !appBaseUrl) {
       throw new ServiceUnavailableException(
-        'Invitation email is not configured. Set RESEND_API_KEY, EMAIL_FROM, and APP_BASE_URL.',
+        'Invitation email is not configured. Set NEON_AUTH_BASE_URL and APP_BASE_URL.',
       );
     }
 
@@ -89,32 +88,22 @@ export class InvitationsService {
     );
     const invitationId = inserted.rows[0].id;
     const acceptUrl = new URL('/accept-invitation', appBaseUrl);
-    acceptUrl.searchParams.set('token', token);
-    const company = await this.db.query<{ name: string }>(
-      'SELECT name FROM companies WHERE id = $1',
-      [actor.companyId],
-    );
-    const companyName = company.rows[0]?.name ?? 'your company';
+    acceptUrl.searchParams.set('invitationToken', token);
 
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      const response = await fetch(`${neonAuthBaseUrl}/sign-in/magic-link`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from,
-          to: [email],
-          subject: `Invitation to join ${companyName} on Omega Solutions`,
-          text: `You have been invited to join ${companyName} on Omega Solutions as ${dto.role}. This link expires in 7 days: ${acceptUrl.toString()} If you were not expecting this invitation, you can ignore this email.`,
-        }),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ email, callbackURL: acceptUrl.toString() }),
         signal: AbortSignal.timeout(10000),
       });
-      if (!response.ok) throw new Error(`Email provider returned HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`Neon Auth returned HTTP ${response.status}`);
     } catch {
       await this.db.query(
         'UPDATE company_invitations SET revoked_at = NOW(), updated_at = NOW() WHERE id = $1 AND accepted_at IS NULL',
         [invitationId],
       );
-      throw new ServiceUnavailableException('Invitation email could not be delivered; the invitation was cancelled.');
+      throw new ServiceUnavailableException('Neon sign-in link could not be sent; the invitation was cancelled.');
     }
 
     await this.audit.log({
