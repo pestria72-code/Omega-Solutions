@@ -363,7 +363,7 @@ export class MpesaService {
     });
     if (!response.ok) throw new Error(`Daraja STK query returned HTTP ${response.status}`);
     const data = await response.json() as { ResponseCode?: string; ResultCode?: string | number };
-    return data.ResponseCode === '0' && String(data.ResultCode) === '0';
+    return String(data.ResponseCode) === '0' && String(data.ResultCode) === '0';
   }
 
   async getStatus(user: AuthenticatedUser, requestId: string) {
