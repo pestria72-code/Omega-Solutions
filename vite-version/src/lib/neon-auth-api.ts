@@ -103,7 +103,7 @@ export async function verifyNeonEmailAndSignIn(input: {
   await neonRequest("/email-otp/verify-email", { email, otp: input.otp.trim() });
 
   // Verification deliberately does not sign the user in; perform an explicit password sign-in.
-  const signInResponse = await neonRequest("/sign-in/email", { email, password });
+  const signInResponse = await neonRequest("/sign-in/email", { email, password: input.password });
   // Prefer the JWT returned by sign-in. A separate /token request depends on a
   // cross-origin session cookie that may be blocked by browser privacy settings.
   const directToken = signInResponse.jwt
