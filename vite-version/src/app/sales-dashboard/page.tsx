@@ -45,9 +45,9 @@ export default function SalesDashboardPage() {
     setLoading(true); setError("");
     try {
       const [invoices, customers, products, teamSummary, salespersonAssignment] = await Promise.all([
-        api.get<InvoiceApiRow[]>("/invoices"),
-        api.get<CustomerRow[]>("/customers"),
-        api.get<ProductRow[]>("/products"),
+        canViewTeam ? api.get<InvoiceApiRow[]>("/invoices") : Promise.resolve([] as InvoiceApiRow[]),
+        canViewTeam ? api.get<CustomerRow[]>("/customers") : Promise.resolve([] as CustomerRow[]),
+        canViewTeam ? api.get<ProductRow[]>("/products") : Promise.resolve([] as ProductRow[]),
         canViewTeam ? api.get<TeamMember[]>("/invoices/team-summary") : Promise.resolve([] as TeamMember[]),
         canViewTeam ? Promise.resolve(null) : api.get<SalespersonAssignment>("/pos/salesperson-assignment/me"),
       ]);
@@ -81,6 +81,7 @@ export default function SalesDashboardPage() {
             <Link to="/pos" className={buttonVariants({ className: "shrink-0" })}><Store className="mr-2 size-4" />Open point of sale</Link>
           </CardContent>
         </Card>}
+        {canViewTeam && <>
         <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric title="Invoices" value={formatNumber(data.invoices.filter((invoice) => invoice.status !== "cancelled").length)} detail="All invoice statuses" icon={Receipt} href="/invoices" />
           <Metric title="Outstanding" value={formatKES(outstanding)} detail="Unpaid balance on sent invoices" icon={Banknote} href="/payments" />
@@ -111,6 +112,7 @@ export default function SalesDashboardPage() {
           <CardHeader><CardTitle>Team sales performance</CardTitle><CardDescription>Company-wide performance grouped by the user who created each invoice. Drafts and cancelled invoices are excluded from sales totals.</CardDescription></CardHeader>
           <CardContent>{team.length === 0 ? <p className="py-6 text-sm text-muted-foreground">No active team members or invoice activity yet.</p> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Team member</TableHead><TableHead>Role</TableHead><TableHead className="text-right">Invoices</TableHead><TableHead className="text-right">Sales</TableHead><TableHead className="text-right">Collected</TableHead><TableHead className="text-right">Outstanding</TableHead></TableRow></TableHeader><TableBody>{team.map((member) => <TableRow key={member.user_id}><TableCell className="font-medium">{member.full_name}</TableCell><TableCell className="capitalize">{member.role}</TableCell><TableCell className="text-right tabular-nums">{formatNumber(member.invoice_count)}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(member.sales_total))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(member.collected_total))}</TableCell><TableCell className="text-right tabular-nums">{formatKES(Number(member.outstanding_total))}</TableCell></TableRow>)}</TableBody></Table></div>}</CardContent>
         </Card>}
+        </>}
         <p className="text-xs text-muted-foreground">Figures are based on company-scoped records. Collection totals represent confirmed ERP receipts; automatic M-Pesa verification and bank reconciliation are separate integrations.</p>
       </>}
     </div>
