@@ -9,6 +9,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { api } from "@/lib/api-client"
 import { formatKES } from "@/lib/format"
 import { useMyCompany } from "@/hooks/use-company"
+import { useAuth } from "@/contexts/auth-context"
 
 type Register = { id:string; code:string; name:string; branch_name:string|null; is_active:boolean; open_shift_id:string|null }
 type Shift = { id:string; register_id:string; register_code:string; register_name:string; opening_float:string|number; opened_at:string; status:"open"|"closed" }
@@ -32,6 +33,8 @@ function downloadReceipt(sale: LastSale, companyName: string) {
 
 export default function PosPage() {
   const { company } = useMyCompany();
+  const { user } = useAuth();
+  const canViewTeam = Boolean(user?.permissions.includes("sales:team-read"));
   const [registers,setRegisters]=React.useState<Register[]>([])
   const [shift,setShift]=React.useState<Shift|null>(null)
   const [warehouses,setWarehouses]=React.useState<Warehouse[]>([])
@@ -62,12 +65,15 @@ export default function PosPage() {
     try{
       const [regs,current,warehouseRows,customerRows,saleRows,assignment]=await Promise.all([
         api.get<Register[]>("/pos/registers"),api.get<Shift|null>("/pos/shifts/current"),
-        api.get<Warehouse[]>("/inventory/warehouses"),api.get<Customer[]>("/customers"),
-        api.get<Record<string,unknown>[]>("/pos/sales?limit=10"),api.get<{warehouse_id:string}|null>("/pos/salesperson-assignment/me")
+        canViewTeam ? api.get<Warehouse[]>("/inventory/warehouses") : Promise.resolve([] as Warehouse[]),api.get<Customer[]>("/customers"),
+        api.get<Record<string,unknown>[]>("/pos/sales?limit=10"),api.get<{warehouse_id:string;warehouse_code:string;warehouse_name:string}|null>("/pos/salesperson-assignment/me")
       ])
-      setRegisters(regs);setShift(current);setWarehouses(warehouseRows.filter(w=>w.is_active));setCustomers(customerRows.filter(c=>c.is_active));setSales(saleRows)
+      const activeWarehouses = canViewTeam
+        ? warehouseRows.filter(w=>w.is_active)
+        : assignment ? [{id:assignment.warehouse_id,code:assignment.warehouse_code,name:assignment.warehouse_name,is_active:true}] : []
+      setRegisters(regs);setShift(current);setWarehouses(activeWarehouses);setCustomers(customerRows.filter(c=>c.is_active));setSales(saleRows)
       setRegisterId(current?.register_id??regs.find(r=>r.is_active&&!r.open_shift_id)?.id??"")
-      setWarehouseId(assignment?.warehouse_id ?? warehouseRows.find(w=>w.is_active)?.id ?? "")
+      setWarehouseId(assignment?.warehouse_id ?? activeWarehouses[0]?.id ?? "")
     }catch(e){setError((e as {message?:string}).message??"Could not load POS data.")}
     finally{setLoading(false)}
   },[])
