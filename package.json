@@ -5,6 +5,6 @@
   "description": "Root-level scripts for Render API services configured at the repository root.",
   "scripts": {
     "build": "npm --prefix api ci && npm --prefix api run build",
-    "start:prod": "npm --prefix api run migrate && npm --prefix api run start:prod"
+    "start:prod": "npm --prefix api run migrate:subscriptions && npm --prefix api run start:prod"
   }
 }

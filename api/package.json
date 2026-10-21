@@ -21,7 +21,8 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "migrate": "node scripts/migrate.mjs",
     "migrate:down": "node-pg-migrate -c migrate.config.ts down",
-    "migrate:create": "node-pg-migrate -c migrate.config.ts create"
+    "migrate:create": "node-pg-migrate -c migrate.config.ts create",
+    "migrate:subscriptions": "node scripts/migrate-subscription-entitlements.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
