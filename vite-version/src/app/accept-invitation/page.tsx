@@ -35,7 +35,7 @@ export default function AcceptInvitationPage() {
     navigate("/dashboard", { replace: true });
   };
 
-  const completeInvitation = async (identityToken: string) => {
+  const completeInvitation = React.useCallback(async (identityToken: string) => {
     const needsMfa = await finishNeonInvitation(identityToken, invitationToken);
     if (needsMfa) {
       navigate("/login?mfa=1", { replace: true });
@@ -44,19 +44,16 @@ export default function AcceptInvitationPage() {
     await refreshUser();
     setAccepted(true);
     navigate("/dashboard", { replace: true });
-  };
+  }, [finishNeonInvitation, invitationToken, navigate, refreshUser]);
 
-  const magicLinkAttempted = React.useRef(false);
   React.useEffect(() => {
-    if (!invitationToken || user || magicLinkAttempted.current) return;
-    magicLinkAttempted.current = true;
-    let active = true;
+    if (!invitationToken || user) return;
+    // Neon Auth redirects the email magic link back to this URL after establishing
+    // its session. Try the identity-token exchange automatically; a direct visit
+    // without a Neon session falls back to the account verification form below.
     void getNeonIdentityToken()
-      .then(identityToken => active ? completeInvitation(identityToken) : undefined)
-      .catch(() => {
-        // A direct visit has no Neon session yet; keep the manual verification flow available.
-      });
-    return () => { active = false; };
+      .then(identityToken => completeInvitation(identityToken))
+      .catch(() => undefined);
   }, [invitationToken, user, completeInvitation]);
 
   const handleSubmit = async (event: React.FormEvent) => {
