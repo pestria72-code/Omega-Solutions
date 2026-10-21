@@ -325,12 +325,15 @@ export class PosService {
     const {companyId}=await this.company(user);
     const parsed=Number.parseInt(limit??'50',10);
     const safeLimit=Number.isFinite(parsed)?Math.max(1,Math.min(parsed,100)):50;
+    const canViewTeam=user.permissions.includes('sales:team-read');
+    // Company-wide POS history is only visible with the explicit team-read permission.
     return (await this.db.query(
       `SELECT s.id,s.sale_number,s.shift_id,s.register_id,s.warehouse_id,s.invoice_id,s.subtotal,s.tax_amount,s.total,s.amount_confirmed,s.status,s.created_at,
         i.invoice_number,i.status AS invoice_status,c.name AS customer_name
        FROM pos_sales s JOIN invoices i ON i.id=s.invoice_id AND i.company_id=s.company_id
        JOIN customers c ON c.id=i.customer_id AND c.company_id=i.company_id
-       WHERE s.company_id=$1 ORDER BY s.created_at DESC LIMIT $2`,[companyId,safeLimit])).rows;
+       WHERE s.company_id=$1 AND ($3::boolean=true OR s.created_by=$4)
+       ORDER BY s.created_at DESC LIMIT $2`,[companyId,safeLimit,canViewTeam,user.userId])).rows;
   }
 
   async openShift(user: AuthenticatedUser, input: OpenShiftInput) {
