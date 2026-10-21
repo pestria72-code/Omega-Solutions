@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { InvoicesController } from './invoices.controller.js';
 import { InvoicesService } from './invoices.service.js';
+import { MpesaService } from './mpesa.service.js';
+import { MpesaController } from './mpesa.controller.js';
 import { MembershipsModule } from '../memberships/memberships.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { RbacModule } from '../rbac/rbac.module.js';
@@ -9,7 +11,8 @@ import { AccountingModule } from '../accounting/accounting.module.js';
 
 @Module({
   imports: [MembershipsModule, AuditModule, RbacModule, AuthModule, AccountingModule],
-  controllers: [InvoicesController],
-  providers: [InvoicesService],
+  controllers: [InvoicesController, MpesaController],
+  providers: [InvoicesService, MpesaService],
+  exports: [InvoicesService],
 })
 export class InvoicesModule {}
