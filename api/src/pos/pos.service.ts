@@ -172,7 +172,7 @@ export class PosService {
       [companyId,warehouseId??null,term?`%${term}%`:null]);
     return result.rows.map((row: Record<string, unknown>) => {
       const { image_storage_key: storageKey, ...product } = row;
-      const { cost_price: costPrice, ...salespersonSafeProduct } = product;
+      const salespersonSafeProduct = Object.fromEntries(Object.entries(product).filter(([key]) => key !== 'cost_price'));
       const visibleProduct = user.permissions.includes('sales:team-read') ? product : salespersonSafeProduct;
       return { ...visibleProduct, image_url: storageKey ? this.imageStorage.signedReadUrl(String(storageKey)) : product.image_url };
     });
