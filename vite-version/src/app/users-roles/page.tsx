@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/contexts/auth-context";
 
-type Role = "owner" | "admin" | "manager" | "staff" | "viewer";
+type Role = "owner" | "admin" | "manager" | "staff" | "salesperson" | "viewer";
 type Member = {
   membership_id: string; user_id: string; company_id: string; branch_id: string | null;
   role: Role; is_active: boolean; full_name: string; email: string; phone: string | null;
