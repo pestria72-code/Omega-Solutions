@@ -6,6 +6,7 @@ import { MembershipsModule } from '../memberships/memberships.module.js';
 import { AuditModule } from '../audit/audit.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { RbacModule } from '../rbac/rbac.module.js';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module.js';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { RbacModule } from '../rbac/rbac.module.js';
     AuditModule,
     AuthModule,
     RbacModule,
+    SubscriptionsModule,
   ],
   controllers: [BranchesController],
   providers: [BranchesService],

@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { BranchRow } from './branch.types.js';
 import type { CreateBranchDto, UpdateBranchDto } from './dto/branch.dto.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 
 const BRANCH_COLUMNS = `
   id, company_id, name, code, address_line1, address_line2,
@@ -21,6 +22,7 @@ export class BranchesService {
     private readonly db: DatabaseService,
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   async listByCompany(user: AuthenticatedUser, companyId: string): Promise<BranchRow[]> {
@@ -46,6 +48,7 @@ export class BranchesService {
     dto: CreateBranchDto,
   ): Promise<BranchRow> {
     await this.memberships.requireRole(user.userId, companyId, ['owner', 'admin', 'manager']);
+    await this.subscriptions.assertBranchCapacity(companyId);
 
     if (dto.code) {
       const existing = await this.db.query<{ id: string }>(

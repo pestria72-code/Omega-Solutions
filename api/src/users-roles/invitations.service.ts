@@ -10,6 +10,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { CreateInvitationDto } from './dto/invitations.dto.js';
 
@@ -22,6 +23,7 @@ export class InvitationsService {
     private readonly db: DatabaseService,
     private readonly memberships: MembershipsService,
     private readonly audit: AuditService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   async list(user: AuthenticatedUser) {
@@ -74,6 +76,7 @@ export class InvitationsService {
       [actor.companyId, email],
     );
     if (existing.rows.length) throw new ConflictException('An active invitation already exists for this email.');
+    await this.subscriptions.assertUserCapacity(actor.companyId);
 
     const token = randomBytes(32).toString('base64url');
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -156,6 +159,7 @@ export class InvitationsService {
         [user.userId, invite.company_id],
       );
       if (existing.rows.length) throw new ConflictException('This account already has a membership in the invited company.');
+      await this.subscriptions.assertUserCapacity(invite.company_id, client);
       if (invite.branch_id) {
         const branch = await client.query(
           'SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_active = true',

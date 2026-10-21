@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -180,6 +181,53 @@ export class SubscriptionsService {
         throw new ConflictException('There is already a pending request for this module.');
       }
       throw error;
+    }
+  }
+
+  async assertBranchCapacity(companyId: string) {
+    const plan = await this.db.query<{ status: string; max_branches: number; plan_name: string }>(
+      `SELECT s.status, p.max_branches, p.name AS plan_name
+       FROM company_subscriptions s JOIN subscription_plans p ON p.code = s.plan_code
+       WHERE s.company_id = $1`,
+      [companyId],
+    );
+    if (!plan.rows.length) return;
+    const current = plan.rows[0];
+    if (!['active', 'trialing'].includes(current.status)) {
+      throw new ForbiddenException('An active subscription is required to add branches.');
+    }
+    const count = await this.db.query<{ used: number }>(
+      'SELECT count(*)::int AS used FROM branches WHERE company_id = $1 AND is_active = true',
+      [companyId],
+    );
+    if (count.rows[0].used >= current.max_branches) {
+      throw new ForbiddenException(`Your ${current.plan_name} plan allows up to ${current.max_branches} active branches. Request a plan change to add more.`);
+    }
+  }
+
+  async assertUserCapacity(companyId: string, client?: import('pg').PoolClient) {
+    const query = async <T extends Record<string, unknown>>(sql: string, params: (string | number | boolean | Date | null)[]) =>
+      client ? client.query<T>(sql, params) : this.db.query<T>(sql, params);
+    const plan = await query<{ status: string; max_users: number; plan_name: string }>(
+      `SELECT s.status, p.max_users, p.name AS plan_name
+       FROM company_subscriptions s JOIN subscription_plans p ON p.code = s.plan_code
+       WHERE s.company_id = $1`,
+      [companyId],
+    );
+    if (!plan.rows.length) return;
+    const current = plan.rows[0];
+    if (!['active', 'trialing'].includes(current.status)) {
+      throw new ForbiddenException('An active subscription is required to invite or add users.');
+    }
+    const count = await query<{ used: number }>(
+      `SELECT
+         (SELECT count(*) FROM company_memberships WHERE company_id = $1 AND is_active = true)
+         + (SELECT count(*) FROM company_invitations
+            WHERE company_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()) AS used`,
+      [companyId],
+    );
+    if (Number(count.rows[0].used) > current.max_users) {
+      throw new ForbiddenException(`Your ${current.plan_name} plan allows up to ${current.max_users} users, including pending invitations. Remove an invitation or request a plan change.`);
     }
   }
 
