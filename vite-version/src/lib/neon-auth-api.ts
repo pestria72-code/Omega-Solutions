@@ -116,22 +116,40 @@ export async function verifyNeonEmailAndSignIn(input: {
 export async function signInWithNeon(emailInput: string, password: string): Promise<string> {
   const email = emailInput.trim().toLowerCase();
   const signInResponse = await neonRequest("/sign-in/email", { email, password });
-  // Prefer the JWT returned by Neon Auth itself when available. This avoids
-  // making a successful sign-in depend on a second cross-origin session request.
+
+  // Prefer the JWT returned by Neon Auth itself (including its set-auth-jwt
+  // response header). A second cross-origin /token request can fail when browser
+  // cookie restrictions block the Auth session cookie, even after sign-in worked.
   const directToken = signInResponse.jwt
     || signInResponse.accessToken
     || signInResponse.access_token
     || signInResponse.data?.jwt
     || signInResponse.data?.accessToken
-    || signInResponse.data?.access_token;
+    || signInResponse.data?.access_token
+    || signInResponse.data?.session?.access_token
+    || signInResponse.data?.session?.accessToken;
   if (directToken) return directToken;
 
-  const tokenResponse = await neonRequest("/get-session");
-  const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
-  if (!token) {
-    throw new Error("Email sign-in succeeded, but the secure sign-in token was not returned.");
+  // Only call /token when sign-in did not return a JWT.
+  try {
+    const tokenResponse = await neonRequest("/token");
+    const token = tokenResponse.jwt
+      || tokenResponse.accessToken
+      || tokenResponse.access_token
+      || tokenResponse.data?.jwt
+      || tokenResponse.data?.token
+      || tokenResponse.data?.accessToken
+      || tokenResponse.data?.access_token
+      || tokenResponse.data?.session?.access_token
+      || tokenResponse.data?.session?.accessToken
+      || tokenResponse.token;
+    if (token) return token;
+  } catch {
+    // Surface the account-setup error below instead of a misleading fallback
+    // session Unauthorized when the sign-in response had no JWT.
   }
-  return token;
+
+  throw new Error("Your email was verified, but Omega could not complete account setup securely. Please try again.");
 }
 
 export async function getNeonIdentityToken(): Promise<string> {
