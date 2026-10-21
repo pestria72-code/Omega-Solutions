@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api-client";
-import { registerWithNeon, resendNeonVerification, verifyNeonEmailAndSignIn } from "@/lib/neon-auth-api";
+import { getNeonIdentityToken, registerWithNeon, resendNeonVerification, verifyNeonEmailAndSignIn } from "@/lib/neon-auth-api";
 import { useAuth } from "@/contexts/auth-context";
 
 
@@ -45,6 +45,19 @@ export default function AcceptInvitationPage() {
     setAccepted(true);
     navigate("/dashboard", { replace: true });
   };
+
+  const magicLinkAttempted = React.useRef(false);
+  React.useEffect(() => {
+    if (!invitationToken || user || magicLinkAttempted.current) return;
+    magicLinkAttempted.current = true;
+    let active = true;
+    void getNeonIdentityToken()
+      .then(identityToken => active ? completeInvitation(identityToken) : undefined)
+      .catch(() => {
+        // A direct visit has no Neon session yet; keep the manual verification flow available.
+      });
+    return () => { active = false; };
+  }, [invitationToken, user, completeInvitation]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -101,7 +114,7 @@ export default function AcceptInvitationPage() {
   };
 
   return <BaseLayout><div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 lg:px-6">
-    <PageHeader title="Accept company invitation" description="Create your Omega account and verify your email to join the company workspace."/>
+    <PageHeader title="Accept company invitation" description="Open the secure Neon Auth invitation link to join your company workspace, or create and verify your Omega account here."/>
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><MailCheck className="size-5"/>Invitation details</CardTitle><CardDescription>Omega verifies your email and activates the company membership assigned by your administrator.</CardDescription></CardHeader><CardContent className="space-y-4">
       {error && <div role="alert" className="flex gap-2 rounded-md border border-destructive/30 p-3 text-sm text-destructive"><AlertCircle className="size-4 shrink-0"/>{error}</div>}
       {notice && <div role="status" className="rounded-md border p-3 text-sm text-muted-foreground">{notice}</div>}
