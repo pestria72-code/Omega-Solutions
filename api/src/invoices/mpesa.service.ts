@@ -50,8 +50,8 @@ export class MpesaService {
       : await this.memberships.getMembership(user.userId);
     const phone = this.normalizePhone(phoneInput);
     const amount = Math.round(Number(amountInput) * 100) / 100;
-    if (!Number.isFinite(amount) || amount < 1) {
-      throw new BadRequestException('M-Pesa payment must be at least KES 1.00.');
+    if (!Number.isFinite(amount) || amount < 1 || !Number.isInteger(amount)) {
+      throw new BadRequestException('M-Pesa STK payments must be a whole KES amount of at least KES 1.');
     }
 
     const invoiceResult = await this.db.query<{
