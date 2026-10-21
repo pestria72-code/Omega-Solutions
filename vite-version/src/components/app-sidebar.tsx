@@ -78,7 +78,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "Customers", url: "/customers", icon: Users },
       { title: "Point of Sale", url: "/pos", icon: Store, module: "pos" },
-      { title: "My Assigned Stock", url: "/salesperson-stock", icon: Boxes, module: "inventory" },
+      { title: "My Assigned Stock", url: "/salesperson-stock", icon: Boxes, module: "pos" },
       { title: "Quotations", url: "/quotations", icon: FileText },
       { title: "Sales Orders", url: "/sales-orders", icon: ShoppingCart },
       { title: "Invoices", url: "/invoices", icon: Receipt },
