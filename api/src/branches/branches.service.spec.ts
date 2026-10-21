@@ -3,6 +3,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import { AuditService } from '../audit/audit.service.js';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service.js';
 import { BranchesService } from './branches.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import type { BranchRow } from './branch.types.js';
@@ -63,6 +64,7 @@ describe('BranchesService', () => {
         { provide: DatabaseService, useValue: db },
         { provide: MembershipsService, useValue: memberships },
         { provide: AuditService, useValue: audit },
+        { provide: SubscriptionsService, useValue: { assertBranchCapacity: vi.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
 
