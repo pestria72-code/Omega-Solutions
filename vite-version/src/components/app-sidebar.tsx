@@ -31,6 +31,7 @@ import {
   Headset,
   Factory,
   ShieldCheck,
+  CreditCard,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { NavMain } from "@/components/nav-main"
@@ -75,7 +76,7 @@ const navGroups: NavGroup[] = [
     module: "sales",
     items: [
       { title: "Customers", url: "/customers", icon: Users },
-      { title: "Point of Sale", url: "/pos", icon: Store },
+      { title: "Point of Sale", url: "/pos", icon: Store, module: "pos" },
       { title: "Quotations", url: "/quotations", icon: FileText },
       { title: "Sales Orders", url: "/sales-orders", icon: ShoppingCart },
       { title: "Invoices", url: "/invoices", icon: Receipt },
@@ -128,11 +129,12 @@ const navGroups: NavGroup[] = [
     label: "Administration",
     module: "core",
     items: [
-      { title: "Approval Inbox", url: "/approvals", icon: ShieldCheck },
+      { title: "Approval Inbox", url: "/approvals", icon: ShieldCheck, module: "procurement" },
       { title: "Companies & Branches", url: "/companies", icon: Building2 },
       { title: "Users & Roles", url: "/users-roles", icon: UserCog },
       { title: "Audit Logs", url: "/audit-logs", icon: ScrollText },
       { title: "Settings", url: "/settings", icon: Settings },
+      { title: "Plans & Billing", url: "/settings/billing", icon: CreditCard },
     ],
   },
 ]
