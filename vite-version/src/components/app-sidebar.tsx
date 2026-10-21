@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { LucideIcon } from "lucide-react"
 import {
   LayoutDashboard,
   ChartNoAxesCombined,
@@ -44,17 +45,24 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { useMyCompany } from "@/hooks/use-company"
+import { api } from "@/lib/api-client"
 
-const navGroups = [
+type NavItem = { title: string; url: string; icon: LucideIcon; module?: string }
+type NavGroup = { label: string; module: string; items: NavItem[] }
+type SubscriptionAccess = { subscription: null | { status: string }; modules?: Record<string, boolean> }
+
+const navGroups: NavGroup[] = [
   {
     label: "Overview",
+    module: "core",
     items: [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-      { title: "Sales Dashboard", url: "/sales-dashboard", icon: ChartNoAxesCombined },
+      { title: "Sales Dashboard", url: "/sales-dashboard", icon: ChartNoAxesCombined, module: "sales" },
     ],
   },
   {
     label: "CRM",
+    module: "crm",
     items: [
       { title: "Leads & Pipeline", url: "/crm", icon: Users },
       { title: "Campaigns", url: "/crm/campaigns", icon: Megaphone },
@@ -64,6 +72,7 @@ const navGroups = [
   },
   {
     label: "Sales",
+    module: "sales",
     items: [
       { title: "Customers", url: "/customers", icon: Users },
       { title: "Point of Sale", url: "/pos", icon: Store },
@@ -76,6 +85,7 @@ const navGroups = [
   },
   {
     label: "Purchasing",
+    module: "procurement",
     items: [
       { title: "Suppliers", url: "/suppliers", icon: Briefcase },
       { title: "Requisitions", url: "/requisitions", icon: ClipboardList },
@@ -85,25 +95,28 @@ const navGroups = [
   },
   {
     label: "Inventory",
+    module: "inventory",
     items: [
       { title: "Products", url: "/products", icon: Package },
       { title: "Stock Levels", url: "/stock-levels", icon: Boxes },
       { title: "Warehouses", url: "/warehouses", icon: Building },
       { title: "Stock Movements", url: "/stock-movements", icon: ArrowLeftRight },
-      { title: "Manufacturing", url: "/manufacturing", icon: Factory },
+      { title: "Manufacturing", url: "/manufacturing", icon: Factory, module: "manufacturing" },
     ],
   },
   {
     label: "Finance",
+    module: "accounting",
     items: [
       { title: "Chart of Accounts", url: "/chart-of-accounts", icon: BookOpen },
       { title: "Expenses", url: "/expenses", icon: Wallet },
       { title: "Financial Reports", url: "/financial-reports", icon: FileBarChart },
-      { title: "Reports", url: "/reports", icon: FileBarChart },
+      { title: "Reports", url: "/reports", icon: FileBarChart, module: "reports" },
     ],
   },
   {
     label: "People",
+    module: "hr_workforce",
     items: [
       { title: "Employees", url: "/employees", icon: UserCircle },
       { title: "Workforce", url: "/workforce", icon: ClipboardList },
@@ -113,6 +126,7 @@ const navGroups = [
   },
   {
     label: "Administration",
+    module: "core",
     items: [
       { title: "Approval Inbox", url: "/approvals", icon: ShieldCheck },
       { title: "Companies & Branches", url: "/companies", icon: Building2 },
@@ -125,6 +139,39 @@ const navGroups = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { company } = useMyCompany()
+  const [access, setAccess] = React.useState<SubscriptionAccess | null>(null)
+  const [accessLoaded, setAccessLoaded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!company?.id) return
+    let cancelled = false
+    setAccessLoaded(false)
+    api.get<SubscriptionAccess>("/subscriptions/current")
+      .then((result) => {
+        if (!cancelled) setAccess(result)
+      })
+      .catch(() => {
+        // Fail closed in the navigation when subscription data cannot be loaded.
+        if (!cancelled) setAccess({ subscription: { status: "unknown" }, modules: {} })
+      })
+      .finally(() => {
+        if (!cancelled) setAccessLoaded(true)
+      })
+    return () => { cancelled = true }
+  }, [company?.id])
+
+  const canShowModule = (moduleCode: string) => {
+    if (!accessLoaded) return moduleCode === "core"
+    if (!access?.subscription) return true // Legacy tenants retain their current navigation.
+    if (moduleCode === "core") return true
+    if (!["active", "trialing"].includes(access.subscription.status)) return false
+    return access.modules?.[moduleCode] === true
+  }
+
+  const visibleGroups = navGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => canShowModule(item.module ?? group.module)),
+  })).filter((group) => group.items.length > 0)
 
   return (
     <Sidebar {...props}>
@@ -146,7 +193,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <NavMain key={group.label} label={group.label} items={group.items} />
         ))}
       </SidebarContent>
