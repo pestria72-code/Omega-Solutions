@@ -21,6 +21,7 @@ type StkRequest = {
   invoice_payment_id: string | null;
   status: string;
   mpesa_receipt_number: string | null;
+  updated_at?: string | Date;
 };
 
 type CallbackItem = { Name?: string; Value?: string | number };
@@ -171,7 +172,7 @@ export class MpesaService {
       this.logger.warn('Received an M-Pesa callback for an unknown checkout request.');
       return { ResultCode: 0, ResultDesc: 'Callback acknowledged.' };
     }
-    if (request.status === 'reconciled' || request.status === 'failed') {
+    if (request.status === 'reconciled' || request.status === 'failed' || request.status === 'review') {
       return { ResultCode: 0, ResultDesc: 'Callback already processed.' };
     }
 
@@ -232,14 +233,19 @@ export class MpesaService {
     }
 
     let paymentId = request.invoice_payment_id;
+    let skipRecentProcessing = false;
     try {
       await this.db.transaction(async (client) => {
         const locked = await client.query<StkRequest>(
-          'SELECT id,company_id,invoice_id,requested_by,phone_number,amount,account_reference,checkout_request_id,invoice_payment_id,status,mpesa_receipt_number FROM mpesa_stk_requests WHERE id=$1 FOR UPDATE',
+          'SELECT id,company_id,invoice_id,requested_by,phone_number,amount,account_reference,checkout_request_id,invoice_payment_id,status,mpesa_receipt_number,updated_at FROM mpesa_stk_requests WHERE id=$1 FOR UPDATE',
           [request.id],
         );
         const current = locked.rows[0];
-        if (!current || current.status === 'reconciled') return;
+        if (!current || current.status === 'reconciled' || current.status === 'review' || current.status === 'failed') return;
+        if (current.status === 'processing' && current.updated_at && Date.now() - new Date(current.updated_at).getTime() < 120000) {
+          skipRecentProcessing = true;
+          return;
+        }
         if (current.mpesa_receipt_number && current.mpesa_receipt_number !== receipt) {
           await client.query(`UPDATE mpesa_stk_requests SET status='review',failure_reason='Callback receipt changed across retries.',updated_at=NOW() WHERE id=$1`, [request.id]);
           return;
@@ -272,6 +278,7 @@ export class MpesaService {
         );
       });
 
+      if (skipRecentProcessing) return { ResultCode: 0, ResultDesc: 'Callback already being processed.' };
       const latest = await this.db.query<StkRequest>(
         'SELECT id,company_id,invoice_id,requested_by,phone_number,amount,account_reference,checkout_request_id,invoice_payment_id,status,mpesa_receipt_number FROM mpesa_stk_requests WHERE id=$1',
         [request.id],
