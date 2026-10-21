@@ -83,7 +83,7 @@ export default function UsersRolesPage() {
         email: inviteEmail.trim(), role: inviteRole, branchId: inviteBranchId || null,
       });
       setInviteEmail("");
-      setNotice("Invitation email sent to " + result.email + ".");
+      setNotice("Neon Auth invitation email sent to " + result.email + ".");
       setInvitationError("");
       setInvitations(await api.get<Invitation[]>("/users-roles/invitations"));
     } catch (e) { setError(errorText(e)); }
@@ -114,14 +114,14 @@ export default function UsersRolesPage() {
         </div>
       </div>)}</div>}
     </CardContent></Card>
-    {canManage && <Card><CardHeader><CardTitle className="flex items-center gap-2"><MailPlus className="size-4"/>Invite a team member</CardTitle><CardDescription>Send a secure, seven-day invitation link. The recipient must sign in with the invited email address.</CardDescription></CardHeader><CardContent className="space-y-4">
+    {canManage && <Card><CardHeader><CardTitle className="flex items-center gap-2"><MailPlus className="size-4"/>Invite a team member</CardTitle><CardDescription>Neon Auth sends the invitation email. Omega enforces the invited email, company, branch and role.</CardDescription></CardHeader><CardContent className="space-y-4">
       <form onSubmit={e => void sendInvitation(e)} className="grid gap-3 rounded-lg border p-4 md:grid-cols-2">
         <div className="space-y-2"><Label htmlFor="invite-email">Work email</Label><Input id="invite-email" type="email" required maxLength={254} value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="person@company.com"/></div>
         <div className="space-y-2"><Label htmlFor="invite-role">Role</Label><select id="invite-role" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={inviteRole} onChange={e=>setInviteRole(e.target.value as Exclude<Role,"owner">)}>{roles.filter(r=>r!=="admin"||user?.role==="owner").map(r=><option key={r} value={r}>{title(r)}</option>)}</select></div>
         <div className="space-y-2"><Label htmlFor="invite-branch">Branch (optional)</Label><select id="invite-branch" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={inviteBranchId} onChange={e=>setInviteBranchId(e.target.value)}><option value="">All branches / no branch assigned</option>{branches.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
         <div className="flex items-end"><Button type="submit" disabled={invitationLoading||!inviteEmail.trim()}><MailPlus className="mr-2 size-4"/>{invitationLoading?"Working…":"Send invitation"}</Button></div>
       </form>
-      {invitationError && <p className="text-sm text-muted-foreground">Invitation history is currently unavailable: {invitationError}. Confirm the development database migration and email-provider configuration.</p>}
+      {invitationError && <p className="text-sm text-muted-foreground">Invitation history is currently unavailable: {invitationError}. Confirm the development database migration and Neon Auth configuration.</p>}
       {invitations.length>0 && <div className="space-y-2">{invitations.map(i=><div key={i.id} className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="break-all text-sm font-medium">{i.email}</p><p className="text-xs text-muted-foreground">{title(i.role)} · {i.accepted_at?"Accepted":i.revoked_at?"Revoked":new Date(i.expires_at).getTime()<=Date.now()?"Expired":"Pending"} · Expires {new Date(i.expires_at).toLocaleDateString()}</p></div>{!i.accepted_at&&!i.revoked_at&&new Date(i.expires_at).getTime()>Date.now()&&<Button type="button" variant="outline" size="sm" disabled={invitationLoading} onClick={()=>void revokeInvitation(i)}><Ban className="mr-2 size-4"/>Revoke</Button>}</div>)}</div>}
     </CardContent></Card>}
     <Card><CardHeader><CardTitle className="flex items-center gap-2"><Shield className="size-4"/>Role permissions</CardTitle><CardDescription>These are the permissions assigned to each system role in the backend. API endpoints enforce them on every request.</CardDescription></CardHeader><CardContent>
