@@ -77,6 +77,18 @@ describe('PosService', () => {
     expect(db.query).toHaveBeenCalledTimes(1);
   });
 
+  it('limits POS history to the current salesperson unless team-read is granted', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.listSales({ ...user, permissions: ['sales:read'] }, '10');
+    expect(db.query.mock.calls[0][0]).toContain('s.company_id=$1 AND ($3::boolean=true OR s.created_by=$4)');
+    expect(db.query.mock.calls[0][1]).toEqual(['company-1', 10, false, 'cashier-1']);
+
+    db.query.mockClear();
+    await service.listSales({ ...user, permissions: ['sales:read', 'sales:team-read'] }, '10');
+    expect(db.query.mock.calls[0][1]).toEqual(['company-1', 10, true, 'cashier-1']);
+  });
+
   it('keeps the current shift lookup company- and cashier-scoped', async () => {
     db.query.mockResolvedValue({ rows: [], rowCount: 0 });
     expect(await service.currentShift(user)).toBeNull();
