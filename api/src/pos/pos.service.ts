@@ -140,7 +140,7 @@ export class PosService {
     const {companyId}=await this.company(user);
     if(!input.userId||!input.warehouseId||input.userId===user.userId) throw new BadRequestException('Choose a salesperson and warehouse.');
     const saved=await this.db.transaction(async client=>{
-      const m=await client.query(`SELECT m.user_id FROM company_memberships m JOIN users u ON u.id=m.user_id WHERE m.company_id=$1 AND m.user_id=$2 AND m.is_active=true AND u.is_active=true AND m.role='staff' FOR SHARE`,[companyId,input.userId]);
+      const m=await client.query(`SELECT m.user_id FROM company_memberships m JOIN users u ON u.id=m.user_id WHERE m.company_id=$1 AND m.user_id=$2 AND m.is_active=true AND u.is_active=true AND m.role IN ('staff','salesperson') FOR SHARE`,[companyId,input.userId]);
       if(!m.rows[0]) throw new BadRequestException('Salesperson must be active staff in this company.');
       const w=await client.query('SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true FOR SHARE',[input.warehouseId,companyId]);
       if(!w.rows[0]) throw new BadRequestException('Choose an active warehouse belonging to this company.');
