@@ -110,7 +110,7 @@ export class InvitationsService {
             '',
             'This invitation expires in seven days and can only be used once.',
             'If you were not expecting this invitation, you can ignore this email.',
-          ].join('\n'),
+          ].join('\\n'),
           html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#202124;line-height:1.5">
             <h1 style="font-size:24px">You are invited to Omega Solutions</h1>
             <p>A company administrator has invited you to join their Omega Solutions workspace.</p>
@@ -123,7 +123,7 @@ export class InvitationsService {
         signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) {
-        const providerMessage = (await response.text()).split(/\r?\n/).join(' ').slice(0, 300);
+        const providerMessage = (await response.text()).split(/\\r?\\n/).join(' ').slice(0, 300);
         console.error(`Omega invitation email delivery failed: HTTP ${response.status}; response=${providerMessage}`);
         throw new Error(`Email provider returned HTTP ${response.status}`);
       }
