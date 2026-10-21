@@ -59,6 +59,10 @@ export function ProtectedLayout() {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
+  if (user.role === "salesperson" && location.pathname === "/dashboard") {
+    return <Navigate to="/sales-dashboard" replace />
+  }
+
   if (accessLoaded && hasSubscription && !moduleAllowed) {
     return <Navigate to="/settings/billing" replace state={{ blockedModule: required }} />
   }
