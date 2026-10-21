@@ -46,6 +46,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { useMyCompany } from "@/hooks/use-company"
+import { useAuth } from "@/contexts/auth-context"
 import { api } from "@/lib/api-client"
 
 type NavItem = { title: string; url: string; icon: LucideIcon; module?: string }
@@ -77,6 +78,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: "Customers", url: "/customers", icon: Users },
       { title: "Point of Sale", url: "/pos", icon: Store, module: "pos" },
+      { title: "My Assigned Stock", url: "/salesperson-stock", icon: Boxes, module: "inventory" },
       { title: "Quotations", url: "/quotations", icon: FileText },
       { title: "Sales Orders", url: "/sales-orders", icon: ShoppingCart },
       { title: "Invoices", url: "/invoices", icon: Receipt },
@@ -141,6 +143,8 @@ const navGroups: NavGroup[] = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { company } = useMyCompany()
+  const { user } = useAuth()
+  const isSalesperson = user?.role === "salesperson"
   const [access, setAccess] = React.useState<SubscriptionAccess | null>(null)
   const [accessLoaded, setAccessLoaded] = React.useState(false)
 
@@ -170,17 +174,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     return access.modules?.[moduleCode] === true
   }
 
-  const visibleGroups = navGroups.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => canShowModule(item.module ?? group.module)),
-  })).filter((group) => group.items.length > 0)
+  const visibleGroups = isSalesperson
+    ? [
+        {
+          label: "My Workspace",
+          module: "core",
+          items: [
+            { title: "Sales Dashboard", url: "/sales-dashboard", icon: ChartNoAxesCombined },
+            { title: "Point of Sale", url: "/pos", icon: Store },
+            { title: "My Assigned Stock", url: "/salesperson-stock", icon: Boxes },
+            { title: "Customers", url: "/customers", icon: Users },
+          ].filter((item) => item.url !== "/pos" || canShowModule("pos"))
+            .filter((item) => item.url !== "/customers" || canShowModule("sales")),
+        },
+      ]
+    : navGroups.map((group) => ({
+        ...group,
+        items: group.items.filter((item) => canShowModule(item.module ?? group.module)),
+      })).filter((group) => group.items.length > 0)
 
   return (
     <Sidebar {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link to="/dashboard" />}>
+            <SidebarMenuButton size="lg" render={<Link to={isSalesperson ? "/sales-dashboard" : "/dashboard"} />}>
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <span className="text-sm font-bold">Ω</span>
               </div>
