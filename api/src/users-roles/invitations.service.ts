@@ -93,7 +93,7 @@ export class InvitationsService {
       const response = await fetch(`${neonAuthBaseUrl}/sign-in/magic-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ email, name: 'Omega Solutions', callbackURL: acceptUrl.toString() }),
+        body: JSON.stringify({ email, name: email.split('@')[0], callbackURL: acceptUrl.toString() }),
         signal: AbortSignal.timeout(12000),
       });
       if (!response.ok) {
