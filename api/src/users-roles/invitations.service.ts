@@ -159,7 +159,7 @@ export class InvitationsService {
         [user.userId, invite.company_id],
       );
       if (existing.rows.length) throw new ConflictException('This account already has a membership in the invited company.');
-      await this.subscriptions.assertUserCapacity(invite.company_id, client);
+      await this.subscriptions.assertUserCapacity(invite.company_id, client, true);
       if (invite.branch_id) {
         const branch = await client.query(
           'SELECT id FROM branches WHERE id = $1 AND company_id = $2 AND is_active = true',

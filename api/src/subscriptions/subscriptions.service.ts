@@ -205,7 +205,7 @@ export class SubscriptionsService {
     }
   }
 
-  async assertUserCapacity(companyId: string, client?: import('pg').PoolClient) {
+  async assertUserCapacity(companyId: string, client?: import('pg').PoolClient, acceptingReservedInvite = false) {
     const query = async <T extends Record<string, unknown>>(sql: string, params: (string | number | boolean | Date | null)[]) =>
       client ? client.query<T>(sql, params) : this.db.query<T>(sql, params);
     const plan = await query<{ status: string; max_users: number; plan_name: string }>(
@@ -226,7 +226,7 @@ export class SubscriptionsService {
             WHERE company_id = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()) AS used`,
       [companyId],
     );
-    if (Number(count.rows[0].used) > current.max_users) {
+    if (acceptingReservedInvite ? Number(count.rows[0].used) > current.max_users : Number(count.rows[0].used) >= current.max_users) {
       throw new ForbiddenException(`Your ${current.plan_name} plan allows up to ${current.max_users} users, including pending invitations. Remove an invitation or request a plan change.`);
     }
   }
