@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { PricingPlans } from "@/components/pricing-plans"
 import { api } from "@/lib/api-client"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Loader2 } from "lucide-react"
+import { Loader2, PlusCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 type Plan = {
   code: string
@@ -21,6 +22,7 @@ type Plan = {
 type Current = {
   subscription: null | { planCode: string; planName: string; status: string; monthlyPriceKes: number }
   accessMode: string
+  modules?: Record<string, boolean>
   message?: string
 }
 
@@ -31,6 +33,7 @@ export default function BillingSettings() {
   const [error, setError] = React.useState<string | null>(null)
   const [notice, setNotice] = React.useState<string | null>(null)
   const [requesting, setRequesting] = React.useState(false)
+  const [requestingModule, setRequestingModule] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     let cancelled = false
@@ -63,6 +66,20 @@ export default function BillingSettings() {
     }
   }
 
+  const handleModuleSelect = async (moduleCode: string) => {
+    setRequestingModule(moduleCode)
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await api.post<{ message: string }>("/subscriptions/module-requests", { moduleCode })
+      setNotice(result.message)
+    } catch (err) {
+      setError((err as { message?: string }).message ?? "Could not submit the add-on request.")
+    } finally {
+      setRequestingModule(null)
+    }
+  }
+
   const formattedPlans = plans.map((plan) => ({
     id: plan.code,
     name: plan.name,
@@ -76,6 +93,17 @@ export default function BillingSettings() {
       `${plan.limits.branches} branch${plan.limits.branches === 1 ? "" : "es"}`,
     ],
   }))
+
+  const allOptionalModules = [
+    { code: "accounting", name: "Finance & Accounting", description: "Accounts, expenses and financial control" },
+    { code: "procurement", name: "Procurement", description: "Purchase orders, supplier bills and approvals" },
+    { code: "crm", name: "CRM", description: "Sales pipeline and customer follow-ups" },
+    { code: "manufacturing", name: "Manufacturing", description: "Production orders, bills of materials and costing" },
+    { code: "hr_workforce", name: "HR & Workforce", description: "Employees, attendance and payroll workflows" },
+  ]
+  const addOnModules = current?.subscription
+    ? allOptionalModules.filter((module) => current.modules?.[module.code] !== true)
+    : []
 
   return (
     <BaseLayout>
@@ -119,7 +147,8 @@ export default function BillingSettings() {
             ) : (
               <PricingPlans
                 plans={formattedPlans}
-                mode="pricing"
+                mode="billing"
+                currentPlanId={current?.subscription?.planCode}
                 onPlanSelect={handlePlanSelect}
               />
             )}
@@ -127,6 +156,33 @@ export default function BillingSettings() {
             <p className="mt-4 text-sm text-muted-foreground">Plan changes require billing confirmation. Payment-provider fees, custom integrations and hands-on implementation may be priced separately.</p>
           </CardContent>
         </Card>
+        {current?.subscription && addOnModules.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Optional modules</CardTitle>
+              <CardDescription>Request an add-on for your current plan. Requests are reviewed before activation; no charge or access change happens automatically.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {addOnModules.map((module) => (
+                <div key={module.code} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium">{module.name}</p>
+                    <p className="text-sm text-muted-foreground">{module.description}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={requestingModule !== null}
+                    onClick={() => handleModuleSelect(module.code)}
+                  >
+                    {requestingModule === module.code ? <Loader2 className="mr-2 size-4 animate-spin" /> : <PlusCircle className="mr-2 size-4" />}
+                    Request module
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </BaseLayout>
   )
