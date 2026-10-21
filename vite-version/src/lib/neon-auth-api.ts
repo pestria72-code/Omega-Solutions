@@ -66,7 +66,9 @@ async function neonRequest(path: string, body?: unknown): Promise<NeonResponse> 
   if (!response.ok || result.error) {
     throw new Error(result.message || result.error || "Email authentication failed. Check your details and try again.");
   }
-  return { ...result, jwt: response.headers.get("set-auth-jwt") || undefined };
+  const headerJwt = response.headers.get("set-auth-jwt");
+  // Do not erase a JWT returned in the JSON body when the optional header is absent.
+  return headerJwt ? { ...result, jwt: headerJwt } : result;
 }
 
 export async function registerWithNeon(input: {
