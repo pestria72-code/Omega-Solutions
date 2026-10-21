@@ -192,6 +192,31 @@ export class MpesaService {
       return { ResultCode: 0, ResultDesc: 'Callback acknowledged.' };
     }
 
+    try {
+      const verified = await this.verifyDarajaCheckout(checkoutId);
+      if (!verified) {
+        await this.db.query(
+          `UPDATE mpesa_stk_requests SET status='review',result_code='0',
+           result_description='Daraja transaction status could not be independently verified.',
+           callback_received_at=NOW(),callback_payload=$1::jsonb,
+           failure_reason='STK query did not confirm a successful transaction.',updated_at=NOW()
+           WHERE id=$2 AND status <> 'reconciled'`,
+          [JSON.stringify(payload), request.id],
+        );
+        return { ResultCode: 0, ResultDesc: 'Callback acknowledged for review.' };
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Daraja STK query failed';
+      this.logger.warn(`Unable to independently verify callback ${request.id}: ${reason}`);
+      await this.db.query(
+        `UPDATE mpesa_stk_requests SET status='review',failure_reason=$1,
+         callback_received_at=NOW(),callback_payload=$2::jsonb,updated_at=NOW()
+         WHERE id=$3 AND status <> 'reconciled'`,
+        [`Daraja verification failed: ${reason}`.slice(0, 500), JSON.stringify(payload), request.id],
+      );
+      return { ResultCode: 0, ResultDesc: 'Callback acknowledged for review.' };
+    }
+
     if (typeof receipt !== 'string' || !receipt.trim() ||
         callbackAmount === null || !Number.isFinite(callbackAmount) ||
         Math.round(callbackAmount * 100) !== Math.round(Number(request.amount) * 100) ||
@@ -296,6 +321,42 @@ export class MpesaService {
       );
     }
     return { ResultCode: 0, ResultDesc: 'Callback acknowledged.' };
+  }
+
+  private async verifyDarajaCheckout(checkoutId: string): Promise<boolean> {
+    const consumerKey = process.env.MPESA_CONSUMER_KEY;
+    const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+    const shortcode = process.env.MPESA_SHORTCODE;
+    const passkey = process.env.MPESA_PASSKEY;
+    if (!consumerKey || !consumerSecret || !shortcode || !passkey) {
+      throw new Error('Daraja credentials are not configured for callback verification.');
+    }
+    const base = process.env.MPESA_ENVIRONMENT === 'production'
+      ? 'https://api.safaricom.co.ke'
+      : 'https://sandbox.safaricom.co.ke';
+    const tokenResponse = await fetch(`${base}/oauth/v1/generate?grant_type=client_credentials`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64')}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!tokenResponse.ok) throw new Error(`Daraja OAuth returned HTTP ${tokenResponse.status}`);
+    const token = await tokenResponse.json() as { access_token?: string };
+    if (!token.access_token) throw new Error('Daraja did not return an access token.');
+    const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
+    const response = await fetch(`${base}/mpesa/stkpushquery/v1/query`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        BusinessShortCode: shortcode,
+        Password: password,
+        Timestamp: timestamp,
+        CheckoutRequestID: checkoutId,
+      }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error(`Daraja STK query returned HTTP ${response.status}`);
+    const data = await response.json() as { ResponseCode?: string; ResultCode?: string | number };
+    return data.ResponseCode === '0' && String(data.ResultCode) === '0';
   }
 
   async getStatus(user: AuthenticatedUser, requestId: string) {
