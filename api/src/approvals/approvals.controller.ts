@@ -5,9 +5,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import { RequireModule } from '../subscriptions/require-module.decorator.js';
+import { ModuleEntitlementsGuard } from '../subscriptions/module-entitlements.guard.js';
 
 @Controller('approvals')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequireModule('procurement')
+@UseGuards(JwtAuthGuard, PermissionsGuard, ModuleEntitlementsGuard)
 export class ApprovalsController {
   constructor(private readonly service: ApprovalsService) {}
   @Get() @RequirePermissions('approvals:read') inbox(@Req() req:{user:AuthenticatedUser}) { return this.service.inbox(req.user); }
