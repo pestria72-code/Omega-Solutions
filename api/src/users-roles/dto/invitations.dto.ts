@@ -5,8 +5,8 @@ export class CreateInvitationDto {
   @MaxLength(254)
   email!: string;
 
-  @IsIn(['admin', 'manager', 'staff', 'viewer'])
-  role!: 'admin' | 'manager' | 'staff' | 'viewer';
+  @IsIn(['admin', 'manager', 'staff', 'salesperson', 'viewer'])
+  role!: 'admin' | 'manager' | 'staff' | 'salesperson' | 'viewer';
 
   @IsOptional()
   @IsUUID()
