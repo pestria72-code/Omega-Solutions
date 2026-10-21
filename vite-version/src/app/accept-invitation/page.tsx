@@ -108,7 +108,7 @@ export default function AcceptInvitationPage() {
       {accepted ? <div role="status" className="space-y-3"><p className="flex items-center gap-2 text-sm"><CheckCircle2 className="size-5 text-emerald-600"/>Invitation accepted. Your company membership is active.</p><Button onClick={()=>navigate("/dashboard",{replace:true})}>Continue to dashboard</Button></div>
       : <form className="space-y-4" onSubmit={handleSubmit}>
         <p className="text-sm text-muted-foreground">This invitation expires after seven days and can be used only once. Create your Omega account here. Email verification and invitation acceptance happen in this flow.</p>
-        {!user && mode === "register" && !verificationPending && <div className="space-y-2">
+        {!user && !verificationPending && <div className="space-y-2">
           <Label htmlFor="invite-full-name">Full name</Label>
           <Input id="invite-full-name" autoComplete="name" value={fullName} onChange={event=>setFullName(event.target.value)} required placeholder="Your full name"/>
         </div>}
@@ -118,7 +118,7 @@ export default function AcceptInvitationPage() {
         </div>}
         {!user && !verificationPending && <div className="space-y-2">
           <Label htmlFor="invite-password">Password</Label>
-          <Input id="invite-password" type="password" autoComplete="new-password" minLength={mode === "register" ? 8 : 1} value={password} onChange={event=>setPassword(event.target.value)} required placeholder="At least 8 characters"/>
+          <Input id="invite-password" type="password" autoComplete="new-password" minLength={8} value={password} onChange={event=>setPassword(event.target.value)} required placeholder="At least 8 characters"/>
         </div>}
         {verificationPending && <div className="space-y-2">
           <Label htmlFor="invite-otp">Email verification code</Label>
