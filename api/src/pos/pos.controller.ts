@@ -20,7 +20,7 @@ export class PosController {
   listRegisters(@Req() req: { user: AuthenticatedUser }) { return this.pos.listRegisters(req.user); }
 
   @Post('registers')
-  @RequirePermissions('sales:write')
+  @RequirePermissions('sales:stock-assign')
   createRegister(@Req() req: { user: AuthenticatedUser }, @Body() body: { code: string; name: string; branchId?: string | null }) {
     return this.pos.createRegister(req.user, body);
   }
