@@ -3,12 +3,15 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import { RequireModule } from '../subscriptions/require-module.decorator.js';
+import { ModuleEntitlementsGuard } from '../subscriptions/module-entitlements.guard.js';
 import type { Response } from 'express';
 import { PosService } from './pos.service.js';
 import { PosCheckoutDto } from './dto/pos-checkout.dto.js';
 
 @Controller('pos')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequireModule('pos')
+@UseGuards(JwtAuthGuard, PermissionsGuard, ModuleEntitlementsGuard)
 export class PosController {
   constructor(private readonly pos: PosService) {}
 

@@ -5,9 +5,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import { RequireModule } from '../subscriptions/require-module.decorator.js';
+import { ModuleEntitlementsGuard } from '../subscriptions/module-entitlements.guard.js';
 
 @Controller('sales-orders')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequireModule('sales')
+@UseGuards(JwtAuthGuard, PermissionsGuard, ModuleEntitlementsGuard)
 export class SalesOrdersController {
   constructor(private readonly orders: SalesOrdersService) {}
 
