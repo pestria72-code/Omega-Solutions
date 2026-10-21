@@ -41,6 +41,7 @@ export class PosService {
 
   async listRegisters(user: AuthenticatedUser) {
     const { companyId } = await this.company(user);
+    const canViewTeam = user.permissions.includes('sales:team-read');
     const result = await this.db.query(
       `SELECT r.id,r.company_id,r.branch_id,r.code,r.name,r.is_active,r.created_at,
         b.name AS branch_name,
@@ -48,8 +49,16 @@ export class PosService {
        FROM pos_registers r
        LEFT JOIN branches b ON b.id=r.branch_id AND b.company_id=r.company_id
        LEFT JOIN pos_shifts s ON s.register_id=r.id AND s.company_id=r.company_id AND s.status='open'
-       WHERE r.company_id=$1 ORDER BY r.is_active DESC,r.name ASC`,
-      [companyId],
+       WHERE r.company_id=$1 AND (
+         $2::boolean=true OR EXISTS (
+           SELECT 1 FROM salesperson_stock_assignments a
+           JOIN warehouses w ON w.id=a.warehouse_id AND w.company_id=a.company_id
+           WHERE a.company_id=r.company_id AND a.user_id=$3 AND a.is_active=true
+             AND r.branch_id IS NOT DISTINCT FROM w.branch_id
+         )
+       )
+       ORDER BY r.is_active DESC,r.name ASC`,
+      [companyId,canViewTeam,user.userId],
     );
     return result.rows;
   }
@@ -197,14 +206,17 @@ export class PosService {
         [dto.shiftId,companyId]);
       const shift=shiftResult.rows[0];
       if(!shift||shift.status!=='open'||shift.opened_by!==user.userId) throw new BadRequestException('An open cashier shift belonging to you is required to check out.');
-      const register=await client.query<{id:string}>(
-        'SELECT id FROM pos_registers WHERE id=$1 AND company_id=$2 AND is_active=true',
+      const register=await client.query<{id:string;branch_id:string|null}>(
+        'SELECT id,branch_id FROM pos_registers WHERE id=$1 AND company_id=$2 AND is_active=true',
         [shift.register_id,companyId]);
       if(!register.rows[0]) throw new BadRequestException('The shift register is no longer active.');
-      const warehouse=await client.query<{id:string}>(
-        'SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',
+      const warehouse=await client.query<{id:string;branch_id:string|null}>(
+        'SELECT id,branch_id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',
         [dto.warehouseId,companyId]);
       if(!warehouse.rows[0]) throw new BadRequestException('Choose an active warehouse belonging to this company.');
+      if(!user.permissions.includes('sales:team-read') && warehouse.rows[0].branch_id !== register.rows[0].branch_id) {
+        throw new BadRequestException('Your assigned warehouse and POS register must belong to the same branch.');
+      }
       if(!user.permissions.includes('sales:team-read')) {
         const a=await client.query<{warehouse_id:string}>('SELECT warehouse_id FROM salesperson_stock_assignments WHERE company_id=$1 AND user_id=$2 AND is_active=true LIMIT 1 FOR SHARE',[companyId,user.userId]);
         if(!a.rows[0]) throw new BadRequestException('Your manager must assign a stock warehouse before selling.');
@@ -352,6 +364,18 @@ export class PosService {
           [input.registerId, companyId],
         );
         if (!register.rows[0]) throw new NotFoundException('Active POS register not found in this company.');
+        if (!user.permissions.includes('sales:team-read')) {
+          const assignment = await client.query<{branch_id:string|null}>(
+            `SELECT w.branch_id FROM salesperson_stock_assignments a
+             JOIN warehouses w ON w.id=a.warehouse_id AND w.company_id=a.company_id
+             WHERE a.company_id=$1 AND a.user_id=$2 AND a.is_active=true FOR SHARE`,
+            [companyId,user.userId],
+          );
+          if (!assignment.rows[0]) throw new BadRequestException('Your manager must assign a stock warehouse before selling.');
+          if (assignment.rows[0].branch_id !== register.rows[0].branch_id) {
+            throw new BadRequestException('You can only open a register in your assigned warehouse branch.');
+          }
+        }
         const alreadyOpen = await client.query<{id:string}>(
           "SELECT id FROM pos_shifts WHERE register_id=$1 AND company_id=$2 AND status='open' FOR UPDATE",
           [input.registerId, companyId],
