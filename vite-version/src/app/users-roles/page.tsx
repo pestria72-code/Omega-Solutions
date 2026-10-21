@@ -19,7 +19,7 @@ type Member = {
 type RoleInfo = { role: Role; permissions: string[] };
 type Invitation = { id: string; email: string; role: Role; branch_id: string | null; expires_at: string; accepted_at: string | null; revoked_at: string | null; created_at: string };
 type Branch = { id: string; name: string; is_active: boolean };
-const roles: Role[] = ["admin", "manager", "staff", "viewer"];
+const roles: Role[] = ["admin", "manager", "staff", "salesperson", "viewer"];
 const title = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
 function errorText(e: unknown) {
   return e && typeof e === "object" && "message" in e ? String((e as { message: unknown }).message) : "Request failed. Please try again.";
