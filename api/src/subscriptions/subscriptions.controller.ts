@@ -49,4 +49,19 @@ export class SubscriptionsController {
       body?.note,
     );
   }
+  @Post('module-requests')
+  @UseGuards(JwtAuthGuard)
+  requestModuleChange(
+    @Request() req: { user: AuthenticatedUser },
+    @Body() body: { moduleCode?: string; note?: string },
+  ) {
+    if (!req.user.companyId) throw new UnauthorizedException('Select a company before requesting an add-on module.');
+    if (!['owner', 'admin'].includes(req.user.role.toLowerCase())) {
+      throw new ForbiddenException('Only company owners or administrators can request add-on modules.');
+    }
+    return this.subscriptions.requestModuleChange(
+      req.user.companyId, req.user.userId, body?.moduleCode ?? '', body?.note,
+    );
+  }
+
 }
