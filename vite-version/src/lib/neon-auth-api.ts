@@ -42,7 +42,7 @@ async function neonRequest(path: string, body?: unknown): Promise<NeonResponse> 
     });
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error("Neon sign-in is taking too long. Your invitation has not been accepted yet. Retry secure sign-in, or sign in to Neon in this browser and reopen the invitation.");
+      throw new Error("Account verification is taking too long. Your invitation has not been accepted yet. Please retry.");
     }
     throw error;
   } finally {
@@ -102,23 +102,15 @@ export async function verifyNeonEmailAndSignIn(input: {
 
   // Verification deliberately does not sign the user in; perform an explicit password sign-in.
   const signInResponse = await neonRequest("/sign-in/email", { email, password: input.password });
-  // Managed Neon Auth can expose the identity JWT directly on the sign-in response.
-  // Prefer that token so invitation acceptance does not depend solely on a follow-up
-  // session-cookie read across the app and Neon Auth origins.
-  const directToken = signInResponse.jwt
-    || signInResponse.accessToken
-    || signInResponse.access_token
-    || signInResponse.data?.jwt
-    || signInResponse.data?.accessToken
-    || signInResponse.data?.access_token;
+  const tokenResponse = await neonRequest("/token");
+  const token = tokenResponse.jwt || tokenResponse.accessToken || tokenResponse.access_token
+    || tokenResponse.data?.jwt || tokenResponse.data?.token || tokenResponse.data?.accessToken
+    || tokenResponse.data?.access_token || tokenResponse.token;
+  if (token) return token;
+  const directToken = signInResponse.jwt || signInResponse.accessToken || signInResponse.access_token
+    || signInResponse.data?.jwt || signInResponse.data?.accessToken || signInResponse.data?.access_token;
   if (directToken) return directToken;
-
-  const tokenResponse = await neonRequest("/get-session");
-  const token = tokenResponse.jwt || tokenResponse.data?.session?.token || tokenResponse.token || tokenResponse.data?.token;
-  if (!token) {
-    throw new Error("Email verified, but a secure sign-in token was not returned. Please sign in again.");
-  }
-  return token;
+  throw new Error("Your email was verified, but Omega could not complete account setup securely. Please try again.");
 }
 
 export async function signInWithNeon(emailInput: string, password: string): Promise<string> {
@@ -150,7 +142,7 @@ export async function getNeonIdentityToken(): Promise<string> {
   const session = sessionResponse.data?.session || sessionResponse.session;
   const hasSession = Boolean(session || sessionResponse.data?.token || sessionResponse.token);
   if (!hasSession) {
-    throw new Error("Neon did not find a signed-in browser session. Open the newest invitation email link in this same browser, complete the Neon sign-in, and retry acceptance.");
+    throw new Error("Your verification session could not be found. Please reopen the Omega invitation and try again.");
   }
 
   // Do not use session.token as an identity JWT: it may be an opaque session ID.
@@ -166,7 +158,7 @@ export async function getNeonIdentityToken(): Promise<string> {
     || tokenResponse.data?.session?.accessToken
     || tokenResponse.token;
   if (!token) {
-    throw new Error("Neon session exists, but its token endpoint did not return an identity JWT. The invitation is still pending; retry after the Neon Auth session is established.");
+    throw new Error("Your email session is active, but Omega could not complete account setup securely. Please retry.");
   }
   return token;
 }
