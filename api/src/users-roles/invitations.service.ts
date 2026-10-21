@@ -48,12 +48,11 @@ export class InvitationsService {
       throw new ForbiddenException('Only a company owner can invite an admin.');
     }
 
-    // Fail closed: never create an invitation that cannot be delivered.
-    const resendApiKey = process.env.RESEND_API_KEY;
-    const emailFrom = process.env.EMAIL_FROM;
+    // Neon Auth is the sole invitation email sender. Fail closed if it is not configured.
+    const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\\/$/, '');
     const appBaseUrl = process.env.APP_BASE_URL || process.env.CORS_ORIGIN?.split(',')[0]?.trim();
-    if (!resendApiKey || !emailFrom || !appBaseUrl) {
-      throw new ServiceUnavailableException('Invitation email is not configured. Set RESEND_API_KEY, EMAIL_FROM, and APP_BASE_URL.');
+    if (!neonAuthBaseUrl || !appBaseUrl) {
+      throw new ServiceUnavailableException('Neon Auth invitation email is not configured. Set NEON_AUTH_BASE_URL and APP_BASE_URL.');
     }
 
     if (dto.branchId) {
@@ -94,42 +93,20 @@ export class InvitationsService {
     acceptUrl.searchParams.set('invitationToken', token);
 
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      const response = await fetch(`${neonAuthBaseUrl}/sign-in/magic-link`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [email],
-          subject: 'You are invited to join Omega Solutions',
-          text: [
-            'You have been invited to join a company workspace on Omega Solutions.',
-            `Assigned role: ${dto.role}.`,
-            '',
-            'Open this Omega invitation to create your account and verify your email:',
-            acceptUrl.toString(),
-            '',
-            'This invitation expires in seven days and can only be used once.',
-            'If you were not expecting this invitation, you can ignore this email.',
-          ].join('\\n'),
-          html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#202124;line-height:1.5">
-            <h1 style="font-size:24px">You are invited to Omega Solutions</h1>
-            <p>A company administrator has invited you to join their Omega Solutions workspace.</p>
-            <p><strong>Assigned role:</strong> ${escapeHtml(dto.role)}</p>
-            <p><a href="${escapeHtml(acceptUrl.toString())}" style="display:inline-block;background:#15803d;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none">Accept invitation</a></p>
-            <p>Open this invitation to create your Omega account and verify your email address.</p>
-            <p>This invitation expires in seven days and can only be used once. If you were not expecting it, you can ignore this email.</p>
-          </div>`,
-        }),
-        signal: AbortSignal.timeout(10000),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ email, name: 'Omega Solutions', callbackURL: acceptUrl.toString() }),
+        signal: AbortSignal.timeout(12000),
       });
       if (!response.ok) {
-        const providerMessage = (await response.text()).split(/\\r?\\n/).join(' ').slice(0, 300);
-        console.error(`Omega invitation email delivery failed: HTTP ${response.status}; response=${providerMessage}`);
-        throw new Error(`Email provider returned HTTP ${response.status}`);
+        const providerMessage = (await response.text()).replace(/\\s+/g, ' ').slice(0, 300);
+        console.error(`Neon Auth invitation email delivery failed: HTTP ${response.status}; response=${providerMessage}`);
+        throw new Error(`Neon Auth returned HTTP ${response.status}`);
       }
     } catch {
       await this.db.query('UPDATE company_invitations SET revoked_at = NOW(), updated_at = NOW() WHERE id = $1 AND accepted_at IS NULL', [invitationId]);
-      throw new ServiceUnavailableException('The Omega invitation email could not be sent; the invitation was cancelled.');
+      throw new ServiceUnavailableException('Neon Auth could not send the invitation email; the invitation was cancelled.');
     }
 
     await this.audit.log({
@@ -138,7 +115,7 @@ export class InvitationsService {
       oldValues: null, newValues: { email, role: dto.role, branchId: dto.branchId ?? null, expiresAt: expiresAt.toISOString() },
       ipAddress: null,
     });
-    return { id: invitationId, email, role: dto.role, expiresAt, status: 'sent' as const };
+    return { id: invitationId, email, role: dto.role, expiresAt, status: 'sent' as const, deliveryProvider: 'neon-auth' as const };
   }
 
   async revoke(user: AuthenticatedUser, invitationId: string) {
