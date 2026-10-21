@@ -103,15 +103,36 @@ export async function verifyNeonEmailAndSignIn(input: {
   await neonRequest("/email-otp/verify-email", { email, otp: input.otp.trim() });
 
   // Verification deliberately does not sign the user in; perform an explicit password sign-in.
-  const signInResponse = await neonRequest("/sign-in/email", { email, password: input.password });
-  const tokenResponse = await neonRequest("/token");
-  const token = tokenResponse.jwt || tokenResponse.accessToken || tokenResponse.access_token
-    || tokenResponse.data?.jwt || tokenResponse.data?.token || tokenResponse.data?.accessToken
-    || tokenResponse.data?.access_token || tokenResponse.token;
-  if (token) return token;
-  const directToken = signInResponse.jwt || signInResponse.accessToken || signInResponse.access_token
-    || signInResponse.data?.jwt || signInResponse.data?.accessToken || signInResponse.data?.access_token;
+  const signInResponse = await neonRequest("/sign-in/email", { email, password });
+  // Prefer the JWT returned by sign-in. A separate /token request depends on a
+  // cross-origin session cookie that may be blocked by browser privacy settings.
+  const directToken = signInResponse.jwt
+    || signInResponse.accessToken
+    || signInResponse.access_token
+    || signInResponse.data?.jwt
+    || signInResponse.data?.accessToken
+    || signInResponse.data?.access_token
+    || signInResponse.data?.session?.access_token
+    || signInResponse.data?.session?.accessToken;
   if (directToken) return directToken;
+
+  // Use /token only as a fallback when sign-in returned no identity JWT.
+  try {
+    const tokenResponse = await neonRequest("/token");
+    const token = tokenResponse.jwt
+      || tokenResponse.accessToken
+      || tokenResponse.access_token
+      || tokenResponse.data?.jwt
+      || tokenResponse.data?.token
+      || tokenResponse.data?.accessToken
+      || tokenResponse.data?.access_token
+      || tokenResponse.data?.session?.access_token
+      || tokenResponse.data?.session?.accessToken
+      || tokenResponse.token;
+    if (token) return token;
+  } catch {
+    // Show one actionable setup error rather than a misleading cookie/session error.
+  }
   throw new Error("Your email was verified, but Omega could not complete account setup securely. Please try again.");
 }
 
