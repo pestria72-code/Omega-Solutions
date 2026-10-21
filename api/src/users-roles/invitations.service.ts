@@ -15,9 +15,6 @@ import type { CreateInvitationDto } from './dto/invitations.dto.js';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] ?? character);
-}
 
 @Injectable()
 export class InvitationsService {
@@ -49,7 +46,7 @@ export class InvitationsService {
     }
 
     // Neon Auth is the sole invitation email sender. Fail closed if it is not configured.
-    const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\\/$/, '');
+    const neonAuthBaseUrl = process.env.NEON_AUTH_BASE_URL?.replace(/\/$/, '');
     const appBaseUrl = process.env.APP_BASE_URL || process.env.CORS_ORIGIN?.split(',')[0]?.trim();
     if (!neonAuthBaseUrl || !appBaseUrl) {
       throw new ServiceUnavailableException('Neon Auth invitation email is not configured. Set NEON_AUTH_BASE_URL and APP_BASE_URL.');
