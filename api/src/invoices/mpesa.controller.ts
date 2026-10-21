@@ -18,7 +18,7 @@ class StkPushDto {
   phoneNumber!: string;
 
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsNumber({ maxDecimalPlaces: 0 })
   @Min(1)
   @Max(1000000)
   amount!: number;
