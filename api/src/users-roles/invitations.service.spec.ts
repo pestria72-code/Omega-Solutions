@@ -7,6 +7,7 @@ describe('InvitationsService', () => {
   let client: { query: ReturnType<typeof vi.fn> };
   let memberships: { requireOwnerOrAdmin: ReturnType<typeof vi.fn> };
   let audit: { log: ReturnType<typeof vi.fn> };
+  let subscriptions: { assertUserCapacity: ReturnType<typeof vi.fn> };
   let service: InvitationsService;
 
   beforeEach(() => {
@@ -19,7 +20,8 @@ describe('InvitationsService', () => {
       requireOwnerOrAdmin: vi.fn().mockResolvedValue({ companyId: 'company-1', branchId: null, role: 'owner' }),
     };
     audit = { log: vi.fn().mockResolvedValue(undefined) };
-    service = new InvitationsService(db as any, memberships as any, audit as any);
+    subscriptions = { assertUserCapacity: vi.fn().mockResolvedValue(undefined) };
+    service = new InvitationsService(db as any, memberships as any, audit as any, subscriptions as any);
   });
 
   it('does not allow an admin to invite another admin', async () => {
