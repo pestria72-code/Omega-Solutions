@@ -33,6 +33,7 @@ import { UsersRolesModule } from './users-roles/users-roles.module.js';
 import { CreditNotesModule } from './credit-notes/credit-notes.module.js';
 import { SearchModule } from './search/search.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module.js';
 
 @Module({
   imports: [
@@ -42,7 +43,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
     SalesOrdersModule, CrmModule, InventoryModule, PurchaseOrdersModule, SupplierBillsModule,
     AccountingModule, ManufacturingModule, EmployeesModule, ExpensesModule, PayrollModule,
     WorkforceModule, PosModule, RequisitionsModule, ApprovalsModule, UsersRolesModule,
-    CreditNotesModule, SearchModule, NotificationsModule,
+    CreditNotesModule, SearchModule, NotificationsModule, SubscriptionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
