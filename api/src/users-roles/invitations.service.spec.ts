@@ -28,23 +28,20 @@ describe('InvitationsService', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  it('fails closed when delivery is not configured', async () => {
+  it('fails closed when Neon Auth delivery is not configured', async () => {
     const old = {
-      key: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM,
+      neon: process.env.NEON_AUTH_BASE_URL,
       base: process.env.APP_BASE_URL,
       cors: process.env.CORS_ORIGIN,
     };
-    delete process.env.RESEND_API_KEY;
-    delete process.env.EMAIL_FROM;
+    delete process.env.NEON_AUTH_BASE_URL;
     delete process.env.APP_BASE_URL;
     delete process.env.CORS_ORIGIN;
     try {
       await expect(service.create(user, { email: 'new@example.com', role: 'staff' })).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(db.query).not.toHaveBeenCalled();
     } finally {
-      if (old.key === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = old.key;
-      if (old.from === undefined) delete process.env.EMAIL_FROM; else process.env.EMAIL_FROM = old.from;
+      if (old.neon === undefined) delete process.env.NEON_AUTH_BASE_URL; else process.env.NEON_AUTH_BASE_URL = old.neon;
       if (old.base === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = old.base;
       if (old.cors === undefined) delete process.env.CORS_ORIGIN; else process.env.CORS_ORIGIN = old.cors;
     }
@@ -118,13 +115,12 @@ describe('InvitationsService', () => {
     expect(audit.log).not.toHaveBeenCalled();
   });
 
-  it('revokes a newly-created invitation when branded email delivery fails', async () => {
-    const oldEnv = { key: process.env.RESEND_API_KEY, from: process.env.EMAIL_FROM, base: process.env.APP_BASE_URL };
+  it('uses Neon Auth to deliver invitations and revokes when Neon delivery fails', async () => {
+    const oldEnv = { neon: process.env.NEON_AUTH_BASE_URL, base: process.env.APP_BASE_URL, cors: process.env.CORS_ORIGIN };
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: false, status: 503, text: vi.fn().mockResolvedValue('provider unavailable'),
+      ok: false, status: 503, text: vi.fn().mockResolvedValue('Neon unavailable'),
     } as unknown as Response);
-    process.env.RESEND_API_KEY = 'resend_test_key';
-    process.env.EMAIL_FROM = 'Omega Solutions <invites@example.test>';
+    process.env.NEON_AUTH_BASE_URL = 'https://auth.example.test/neondb/auth';
     process.env.APP_BASE_URL = 'https://omega.example.test';
     db.query
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
@@ -133,25 +129,21 @@ describe('InvitationsService', () => {
       .mockResolvedValueOnce({ rows: [], rowCount: 1 });
     try {
       await expect(service.create(user, { email: 'new@example.com', role: 'staff' })).rejects.toBeInstanceOf(ServiceUnavailableException);
-      expect(db.query.mock.calls[2][0]).toContain('INSERT INTO company_invitations');
-      expect(db.query.mock.calls[2][1][5]).toMatch(/^[a-f0-9]{64}$/);
-      expect(fetchSpy).toHaveBeenCalledWith('https://api.resend.com/emails', expect.objectContaining({
+      expect(fetchSpy).toHaveBeenCalledWith('https://auth.example.test/neondb/auth/sign-in/magic-link', expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({ Authorization: 'Bearer resend_test_key' }),
         body: expect.stringContaining('https://omega.example.test/accept-invitation?invitationToken='),
       }));
       const payload = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
-      expect(payload.to).toEqual(['new@example.com']);
-      expect(payload.subject).toContain('Omega Solutions');
-      expect(payload.text).toContain('invitationToken=');
-      expect(payload.text).not.toContain(String(db.query.mock.calls[2][1][5]));
+      expect(payload.email).toBe('new@example.com');
+      expect(payload.callbackURL).toContain('invitationToken=');
+      expect(payload.callbackURL).not.toContain(String(db.query.mock.calls[2][1][5]));
       expect(db.query.mock.calls[3][0]).toContain('SET revoked_at = NOW()');
       expect(audit.log).not.toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();
-      if (oldEnv.key === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = oldEnv.key;
-      if (oldEnv.from === undefined) delete process.env.EMAIL_FROM; else process.env.EMAIL_FROM = oldEnv.from;
+      if (oldEnv.neon === undefined) delete process.env.NEON_AUTH_BASE_URL; else process.env.NEON_AUTH_BASE_URL = oldEnv.neon;
       if (oldEnv.base === undefined) delete process.env.APP_BASE_URL; else process.env.APP_BASE_URL = oldEnv.base;
+      if (oldEnv.cors === undefined) delete process.env.CORS_ORIGIN; else process.env.CORS_ORIGIN = oldEnv.cors;
     }
   });
 
