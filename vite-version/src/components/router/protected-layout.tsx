@@ -12,7 +12,7 @@ type SubscriptionAccess = {
 function requiredModule(pathname: string): string {
   if (pathname === "/settings/billing") return "core"
   if (pathname === "/crm" || pathname.startsWith("/crm/")) return "crm"
-  if (pathname === "/pos" || pathname.startsWith("/pos/")) return "pos"
+  if (pathname === "/pos" || pathname.startsWith("/pos/") || pathname === "/salesperson-stock") return "pos"
   if (["/sales-dashboard", "/customers", "/quotations", "/sales-orders", "/invoices", "/credit-notes", "/payments"].some((path) => pathname === path || pathname.startsWith(path + "/"))) return "sales"
   if (["/suppliers", "/requisitions", "/purchase-orders", "/supplier-bills", "/approvals"].some((path) => pathname === path || pathname.startsWith(path + "/"))) return "procurement"
   if (["/products", "/stock-levels", "/warehouses", "/stock-movements"].some((path) => pathname === path || pathname.startsWith(path + "/"))) return "inventory"
