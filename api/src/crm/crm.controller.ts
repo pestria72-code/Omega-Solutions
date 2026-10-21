@@ -9,9 +9,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
 import { RequirePermissions } from '../rbac/decorators/require-permissions.decorator.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
+import { RequireModule } from '../subscriptions/require-module.decorator.js';
+import { ModuleEntitlementsGuard } from '../subscriptions/module-entitlements.guard.js';
 
 @Controller('crm')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequireModule('crm')
+@UseGuards(JwtAuthGuard, PermissionsGuard, ModuleEntitlementsGuard)
 export class CrmController {
   constructor(private readonly crm: CrmService) {}
 
