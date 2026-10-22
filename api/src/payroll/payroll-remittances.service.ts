@@ -120,6 +120,7 @@ export class PayrollRemittancesService {
     if (typeof dto.paymentReference !== 'string' || !dto.paymentReference.trim() || dto.paymentReference.trim().length > 160) {
       throw new BadRequestException('paymentReference is required and must be at most 160 characters.');
     }
+    const paymentReference = dto.paymentReference.trim();
     const paidAt = dto.paidAt === undefined ? new Date().toISOString() : dto.paidAt;
     if (typeof paidAt !== 'string' || Number.isNaN(Date.parse(paidAt))) throw new BadRequestException('paidAt must be a valid date/time.');
     if (dto.receiptStorageKey !== undefined && (typeof dto.receiptStorageKey !== 'string' || dto.receiptStorageKey.length > 500)) {
@@ -148,7 +149,7 @@ export class PayrollRemittancesService {
            (company_id,obligation_id,amount,payment_reference,paid_at,receipt_storage_key,notes,recorded_by)
          VALUES($1,$2,$3,$4,$5::timestamptz,$6,$7,$8)
          RETURNING id,obligation_id,amount,payment_reference,paid_at,receipt_storage_key,notes,created_at`,
-        [companyId, obligationId, amount, dto.paymentReference.trim(), paidAt, dto.receiptStorageKey ?? null, dto.notes ?? null, user.userId],
+        [companyId, obligationId, amount, paymentReference, paidAt, dto.receiptStorageKey ?? null, dto.notes ?? null, user.userId],
       );
       return { ...result.rows[0], verificationStatus: 'recorded_not_independently_verified' };
     });
