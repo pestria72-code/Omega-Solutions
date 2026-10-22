@@ -42,8 +42,8 @@ export class PayrollService {
    numeric[key]=value;
   }
   const rawHousingLevyEnabled: unknown = dto.housingLevyEnabled;
-  if(rawHousingLevyEnabled!==undefined&&typeof rawHousingLevyEnabled!=='boolean')throw new BadRequestException('housingLevyEnabled must be a boolean.');
-  const housingLevyEnabled: boolean = rawHousingLevyEnabled===undefined ? true : rawHousingLevyEnabled;
+  if(typeof rawHousingLevyEnabled!=='boolean')throw new BadRequestException('Choose whether this company remits the housing levy (enabled or disabled) before saving statutory settings.');
+  const housingLevyEnabled: boolean = rawHousingLevyEnabled;
   const result=await this.db.query(`INSERT INTO company_payroll_statutory_settings(company_id,effective_from,nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate,created_by)
    VALUES($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
    ON CONFLICT(company_id,effective_from) DO UPDATE SET nssf_method=EXCLUDED.nssf_method,nssf_employee_flat=EXCLUDED.nssf_employee_flat,nssf_employer_flat=EXCLUDED.nssf_employer_flat,nssf_employee_rate=EXCLUDED.nssf_employee_rate,nssf_employer_rate=EXCLUDED.nssf_employer_rate,nssf_pensionable_pay_cap=EXCLUDED.nssf_pensionable_pay_cap,housing_levy_enabled=EXCLUDED.housing_levy_enabled,housing_levy_employee_rate=EXCLUDED.housing_levy_employee_rate,housing_levy_employer_rate=EXCLUDED.housing_levy_employer_rate
