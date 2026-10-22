@@ -26,7 +26,7 @@ export class PayrollService {
   if(!validDate(effectiveFrom))throw new BadRequestException('effectiveFrom must be a valid YYYY-MM-DD date.');
   const result=await this.db.query(`SELECT id,company_id,effective_from,nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate,created_at
    FROM company_payroll_statutory_settings WHERE company_id=$1 AND effective_from<=$2::date ORDER BY effective_from DESC LIMIT 1`,[companyId,effectiveFrom]);
-  return result.rows[0]??{company_id:companyId,effective_from:effectiveFrom,nssf_method:'YEAR4',nssf_employee_flat:'200.00',nssf_employer_flat:'200.00',nssf_employee_rate:'0.060000',nssf_employer_rate:'0.060000',nssf_pensionable_pay_cap:'108000.00',housing_levy_enabled:true,housing_levy_employee_rate:'0.015000',housing_levy_employer_rate:'0.015000',configurationSource:'default'};
+  return result.rows[0]??{company_id:companyId,effective_from:effectiveFrom,nssf_method:'YEAR4',nssf_employee_flat:'200.00',nssf_employer_flat:'200.00',nssf_employee_rate:'0.060000',nssf_employer_rate:'0.060000',nssf_pensionable_pay_cap:'108000.00',housing_levy_enabled:null,housing_levy_employee_rate:'0.015000',housing_levy_employer_rate:'0.015000',configurationSource:'default'};
  }
  async setCompanyStatutorySettings(user:AuthenticatedUser,dto:Record<string,unknown>){
   const {companyId}=await this.membershipFor(user);
@@ -118,6 +118,13 @@ export class PayrollService {
    housingLevyEmployeeRate:Number(statutoryRow.housing_levy_employee_rate??.015),
    housingLevyEmployerRate:Number(statutoryRow.housing_levy_employer_rate??.015),
   };
+  const missingPaySettings=await this.db.query<{missing_count:string|number}>(`SELECT COUNT(*)::int AS missing_count
+   FROM employees e
+   WHERE e.company_id=$1 AND e.employment_status='active'
+     AND NOT EXISTS (SELECT 1 FROM employee_pay_settings s
+       WHERE s.employee_id=e.id AND s.company_id=e.company_id AND s.effective_from <= $2::date)`,[membership.companyId,dto.periodStart]);
+  const missingCount=Number(missingPaySettings.rows[0]?.missing_count??0);
+  if(missingCount>0)throw new BadRequestException(`Payroll cannot be generated because ${missingCount} active employee(s) have no effective pay settings for this period. Configure pay for every active employee before generating payroll. No payroll was created.`);
   const employees=await this.db.query<PayEmployee>(`SELECT e.id,e.employee_number,e.first_name,e.last_name,
     s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,
     s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes
