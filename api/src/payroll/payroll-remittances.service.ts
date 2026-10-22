@@ -95,7 +95,7 @@ export class PayrollRemittancesService {
     dto: { amount?: unknown; paymentReference?: unknown; paidAt?: unknown; receiptStorageKey?: unknown; notes?: unknown },
   ) {
     const amount = Number(dto.amount);
-    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount * 100) !== amount * 100) {
+    if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-7) {
       throw new BadRequestException('amount must be a positive monetary amount with no more than two decimal places.');
     }
     if (typeof dto.paymentReference !== 'string' || !dto.paymentReference.trim() || dto.paymentReference.trim().length > 160) {
