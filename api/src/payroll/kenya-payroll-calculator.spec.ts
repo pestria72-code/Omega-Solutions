@@ -34,6 +34,23 @@ describe('Kenyan monthly payroll rules', () => {
     expect(result.employerStatutoryCost).toBe(7_500);
   });
 
+  it('supports company-selected legacy flat NSSF and independently disabled housing levy', () => {
+    const result = calculateKenyaMonthlyPayroll({ grossCashPay: 100_000, statutoryOptions: { nssfMethod: 'LEGACY_FLAT_200', nssfEmployeeFlat: 200, nssfEmployerFlat: 200, housingLevyEnabled: false } });
+    expect(result.nssfEmployee).toBe(200);
+    expect(result.nssfEmployer).toBe(200);
+    expect(result.housingLevyEmployee).toBe(0);
+    expect(result.housingLevyEmployer).toBe(0);
+    expect(result.statutoryOptions.nssfMethod).toBe('LEGACY_FLAT_200');
+  });
+
+  it('supports independent custom employee and employer rates for housing levy and NSSF', () => {
+    const result = calculateKenyaMonthlyPayroll({ grossCashPay: 50_000, statutoryOptions: { nssfMethod: 'CUSTOM', nssfEmployeeRate: .05, nssfEmployerRate: .04, nssfPensionablePayCap: 40_000, housingLevyEnabled: true, housingLevyEmployeeRate: .01, housingLevyEmployerRate: .02 } });
+    expect(result.nssfEmployee).toBe(2_000);
+    expect(result.nssfEmployer).toBe(1_600);
+    expect(result.housingLevyEmployee).toBe(500);
+    expect(result.housingLevyEmployer).toBe(1_000);
+  });
+
   it('enforces minimum SHIF and excludes personal relief for non-residents', () => {
     const result = calculateKenyaMonthlyPayroll({ grossCashPay: 10_000, residentForTaxPurposes: false });
     expect(result.shifEmployee).toBe(300);
