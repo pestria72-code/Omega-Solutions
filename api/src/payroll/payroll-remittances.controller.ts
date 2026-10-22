@@ -24,9 +24,8 @@ export class PayrollRemittancesController {
   generateForRun(
     @Req() req: { user: AuthenticatedUser },
     @Param('runId', ParseUUIDPipe) runId: string,
-    @Body() dto: { dueDate?: unknown },
   ) {
-    return this.remittances.generateForRun(req.user, runId, dto.dueDate);
+    return this.remittances.generateForRun(req.user, runId);
   }
 
   @Post(':obligationId/payments')
