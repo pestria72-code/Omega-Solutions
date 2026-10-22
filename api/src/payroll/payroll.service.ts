@@ -119,8 +119,7 @@ export class PayrollService {
   if(!allowed.includes(reportType))throw new BadRequestException(`Unsupported report type. Choose: ${allowed.join(', ')}.`);
   const run=await this.getRun(user,id) as Record<string,unknown> & {items:Array<Record<string,unknown>>};
   const items=run.items;
-  const csvCell=(value:unknown)=>{const text=String(value??'');const safe=/^[=+@\t\r-]/.test(text)?\"'\"+text:text;return '"' + safe.replace(/"/g,'""') + '"';};
-  const amountCell=(value:unknown)=>Number(value??0).toFixed(2);
+  const csvCell=(value:unknown):string=>{const text=String(value??'');const safe=/^[=+@\t\r-]/.test(text)?"'"+text:text;return '"' + safe.replace(/"/g,'""') + '"';};
   let filename=`omega-payroll-${reportType}-${String(run.period_start).slice(0,10)}.csv`;
   let headers:string[]=[];
   let rows:unknown[][]=[];
@@ -140,7 +139,7 @@ export class PayrollService {
    headers=['Employee number','Employee name','Pay period start','Pay period end','Employee housing levy KES','Employer housing levy KES','Combined housing levy KES','Payroll status'];
    rows=items.map(x=>[x.employee_number,x.employee_name,run.period_start,run.period_end,x.housing_levy_employee,x.housing_levy_employer,Number(x.housing_levy_employee||0)+Number(x.housing_levy_employer||0),run.status]);
   }
-  const csv=[headers,...rows].map(row=>row.map(csvCell).join(',')).join('\\r\\n')+'\\r\\n';
+  const csv=[headers,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n')+'\r\n';
   return {filename,contentType:'text/csv; charset=utf-8',disclaimer:'Internal payroll support schedule generated from the saved payroll calculation snapshot. Not an official authority filing, not proof of submission or payment, and may require authority-specific identifiers, templates, and review before use.',csv};
  }
  async approveRun(user:AuthenticatedUser,id:string){
