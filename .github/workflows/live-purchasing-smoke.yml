@@ -58,6 +58,68 @@ jobs:
         run: |
           node --input-type=module -e 'const value=process.env.OMEGA_API_URL; const url=new URL(value); if (url.hostname !== "omega-solutions-api-development.onrender.com" || url.pathname !== "/api") throw new Error("Refusing to run smoke tests against anything except the fixed development API."); console.log("Development API target configured:", url.origin + url.pathname);'
 
+      - name: Set up Node.js for read-only approver diagnostic
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install API dependencies for read-only approver diagnostic
+        working-directory: api
+        run: npm ci --ignore-scripts
+
+      - name: Classify configured approver against Fezaton membership without logging credentials
+        env:
+          OMEGA_DEVELOPMENT_DATABASE_URL: ${{ secrets.OMEGA_DEVELOPMENT_DATABASE_URL }}
+          OMEGA_DEVELOPMENT_DATABASE_BRANCH: omega-migration-smoke-test-live
+          OMEGA_SECURITY_TEST_APPROVER_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_APPROVER_EMAIL }}
+        working-directory: api
+        run: |
+          node --input-type=module -e '
+            import pg from "pg";
+            const { Pool } = pg;
+            const url = process.env.OMEGA_DEVELOPMENT_DATABASE_URL;
+            const branch = process.env.OMEGA_DEVELOPMENT_DATABASE_BRANCH;
+            const email = process.env.OMEGA_SECURITY_TEST_APPROVER_EMAIL?.trim().toLowerCase();
+            if (!url || branch !== "omega-migration-smoke-test-live" || !email) {
+              throw new Error("Approver diagnostic requires the approved development DB secret, exact branch guard, and configured approver email.");
+            }
+            const pool = new Pool({
+              connectionString: url,
+              ssl: /neon\\.tech/i.test(url) ? { rejectUnauthorized: false } : undefined,
+              max: 1,
+              connectionTimeoutMillis: 10000,
+            });
+            try {
+              const db = await pool.query("SELECT current_database() AS name");
+              if (db.rows[0]?.name !== "neondb") throw new Error("Refusing diagnostic: expected the neondb database.");
+              const result = await pool.query(`
+                SELECT m.role
+                FROM public.users u
+                JOIN public.company_memberships m ON m.user_id = u.id
+                JOIN public.companies c ON c.id = m.company_id
+                WHERE lower(trim(u.email)) = $1
+                  AND c.name = 'Fezaton Enterprises'
+                  AND u.is_active = true
+                  AND m.is_active = true
+                LIMIT 2
+              `, [email]);
+              if (result.rows.length === 0) {
+                console.log("APPROVER_IDENTITY_CLASSIFICATION=NO_ACTIVE_FEZATON_MEMBERSHIP");
+              } else if (result.rows.length > 1) {
+                console.log("APPROVER_IDENTITY_CLASSIFICATION=MULTIPLE_ACTIVE_FEZATON_MEMBERSHIPS");
+              } else {
+                const role = String(result.rows[0].role).toLowerCase();
+                console.log("APPROVER_IDENTITY_CLASSIFICATION=" + (
+                  role === "owner" ? "FEZATON_OWNER" :
+                  role === "manager" ? "FEZATON_MANAGER" :
+                  "FEZATON_MEMBER_ROLE_" + role.replace(/[^a-z0-9_-]/g, "_")
+                ));
+              }
+            } finally {
+              await pool.end();
+            }
+          '
+
       - name: Verify live authenticated purchasing and accounting workflow
         env:
           OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
