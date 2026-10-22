@@ -47,7 +47,7 @@ export class PayrollService {
    VALUES($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
    ON CONFLICT(company_id,effective_from) DO UPDATE SET nssf_method=EXCLUDED.nssf_method,nssf_employee_flat=EXCLUDED.nssf_employee_flat,nssf_employer_flat=EXCLUDED.nssf_employer_flat,nssf_employee_rate=EXCLUDED.nssf_employee_rate,nssf_employer_rate=EXCLUDED.nssf_employer_rate,nssf_pensionable_pay_cap=EXCLUDED.nssf_pensionable_pay_cap,housing_levy_enabled=EXCLUDED.housing_levy_enabled,housing_levy_employee_rate=EXCLUDED.housing_levy_employee_rate,housing_levy_employer_rate=EXCLUDED.housing_levy_employer_rate
    RETURNING id,company_id,effective_from,nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate,created_at`,
-   [companyId,effectiveFrom,nssfMethod,numeric.nssfEmployeeFlat,numeric.nssfEmployerFlat,numeric.nssfEmployeeRate,numeric.nssfEmployerRate,numeric.nssfPensionablePayCap,housingLevyEnabled,numeric.housingLevyEmployeeRate,numeric.housingLevyEmployerRate,user.userId]);
+   [companyId,effectiveFrom,String(nssfMethod),numeric.nssfEmployeeFlat,numeric.nssfEmployerFlat,numeric.nssfEmployeeRate,numeric.nssfEmployerRate,numeric.nssfPensionablePayCap,housingLevyEnabled===true,numeric.housingLevyEmployeeRate,numeric.housingLevyEmployerRate,user.userId]);
   return result.rows[0];
  }
  async getEmployeePaySettings(user:AuthenticatedUser,employeeId:string){
