@@ -11,7 +11,6 @@ import {
   Wallet,
 } from "lucide-react"
 import { BaseLayout } from "@/components/layouts/base-layout"
-import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { buttonVariants } from "@/components/ui/button"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
@@ -145,7 +144,6 @@ export default function Page() {
             <h2 className="text-base font-semibold tracking-tight">At a glance</h2>
             <p className="text-sm text-muted-foreground">Live figures from your current company records</p>
           </div>
-          <span className="hidden items-center gap-2 text-xs text-muted-foreground sm:inline-flex"><span className="size-2 rounded-full bg-emerald-500" />Connected workspace</span>
         </div>
 
         {errors.length > 0 && (
