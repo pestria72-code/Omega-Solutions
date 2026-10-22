@@ -78,12 +78,28 @@ export class ContractsService {
     if(!['draft','pending_approval'].includes(String(row.status))) throw new BadRequestException('Only draft contracts can be edited.');
     const allowed:Record<string,string>={title:'title',description:'description',startDate:'start_date',endDate:'end_date',renewalDate:'renewal_date',contractValue:'contract_value',monthlyBudget:'monthly_budget',notes:'notes'};
     const keys=Object.keys(allowed).filter(k=>body[k]!==undefined);
-    if(body.items!==undefined) throw new BadRequestException('Edit contract items through a new draft in this initial release; existing items are preserved.');
-    if(keys.length) {
-      const vals:unknown[]=[membership.companyId,id]; const sets=keys.map(k=>{vals.push(body[k]);return `${allowed[k]}=$${vals.length}`});
-      await this.db.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND ($${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=$${vals.length+1})`,[...vals,membership.branchId] as (string|number|boolean|Date|null)[]);
-    }
+    await this.db.transaction(async client=>{
+      if(keys.length) {
+        const vals:unknown[]=[membership.companyId,id]; const sets=keys.map(k=>{vals.push(body[k]);return `${allowed[k]}=${vals.length}`});
+        await client.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND (${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=${vals.length+1})`,[...vals,membership.branchId]);
+      }
+      if(body.items!==undefined) {
+        await client.query('DELETE FROM contract_items WHERE company_id=$1 AND contract_id=$2',[membership.companyId,id]);
+        await this.insertItems(client,membership.companyId,id,body.items);
+      }
+    });
     await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'update',entityType:'contract',entityId:id,oldValues:null,newValues:body,ipAddress:null});
+    return this.get(user,id);
+  }
+  async submitForApproval(user: AuthenticatedUser,id:string) {
+    const {membership,row}=await this.scoped(user,id);
+    if(row.created_by!==user.userId) throw new ForbiddenException('Only the contract creator can submit it for approval.');
+    if(!['draft','suspended'].includes(String(row.status))) throw new BadRequestException('Only draft or suspended contracts can be submitted for approval.');
+    await this.db.transaction(async client=>{
+      await client.query("UPDATE contracts SET status='pending_approval',updated_at=NOW() WHERE company_id=$1 AND id=$2",[membership.companyId,id]);
+      await client.query("INSERT INTO approval_requests(company_id,branch_id,entity_type,entity_id,requester_user_id,status,decision_note,requested_at,decided_at,approver_user_id) VALUES($1,$2,'contract',$3,$4,'pending',NULL,NOW(),NULL,NULL) ON CONFLICT(company_id,entity_type,entity_id) DO UPDATE SET status='pending',requester_user_id=$4,approver_user_id=NULL,decision_note=NULL,requested_at=NOW(),decided_at=NULL",[membership.companyId,membership.branchId,id,user.userId]);
+    });
+    await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'submit_for_approval',entityType:'contract',entityId:id,oldValues:{status:row.status},newValues:{status:'pending_approval'},ipAddress:null});
     return this.get(user,id);
   }
   async changeStatus(user: AuthenticatedUser,id:string,status:'active'|'suspended') {
