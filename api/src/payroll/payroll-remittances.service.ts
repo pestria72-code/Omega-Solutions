@@ -63,6 +63,55 @@ export class PayrollRemittancesService {
     )).rows;
   }
 
+  async previewForRun(user: AuthenticatedUser, runId: string) {
+    const { companyId } = await this.membershipFor(user);
+    const run = await this.db.query(
+      `SELECT id,period_start,period_end,status FROM payroll_runs
+       WHERE id=$1 AND company_id=$2 AND status IN ('approved','posted')`,
+      [runId, companyId],
+    );
+    if (!run.rows.length) {
+      throw new NotFoundException('An approved or posted payroll run was not found in this company.');
+    }
+    const sums = await this.db.query(
+      `SELECT COALESCE(SUM(paye),0)::numeric(14,2) AS paye,
+              COALESCE(SUM(nssf_employee+nssf_employer),0)::numeric(14,2) AS nssf,
+              COALESCE(SUM(shif_employee),0)::numeric(14,2) AS shif,
+              COALESCE(SUM(housing_levy_employee+housing_levy_employer),0)::numeric(14,2) AS housing_levy
+       FROM payroll_items WHERE company_id=$1 AND payroll_run_id=$2`,
+      [companyId, runId],
+    );
+    const row = run.rows[0];
+    const amounts: Array<[ 'PAYE' | 'NSSF' | 'SHIF' | 'HOUSING_LEVY', string | number ]> = [
+      ['PAYE', sums.rows[0].paye],
+      ['NSSF', sums.rows[0].nssf],
+      ['SHIF', sums.rows[0].shif],
+      ['HOUSING_LEVY', sums.rows[0].housing_levy],
+    ];
+    const obligations = amounts.flatMap(([authority, rawAmount]) => {
+      const amount = Number(rawAmount);
+      if (!Number.isFinite(amount) || amount < 0) {
+        throw new BadRequestException('Payroll contains an invalid statutory total.');
+      }
+      if (amount === 0) return [];
+      return [{
+        authority,
+        amount: amount.toFixed(2),
+        dueDate: calculateRemittanceDueDate(authority, row.period_end),
+        periodStart: String(row.period_start).slice(0, 10),
+        periodEnd: String(row.period_end).slice(0, 10),
+      }];
+    });
+    return {
+      payrollRunId: runId,
+      payrollStatus: row.status,
+      previewOnly: true,
+      persisted: false,
+      obligations,
+      message: 'Preview only: no remittance obligations or payments were created or changed. Due dates are estimates; housing levy dates exclude public holidays. Confirm deadlines in the relevant authority portal.',
+    };
+  }
+
   async generateForRun(user: AuthenticatedUser, runId: string) {
     const { companyId } = await this.membershipFor(user);
     return this.db.transaction(async (client) => {
