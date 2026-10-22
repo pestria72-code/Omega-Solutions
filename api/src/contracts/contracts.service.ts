@@ -81,7 +81,7 @@ export class ContractsService {
     if(body.items!==undefined) throw new BadRequestException('Edit contract items through a new draft in this initial release; existing items are preserved.');
     if(keys.length) {
       const vals:unknown[]=[membership.companyId,id]; const sets=keys.map(k=>{vals.push(body[k]);return `${allowed[k]}=$${vals.length}`});
-      await this.db.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2`,vals as (string|number|boolean|Date|null)[]);
+      await this.db.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND (${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=${vals.length+1})`,[...vals,membership.branchId] as (string|number|boolean|Date|null)[]);
     }
     await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'update',entityType:'contract',entityId:id,oldValues:null,newValues:body,ipAddress:null});
     return this.get(user,id);
@@ -90,7 +90,7 @@ export class ContractsService {
     const {membership,row}=await this.scoped(user,id);
     if(status==='active'&&!['draft','suspended'].includes(String(row.status))) throw new BadRequestException('Only draft or suspended contracts can be activated.');
     if(status==='suspended'&&row.status!=='active') throw new BadRequestException('Only active contracts can be suspended.');
-    await this.db.query('UPDATE contracts SET status=$3,updated_at=NOW() WHERE company_id=$1 AND id=$2',[membership.companyId,id,status]);
+    await this.db.query('UPDATE contracts SET status=$3,updated_at=NOW() WHERE company_id=$1 AND id=$2 AND ($4::uuid IS NULL OR branch_id IS NULL OR branch_id=$4)',[membership.companyId,id,status,membership.branchId]);
     await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'status_change',entityType:'contract',entityId:id,oldValues:{status:row.status},newValues:{status},ipAddress:null});
     return this.get(user,id);
   }
@@ -124,6 +124,7 @@ export class ContractsService {
     const dueDate=body.dueDate===undefined||body.dueDate===null?null:body.dueDate as string;
     const notes=body.notes===undefined||body.notes===null?null:body.notes as string;
     await this.db.query('INSERT INTO contract_obligations(id,company_id,contract_id,title,due_date,notes) VALUES($1,$2,$3,$4,$5,$6)',[obligationId,membership.companyId,id,body.title.trim(),dueDate,notes]);
+    await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'create',entityType:'contract_obligation',entityId:obligationId,oldValues:null,newValues:{contractId:id,title:body.title,dueDate,status:'open'},ipAddress:null});
     return this.get(user,id);
   }
   async updateObligation(user:AuthenticatedUser,id:string,obligationId:string,body:Record<string,unknown>) {
