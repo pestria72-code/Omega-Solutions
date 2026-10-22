@@ -28,6 +28,7 @@ import { PayrollModule } from './payroll/payroll.module.js';
 import { WorkforceModule } from './workforce/workforce.module.js';
 import { PosModule } from './pos/pos.module.js';
 import { RequisitionsModule } from './requisitions/requisitions.module.js';
+import { ContractsModule } from './contracts/contracts.module.js';
 import { ApprovalsModule } from './approvals/approvals.module.js';
 import { UsersRolesModule } from './users-roles/users-roles.module.js';
 import { CreditNotesModule } from './credit-notes/credit-notes.module.js';
@@ -43,7 +44,7 @@ import { EntitlementsModule } from './subscriptions/entitlements.module.js';
     CustomersModule, SuppliersModule, ProductsModule, InvoicesModule, QuotationsModule,
     SalesOrdersModule, CrmModule, InventoryModule, PurchaseOrdersModule, SupplierBillsModule,
     AccountingModule, ManufacturingModule, EmployeesModule, ExpensesModule, PayrollModule,
-    WorkforceModule, PosModule, RequisitionsModule, ApprovalsModule, UsersRolesModule,
+    WorkforceModule, PosModule, RequisitionsModule, ContractsModule, ApprovalsModule, UsersRolesModule,
     CreditNotesModule, SearchModule, NotificationsModule, SubscriptionsModule, EntitlementsModule,
   ],
   controllers: [AppController],
