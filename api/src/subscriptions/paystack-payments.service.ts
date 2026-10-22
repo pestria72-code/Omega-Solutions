@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -22,15 +23,35 @@ type VerifiedTransaction = {
 
 @Injectable()
 export class PaystackPaymentsService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly logger = new Logger(PaystackPaymentsService.name);
+
+  constructor(private readonly db: DatabaseService) {
+    // Log only boolean configuration diagnostics; never log credentials or key fragments.
+    const key = process.env.PAYSTACK_SECRET_KEY?.trim();
+    this.logger.log(
+      `Paystack test configuration: modeIsTest=${process.env.PAYSTACK_MODE === 'test'}, ` +
+      `secretKeyPresent=${Boolean(key)}, secretKeyHasTestPrefix=${Boolean(key?.startsWith('sk_test_'))}`,
+    );
+  }
 
   private secretKey(): string {
+    const mode = process.env.PAYSTACK_MODE;
     const key = process.env.PAYSTACK_SECRET_KEY?.trim();
     // Development deliberately accepts test keys only. This prevents accidentally
     // charging real customers from the development API.
-    if (process.env.PAYSTACK_MODE !== 'test' || !key?.startsWith('sk_test_')) {
+    if (mode !== 'test') {
       throw new ServiceUnavailableException(
-        'Paystack test mode is not configured. Set PAYSTACK_MODE=test and a test secret key in the development API environment.',
+        'Paystack configuration check failed: the development API process does not see PAYSTACK_MODE=test. Verify the variable is saved on the omega-solutions-api-development Render service and restart/redeploy that service.',
+      );
+    }
+    if (!key) {
+      throw new ServiceUnavailableException(
+        'Paystack configuration check failed: PAYSTACK_SECRET_KEY is missing or empty in the development API process.',
+      );
+    }
+    if (!key.startsWith('sk_test_')) {
+      throw new ServiceUnavailableException(
+        'Paystack configuration check failed: PAYSTACK_SECRET_KEY is present but is not a Test Secret Key (expected the sk_test_ prefix). No key value was logged.',
       );
     }
     return key;
