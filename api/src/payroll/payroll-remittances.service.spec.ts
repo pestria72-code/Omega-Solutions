@@ -53,6 +53,21 @@ describe('PayrollRemittancesService', () => {
     expect(client.query.mock.calls[0][1]).toEqual(['obligation-a', 'company-a']);
   });
 
+  it('accepts ordinary two-decimal amounts without floating-point false rejection', async () => {
+    const client: MockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-a', amount: '1.00' }] })
+        .mockResolvedValueOnce({ rows: [{ amount_paid: '0.00' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'payment-a', amount: '0.29', payment_reference: 'MPESA-REF-29' }] }),
+    };
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    const result = await service.recordPayment(user, 'obligation-a', { amount: 0.29, paymentReference: 'MPESA-REF-29' });
+    expect(result.verificationStatus).toBe('recorded_not_independently_verified');
+    expect(client.query).toHaveBeenCalledTimes(3);
+  });
+
   it('requires a non-empty payment reference', async () => {
     const db = { query: vi.fn(), transaction: vi.fn() } as never;
     const memberships = { getMembership: vi.fn() } as never;
