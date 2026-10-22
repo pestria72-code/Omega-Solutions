@@ -20,7 +20,7 @@ const dateKey=(date:Date)=>`${date.getFullYear()}-${String(date.getMonth()+1).pa
 export default function PayrollPage(){
  const [runs,setRuns]=React.useState<PayrollRun[]>([]);const [employees,setEmployees]=React.useState<Employee[]>([]);const [selectedRun,setSelectedRun]=React.useState<PayrollRunDetail|null>(null);const [detailLoading,setDetailLoading]=React.useState(false);const [detailError,setDetailError]=React.useState<string|null>(null);
  const [loading,setLoading]=React.useState(true);const [error,setError]=React.useState<string|null>(null);const [actionError,setActionError]=React.useState<string|null>(null);
- const [periodStart,setPeriodStart]=React.useState(firstDay);const [periodEnd,setPeriodEnd]=React.useState(lastDay);const [creating,setCreating]=React.useState(false);const [busyId,setBusyId]=React.useState<string|null>(null);
+ const [periodStart,setPeriodStart]=React.useState(firstDay);const [periodEnd,setPeriodEnd]=React.useState(lastDay);const [annualTaxYear,setAnnualTaxYear]=React.useState(String(today.getFullYear()));const [creating,setCreating]=React.useState(false);const [busyId,setBusyId]=React.useState<string|null>(null);
  const [employeeId,setEmployeeId]=React.useState("");const [effectiveFrom,setEffectiveFrom]=React.useState(todayKey);const [salary,setSalary]=React.useState("");const [allowances,setAllowances]=React.useState("0");const [benefits,setBenefits]=React.useState("0");const [pension,setPension]=React.useState("0");const [postRetirementMedical,setPostRetirementMedical]=React.useState("0");const [mortgageInterest,setMortgageInterest]=React.useState("0");const [insurancePremiums,setInsurancePremiums]=React.useState("0");const [taxResident,setTaxResident]=React.useState(true);const [settingBusy,setSettingBusy]=React.useState(false);const [settingsLoading,setSettingsLoading]=React.useState(false);const [settingsMessage,setSettingsMessage]=React.useState<string|null>(null);
  const load=React.useCallback(async()=>{setLoading(true);setError(null);try{const [r,e]=await Promise.all([api.get<PayrollRun[]>("/payroll/runs"),api.get<Employee[]>("/employees")]);setRuns(r);setEmployees(e);if(!employeeId&&e.length)setEmployeeId(e[0].id);}catch(e){setError(message(e));}finally{setLoading(false);}},[employeeId]);
  React.useEffect(()=>{void load();},[load]);
@@ -43,6 +43,15 @@ export default function PayrollPage(){
   setActionError(null);
   try{
    const report=await api.get<{filename:string;contentType:string;disclaimer:string;csv:string}>(`/payroll/runs/${selectedRun.id}/reports/${reportType}`);
+   const blob=new Blob([report.csv],{type:report.contentType||"text/csv;charset=utf-8"});
+   const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=report.filename;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+   setSettingsMessage(report.disclaimer);
+  }catch(e){setActionError(message(e));}
+ }
+ async function exportAnnualTaxSummary(){
+  setActionError(null);
+  try{
+   const report=await api.get<{filename:string;contentType:string;disclaimer:string;csv:string}>(\`/payroll/reports/annual-tax-summary?year=\${encodeURIComponent(annualTaxYear)}\`);
    const blob=new Blob([report.csv],{type:report.contentType||"text/csv;charset=utf-8"});
    const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=report.filename;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
    setSettingsMessage(report.disclaimer);
@@ -77,6 +86,7 @@ export default function PayrollPage(){
    <div className="grid gap-2"><Label>Period end</Label><Input type="date" value={periodEnd} onChange={e=>setPeriodEnd(e.target.value)} required min={periodStart}/></div>
    <div className="flex items-end"><Button onClick={()=>void createRun()} disabled={creating||periodEnd<periodStart}>{creating?<Loader2 className="mr-2 size-4 animate-spin"/>:<Plus className="mr-2 size-4"/>}Calculate draft payroll</Button></div>
   </div><p className="mt-3 text-xs text-muted-foreground">Creating a run stores a calculation snapshot and does not pay employees or remit statutory deductions. Only approved runs can be posted. Posting creates a balanced general-ledger journal; it does not initiate bank transfers or statutory remittances.</p></CardContent></Card>
+  <Card><CardHeader><CardTitle className="text-base">Annual payroll tax summary</CardTitle></CardHeader><CardContent><div className="flex flex-wrap items-end gap-3"><div className="grid gap-2"><Label>Tax year</Label><Input type="number" min="2026" max="2100" value={annualTaxYear} onChange={e=>setAnnualTaxYear(e.target.value)} className="w-32"/></div><Button variant="outline" onClick={()=>void exportAnnualTaxSummary()} disabled={!/^20\d{2}$/.test(annualTaxYear)||Number(annualTaxYear)<2026||Number(annualTaxYear)>2100}><Download className="mr-2 size-4"/>Download annual summary CSV</Button></div><p className="mt-3 text-xs text-muted-foreground">Includes posted payroll runs only. This is an internal annual summary, not an official KRA P9/P9A certificate or P10 return.</p></CardContent></Card>
   <Card><CardContent className="p-0">
    <div className="flex items-center justify-between gap-3 p-4"><h2 className="font-semibold">Payroll runs <span className="font-normal text-muted-foreground">({runs.length})</span></h2><Button size="sm" variant="outline" onClick={()=>void load()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button></div>
    {loading?<div className="flex justify-center p-12"><LoadingSpinner/></div>:error?<div role="alert" className="p-6 text-sm text-destructive">{error}<Button className="ml-3" size="sm" variant="outline" onClick={()=>void load()}>Retry</Button></div>:runs.length===0?<EmptyState icon={Banknote} title="No payroll runs yet" description="Save pay settings for active employees, then calculate a draft run. No sample payroll data is loaded."/>:
