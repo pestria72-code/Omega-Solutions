@@ -11,6 +11,7 @@ export type Permission =
   | 'credit-notes:read' | 'credit-notes:write'
   | 'purchases:read' | 'purchases:write'
   | 'requisitions:read' | 'requisitions:write'
+  | 'contracts:read' | 'contracts:write'
   | 'approvals:read' | 'approvals:approve'
   | 'payments:read' | 'payments:write' | 'payments:verify' | 'payments:reconcile'
   | 'expenses:read' | 'expenses:write'
