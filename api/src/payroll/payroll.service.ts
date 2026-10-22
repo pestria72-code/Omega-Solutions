@@ -117,8 +117,8 @@ export class PayrollService {
  async exportRunReport(user:AuthenticatedUser,id:string,reportType:string){
   const allowed=['payslips','paye','nssf','sha','housing'];
   if(!allowed.includes(reportType))throw new BadRequestException(`Unsupported report type. Choose: ${allowed.join(', ')}.`);
-  const run=await this.getRun(user,id);
-  const items=run.items as Array<Record<string,unknown>>;
+  const run=await this.getRun(user,id) as Record<string,unknown> & {items:Array<Record<string,unknown>>};
+  const items=run.items;
   const csvCell=(value:unknown)=>{const text=String(value??'');return '"' + text.replace(/"/g,'""') + '"';};
   const amountCell=(value:unknown)=>Number(value??0).toFixed(2);
   let filename=`omega-payroll-${reportType}-${String(run.period_start).slice(0,10)}.csv`;
