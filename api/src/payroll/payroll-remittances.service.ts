@@ -83,10 +83,10 @@ export class PayrollRemittancesService {
     );
     const row = run.rows[0];
     const amounts: Array<[ 'PAYE' | 'NSSF' | 'SHIF' | 'HOUSING_LEVY', string | number ]> = [
-      ['PAYE', sums.rows[0].paye],
-      ['NSSF', sums.rows[0].nssf],
-      ['SHIF', sums.rows[0].shif],
-      ['HOUSING_LEVY', sums.rows[0].housing_levy],
+      ['PAYE', String(sums.rows[0].paye)],
+      ['NSSF', String(sums.rows[0].nssf)],
+      ['SHIF', String(sums.rows[0].shif)],
+      ['HOUSING_LEVY', String(sums.rows[0].housing_levy)],
     ];
     const obligations = amounts.flatMap(([authority, rawAmount]) => {
       const amount = Number(rawAmount);
