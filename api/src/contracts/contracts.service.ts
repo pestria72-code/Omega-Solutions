@@ -93,6 +93,28 @@ export class ContractsService {
     await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'status_change',entityType:'contract',entityId:id,oldValues:{status:row.status},newValues:{status},ipAddress:null});
     return this.get(user,id);
   }
+  async createRequisition(user: AuthenticatedUser, id: string) {
+    const { membership, row } = await this.scoped(user, id);
+    if (!['active', 'draft'].includes(String(row.status))) throw new BadRequestException('Only draft or active contracts can generate a requisition.');
+    const planned = await this.db.query(`SELECT i.product_id, i.description, i.quantity, i.unit
+      FROM contract_items i JOIN products p ON p.id=i.product_id AND p.company_id=i.company_id
+      WHERE i.company_id=$1 AND i.contract_id=$2 AND i.item_type='material' AND i.product_id IS NOT NULL AND p.is_active=true
+      ORDER BY i.created_at`, [membership.companyId, id]);
+    if (!planned.rows.length) throw new BadRequestException('Add at least one material linked to an active inventory product before generating a requisition.');
+    const requisitionId = randomUUID();
+    const requestNumber = `REQ-${new Date().getFullYear()}-${requisitionId.slice(0,8).toUpperCase()}`;
+    await this.db.transaction(async client => {
+      await client.query(`INSERT INTO requisitions(id,company_id,branch_id,contract_id,request_number,requester_user_id,title,notes,required_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [requisitionId, membership.companyId, row.branch_id ?? membership.branchId, id, requestNumber, user.userId, `Contract materials: ${row.title}`, `Generated from contract ${row.contract_number}. Review quantities and submit for approval.`, null]);
+      for (const item of planned.rows) {
+        await client.query(`INSERT INTO requisition_items(company_id,requisition_id,product_id,quantity,notes) VALUES($1,$2,$3,$4,$5)`,
+          [membership.companyId, requisitionId, item.product_id, item.quantity, `Contract ${row.contract_number}: ${item.description}${item.unit ? ` (${item.unit})` : ''}`]);
+      }
+    });
+    await this.audit.log({ userId:user.userId, companyId:membership.companyId, branchId:row.branch_id ?? membership.branchId, action:'create_from_contract', entityType:'requisition', entityId:requisitionId, oldValues:null, newValues:{ contractId:id, contractNumber:row.contract_number, status:'draft', itemCount:planned.rows.length }, ipAddress:null });
+    return { id: requisitionId, requestNumber, contractId:id, status:'draft', itemCount:planned.rows.length, message:'Draft requisition created. Review it and submit it through the normal approval workflow.' };
+  }
   async addObligation(user:AuthenticatedUser,id:string,body:Record<string,unknown>) {
     if(typeof body.title!=='string'||!body.title.trim()) throw new BadRequestException('Obligation title is required.');
     if(body.dueDate!==undefined&&body.dueDate!==null&&(typeof body.dueDate!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(body.dueDate)||Number.isNaN(Date.parse(body.dueDate+'T00:00:00Z'))||new Date(body.dueDate+'T00:00:00Z').toISOString().slice(0,10)!==body.dueDate)) throw new BadRequestException('Obligation dueDate must be a valid YYYY-MM-DD date.');
