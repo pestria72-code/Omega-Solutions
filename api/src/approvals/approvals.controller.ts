@@ -15,6 +15,7 @@ export class ApprovalsController {
   constructor(private readonly service: ApprovalsService) {}
   @Get() @RequirePermissions('approvals:read') inbox(@Req() req:{user:AuthenticatedUser}) { return this.service.inbox(req.user); }
   @Post('purchase-orders/:id/submit') @RequirePermissions('purchases:write') submitPurchaseOrder(@Req() req:{user:AuthenticatedUser}, @Param('id',ParseUUIDPipe) id:string) { return this.service.submitPurchaseOrder(req.user,id); }
+  @Post('contracts/:id/submit') @RequirePermissions('purchases:write') submitContract(@Req() req:{user:AuthenticatedUser}, @Param('id',ParseUUIDPipe) id:string) { return this.service.submitContract(req.user,id); }
   @Post(':id/approve') @RequirePermissions('approvals:approve') approve(@Req() req:{user:AuthenticatedUser}, @Param('id',ParseUUIDPipe) id:string, @Body() dto:ApprovalDecisionDto) { return this.service.decide(req.user,id,'approved',dto.note); }
   @Post(':id/reject') @RequirePermissions('approvals:approve') reject(@Req() req:{user:AuthenticatedUser}, @Param('id',ParseUUIDPipe) id:string, @Body() dto:ApprovalDecisionDto) { return this.service.decide(req.user,id,'rejected',dto.note); }
 }
