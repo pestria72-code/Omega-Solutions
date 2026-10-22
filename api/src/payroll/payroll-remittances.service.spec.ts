@@ -34,6 +34,33 @@ describe('PayrollRemittancesService', () => {
     expect(() => calculateRemittanceDueDate('PAYE', 'not-a-date')).toThrow('valid calendar date');
   });
 
+  it('previews an approved run without inserting remittance obligations', async () => {
+    const db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'run-a', period_start: '2026-10-01', period_end: '2026-10-31', status: 'approved' }] })
+        .mockResolvedValueOnce({ rows: [{ paye: '100.25', nssf: '200.00', shif: '30.00', housing_levy: '40.00' }] }),
+      transaction: vi.fn(),
+    } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    const result = await service.previewForRun(user, 'run-a');
+    expect(result.previewOnly).toBe(true);
+    expect(result.persisted).toBe(false);
+    expect(result.obligations).toHaveLength(4);
+    expect(result.obligations[0]).toMatchObject({ authority: 'PAYE', amount: '100.25', dueDate: '2026-11-09' });
+    expect((db as { transaction: ReturnType<typeof vi.fn> }).transaction).not.toHaveBeenCalled();
+    expect((db as { query: ReturnType<typeof vi.fn> }).query).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not preview payroll runs outside the active company or before approval', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }), transaction: vi.fn() } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    await expect(service.previewForRun(user, 'run-other')).rejects.toThrow('approved or posted payroll run');
+    expect((db as { query: ReturnType<typeof vi.fn> }).query.mock.calls[0][1]).toEqual(['run-other', 'company-a']);
+    expect((db as { transaction: ReturnType<typeof vi.fn> }).transaction).not.toHaveBeenCalled();
+  });
+
   it('does not generate obligations from a draft payroll run', async () => {
     const client = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'run-a', status: 'draft' }] }) };
     const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
