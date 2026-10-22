@@ -58,3 +58,6 @@ CREATE TABLE IF NOT EXISTS contract_obligations (
   FOREIGN KEY (company_id, contract_id) REFERENCES contracts(company_id, id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS contract_obligations_due_idx ON contract_obligations(company_id, due_date, status);
+
+ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS contract_id UUID NULL REFERENCES contracts(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS requisitions_company_contract_idx ON requisitions(company_id, contract_id);
