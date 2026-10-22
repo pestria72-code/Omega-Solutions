@@ -16,13 +16,15 @@ export class ApprovalsService {
     return (await this.db.query(
       "SELECT a.id,a.entity_type,a.entity_id,a.status,a.requested_at,a.requester_user_id,u.full_name AS requester_name, " +
       "r.request_number,r.title,r.required_by,r.status AS requisition_status, " +
-      "po.order_number,po.order_date,po.expected_date,po.total AS purchase_order_total,po.currency, s.name AS supplier_name " +
+      "po.order_number,po.order_date,po.expected_date,po.total AS purchase_order_total,po.currency, s.name AS supplier_name, " +
+      "c.contract_number,c.title AS contract_title,c.end_date AS contract_end_date,c.contract_value AS contract_value,c.currency AS contract_currency " +
       "FROM approval_requests a JOIN users u ON u.id=a.requester_user_id " +
       "LEFT JOIN requisitions r ON a.entity_type='requisition' AND r.id=a.entity_id AND r.company_id=a.company_id " +
       "LEFT JOIN purchase_orders po ON a.entity_type='purchase_order' AND po.id=a.entity_id AND po.company_id=a.company_id " +
       "LEFT JOIN suppliers s ON s.id=po.supplier_id AND s.company_id=po.company_id " +
+      "LEFT JOIN contracts c ON a.entity_type='contract' AND c.id=a.entity_id AND c.company_id=a.company_id " +
       "WHERE a.company_id=$1 AND a.status='pending' AND a.requester_user_id<>$2 " +
-      "AND ((a.entity_type='requisition' AND r.id IS NOT NULL) OR (a.entity_type='purchase_order' AND po.id IS NOT NULL)) " +
+      "AND ((a.entity_type='requisition' AND r.id IS NOT NULL) OR (a.entity_type='purchase_order' AND po.id IS NOT NULL) OR (a.entity_type='contract' AND c.id IS NOT NULL)) " +
       "ORDER BY a.requested_at", [companyId, user.userId])).rows;
   }
 
@@ -49,6 +51,22 @@ export class ApprovalsService {
     return { id, status:'pending_approval' };
   }
 
+  async submitContract(user: AuthenticatedUser, id: string) {
+    const membership = await this.companyFor(user);
+    const result = await this.db.transaction(async client => {
+      const found = await client.query('SELECT id,status,created_by FROM contracts WHERE company_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id IS NULL OR branch_id=$3) FOR UPDATE',[membership.companyId,id,membership.branchId]);
+      const row=found.rows[0];
+      if(!row) throw new NotFoundException('Contract not found.');
+      if(row.created_by!==user.userId) throw new BadRequestException('Only the contract creator can submit it for approval.');
+      if(!['draft','suspended'].includes(String(row.status))) throw new BadRequestException('Only draft or suspended contracts can be submitted for approval.');
+      await client.query("UPDATE contracts SET status='pending_approval',updated_at=NOW() WHERE company_id=$1 AND id=$2",[membership.companyId,id]);
+      await client.query("INSERT INTO approval_requests(company_id,branch_id,entity_type,entity_id,requester_user_id,status,decision_note,requested_at,decided_at,approver_user_id) VALUES($1,$2,'contract',$3,$4,'pending',NULL,NOW(),NULL,NULL) ON CONFLICT(company_id,entity_type,entity_id) DO UPDATE SET status='pending',requester_user_id=$4,approver_user_id=NULL,decision_note=NULL,requested_at=NOW(),decided_at=NULL",[membership.companyId,membership.branchId,id,user.userId]);
+      return {status:row.status as string};
+    });
+    await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'submit_for_approval',entityType:'contract',entityId:id,oldValues:{status:result.status},newValues:{status:'pending_approval'},ipAddress:null});
+    return {id,status:'pending_approval'};
+  }
+
   async decide(user: AuthenticatedUser, id: string, decision: 'approved'|'rejected', note?: string) {
     const membership = await this.companyFor(user);
     const result = await this.db.transaction(async client => {
@@ -67,6 +85,10 @@ export class ApprovalsService {
         if (decision === 'approved') {
           await client.query("UPDATE purchase_orders SET status='ordered',updated_at=NOW() WHERE company_id=$1 AND id=$2", [membership.companyId,row.entity_id]);
         }
+      } else if (row.entity_type === 'contract') {
+        const contract=await client.query('SELECT id,status FROM contracts WHERE company_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id IS NULL OR branch_id=$3) FOR UPDATE',[membership.companyId,row.entity_id,membership.branchId]);
+        if(!contract.rows[0]||contract.rows[0].status!=='pending_approval') throw new BadRequestException('The contract is not awaiting approval.');
+        await client.query('UPDATE contracts SET status=$1,updated_at=NOW() WHERE company_id=$2 AND id=$3',[decision==='approved'?'active':'draft',membership.companyId,row.entity_id]);
       } else {
         throw new BadRequestException('Unsupported approval request type.');
       }
