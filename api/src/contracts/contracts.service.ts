@@ -113,7 +113,7 @@ export class ContractsService {
           [membership.companyId, requisitionId, item.product_id, item.quantity, `Contract ${row.contract_number}: ${item.description}${item.unit ? ` (${item.unit})` : ''}`]);
       }
     });
-    await this.audit.log({ userId:user.userId, companyId:membership.companyId, branchId:row.branch_id ?? membership.branchId, action:'create_from_contract', entityType:'requisition', entityId:requisitionId, oldValues:null, newValues:{ contractId:id, contractNumber:row.contract_number, status:'draft', itemCount:planned.rows.length }, ipAddress:null });
+    await this.audit.log({ userId:user.userId, companyId:membership.companyId, branchId:typeof row.branch_id==='string'?row.branch_id:membership.branchId, action:'create_from_contract', entityType:'requisition', entityId:requisitionId, oldValues:null, newValues:{ contractId:id, contractNumber:row.contract_number, status:'draft', itemCount:planned.rows.length }, ipAddress:null });
     return { id: requisitionId, requestNumber, contractId:id, status:'draft', itemCount:planned.rows.length, message:'Draft requisition created. Review it and submit it through the normal approval workflow.' };
   }
   async addObligation(user:AuthenticatedUser,id:string,body:Record<string,unknown>) {
