@@ -104,7 +104,8 @@ export class PayrollService {
   if(dto.periodStart<'2026-02-01')throw new BadRequestException('Historical payroll periods before 2026-02-01 are not supported until effective-dated statutory rules are implemented and verified. No payroll was created.');
   const statutoryResult=await this.db.query(`SELECT nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate
    FROM company_payroll_statutory_settings WHERE company_id=$1 AND effective_from<=$2::date ORDER BY effective_from DESC LIMIT 1`,[membership.companyId,dto.periodStart]);
-  const statutoryRow=statutoryResult.rows[0]??{};
+  const statutoryRow=statutoryResult.rows[0];
+  if(!statutoryRow)throw new BadRequestException('Company statutory payroll settings are not configured for this pay period. Save the applicable NSSF method and housing levy choice before generating payroll. No payroll was created.');
   const statutoryOptions:PayrollStatutoryOptions={
    nssfMethod:String(statutoryRow.nssf_method??'YEAR4') as NssfMethod,
    nssfEmployeeFlat:Number(statutoryRow.nssf_employee_flat??200),
