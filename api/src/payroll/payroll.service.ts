@@ -19,6 +19,36 @@ const payFields=['monthlyBasicSalary','monthlyTaxableAllowances','monthlyTaxable
 export class PayrollService {
  constructor(private readonly db:DatabaseService,private readonly memberships:MembershipsService){}
  private membershipFor(user:AuthenticatedUser){return user.companyId?this.memberships.getMembershipForCompany(user.userId,user.companyId):this.memberships.getMembership(user.userId);}
+ async getCompanyStatutorySettings(user:AuthenticatedUser,effectiveFromValue?:string){
+  const {companyId}=await this.membershipFor(user);
+  const effectiveFrom=effectiveFromValue??new Date().toISOString().slice(0,10);
+  if(!validDate(effectiveFrom))throw new BadRequestException('effectiveFrom must be a valid YYYY-MM-DD date.');
+  const result=await this.db.query(`SELECT id,company_id,effective_from,nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate,created_at
+   FROM company_payroll_statutory_settings WHERE company_id=$1 AND effective_from<=$2::date ORDER BY effective_from DESC LIMIT 1`,[companyId,effectiveFrom]);
+  return result.rows[0]??{company_id:companyId,effective_from:effectiveFrom,nssf_method:'YEAR4',nssf_employee_flat:'200.00',nssf_employer_flat:'200.00',nssf_employee_rate:'0.060000',nssf_employer_rate:'0.060000',nssf_pensionable_pay_cap:'108000.00',housing_levy_enabled:true,housing_levy_employee_rate:'0.015000',housing_levy_employer_rate:'0.015000',configurationSource:'default'};
+ }
+ async setCompanyStatutorySettings(user:AuthenticatedUser,dto:Record<string,unknown>){
+  const {companyId}=await this.membershipFor(user);
+  const effectiveFrom=dto.effectiveFrom??new Date().toISOString().slice(0,10);
+  if(typeof effectiveFrom!=='string'||!validDate(effectiveFrom))throw new BadRequestException('effectiveFrom must be a valid YYYY-MM-DD date.');
+  const nssfMethod=dto.nssfMethod??'YEAR4';
+  if(!['YEAR4','LEGACY_FLAT_200','CUSTOM'].includes(String(nssfMethod)))throw new BadRequestException('nssfMethod must be YEAR4, LEGACY_FLAT_200, or CUSTOM.');
+  const numeric:Record<string,number>={};
+  const defaults:Record<string,number>={nssfEmployeeFlat:200,nssfEmployerFlat:200,nssfEmployeeRate:.06,nssfEmployerRate:.06,nssfPensionablePayCap:108000,housingLevyEmployeeRate:.015,housingLevyEmployerRate:.015};
+  for(const [key,fallback] of Object.entries(defaults)){
+   const value=dto[key]===undefined?fallback:dto[key];
+   if(typeof value!=='number'||!Number.isFinite(value)||value<0||((key.endsWith('Rate'))&&value>1))throw new BadRequestException(`${key} must be a valid non-negative number${key.endsWith('Rate')?' no greater than 1':''}.`);
+   numeric[key]=value;
+  }
+  const housingLevyEnabled=dto.housingLevyEnabled??true;
+  if(typeof housingLevyEnabled!=='boolean')throw new BadRequestException('housingLevyEnabled must be a boolean.');
+  const result=await this.db.query(`INSERT INTO company_payroll_statutory_settings(company_id,effective_from,nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate,created_by)
+   VALUES($1,$2::date,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+   ON CONFLICT(company_id,effective_from) DO UPDATE SET nssf_method=EXCLUDED.nssf_method,nssf_employee_flat=EXCLUDED.nssf_employee_flat,nssf_employer_flat=EXCLUDED.nssf_employer_flat,nssf_employee_rate=EXCLUDED.nssf_employee_rate,nssf_employer_rate=EXCLUDED.nssf_employer_rate,nssf_pensionable_pay_cap=EXCLUDED.nssf_pensionable_pay_cap,housing_levy_enabled=EXCLUDED.housing_levy_enabled,housing_levy_employee_rate=EXCLUDED.housing_levy_employee_rate,housing_levy_employer_rate=EXCLUDED.housing_levy_employer_rate
+   RETURNING id,company_id,effective_from,nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate,created_at`,
+   [companyId,effectiveFrom,nssfMethod,numeric.nssfEmployeeFlat,numeric.nssfEmployerFlat,numeric.nssfEmployeeRate,numeric.nssfEmployerRate,numeric.nssfPensionablePayCap,housingLevyEnabled,numeric.housingLevyEmployeeRate,numeric.housingLevyEmployerRate,user.userId]);
+  return result.rows[0];
+ }
  async getEmployeePaySettings(user:AuthenticatedUser,employeeId:string){
   const {companyId}=await this.membershipFor(user);
   const result=await this.db.query(`SELECT s.id,s.company_id,s.employee_id,s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes,s.effective_from,s.created_at,s.updated_at
@@ -71,6 +101,20 @@ export class PayrollService {
   // The current calculator implements NSSF Year 4 (effective February 2026) only.
   // Never silently apply those current rules to an earlier historical payroll period.
   if(dto.periodStart<'2026-02-01')throw new BadRequestException('Historical payroll periods before 2026-02-01 are not supported until effective-dated statutory rules are implemented and verified. No payroll was created.');
+  const statutoryResult=await this.db.query(`SELECT nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate
+   FROM company_payroll_statutory_settings WHERE company_id=$1 AND effective_from<=$2::date ORDER BY effective_from DESC LIMIT 1`,[membership.companyId,dto.periodStart]);
+  const statutoryRow=statutoryResult.rows[0]??{};
+  const statutoryOptions={
+   nssfMethod:statutoryRow.nssf_method??'YEAR4',
+   nssfEmployeeFlat:Number(statutoryRow.nssf_employee_flat??200),
+   nssfEmployerFlat:Number(statutoryRow.nssf_employer_flat??200),
+   nssfEmployeeRate:Number(statutoryRow.nssf_employee_rate??.06),
+   nssfEmployerRate:Number(statutoryRow.nssf_employer_rate??.06),
+   nssfPensionablePayCap:Number(statutoryRow.nssf_pensionable_pay_cap??108000),
+   housingLevyEnabled:statutoryRow.housing_levy_enabled??true,
+   housingLevyEmployeeRate:Number(statutoryRow.housing_levy_employee_rate??.015),
+   housingLevyEmployerRate:Number(statutoryRow.housing_levy_employer_rate??.015),
+  } as const;
   const employees=await this.db.query<PayEmployee>(`SELECT e.id,e.employee_number,e.first_name,e.last_name,
     s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,
     s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes
@@ -85,7 +129,7 @@ export class PayrollService {
       postRetirementMedicalContribution:amount(employee.post_retirement_medical_contribution),
       qualifyingMortgageInterest:amount(employee.qualifying_mortgage_interest),
       insurancePremiums:amount(employee.eligible_insurance_premiums),
-      residentForTaxPurposes:employee.resident_for_tax_purposes});
+      residentForTaxPurposes:employee.resident_for_tax_purposes,statutoryOptions});
     if(snapshot.netPay<0)throw new BadRequestException(`Calculated net pay is negative for employee ${employee.employee_number}; review their pay settings.`);
     return {employee,snapshot,grossCashPay};
   });
