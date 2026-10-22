@@ -24,6 +24,16 @@ describe('PayrollService tenant and workflow guards',()=>{
   const query=(db as {query:ReturnType<typeof vi.fn>}).query;
   expect(query.mock.calls[0][1]).toEqual(['company-a','2026-10-01','LEGACY_FLAT_200',200,200,.06,.06,108000,false,.015,.015,'user-a']);
  });
+ it('requires company-specific statutory settings before creating a payroll run',async()=>{
+  const db={query:vi.fn().mockResolvedValue({rows:[]}),transaction:vi.fn()} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.createRun(
+   {userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},
+   {periodStart:'2026-10-01',periodEnd:'2026-10-31'}
+  )).rejects.toThrow('Company statutory payroll settings are not configured');
+  expect((db as {query:ReturnType<typeof vi.fn>}).query).toHaveBeenCalledTimes(1);
+ });
  it('rejects malformed periods before reading employees',async()=>{
   const db={query:vi.fn(),transaction:vi.fn()} as never;
   const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
