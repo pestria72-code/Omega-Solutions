@@ -6,6 +6,8 @@ const user = {
   companyId: null, branchId: null, role: 'owner', permissions: [],
 };
 
+type MockClient = { query: ReturnType<typeof vi.fn> };
+
 describe('PayrollRemittancesService', () => {
   it('lists obligations only for the active company', async () => {
     const db = { query: vi.fn().mockResolvedValue({ rows: [] }), transaction: vi.fn() } as never;
@@ -28,7 +30,7 @@ describe('PayrollRemittancesService', () => {
 
   it('does not generate obligations from a draft payroll run', async () => {
     const client = { query: vi.fn().mockResolvedValue({ rows: [{ id: 'run-a', status: 'draft' }] }) };
-    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: typeof client) => unknown) => callback(client)) } as never;
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
     const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
     const service = new PayrollRemittancesService(db, memberships);
     await expect(service.generateForRun(user, 'run-a', '2026-11-09')).rejects.toThrow('only be generated from a posted payroll run');
@@ -41,7 +43,7 @@ describe('PayrollRemittancesService', () => {
         .mockResolvedValueOnce({ rows: [{ id: 'obligation-a', amount: '100.00' }] })
         .mockResolvedValueOnce({ rows: [{ amount_paid: '75.00' }] }),
     };
-    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: typeof client) => unknown) => callback(client)) } as never;
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
     const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
     const service = new PayrollRemittancesService(db, memberships);
     await expect(service.recordPayment(user, 'obligation-a', {
