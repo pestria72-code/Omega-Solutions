@@ -75,7 +75,7 @@ export class ContractsService {
   }
   async update(user: AuthenticatedUser, id: string, body: Record<string, unknown>) {
     this.validate(body,true); const {membership,row}=await this.scoped(user,id);
-    if(!['draft','pending_approval'].includes(String(row.status))) throw new BadRequestException('Only draft contracts can be edited.');
+    if(row.status!=='draft') throw new BadRequestException('Only draft contracts can be edited. Submit the contract again after making changes.');
     const allowed:Record<string,string>={title:'title',description:'description',startDate:'start_date',endDate:'end_date',renewalDate:'renewal_date',contractValue:'contract_value',monthlyBudget:'monthly_budget',notes:'notes'};
     const keys=Object.keys(allowed).filter(k=>body[k]!==undefined);
     await this.db.transaction(async client=>{
