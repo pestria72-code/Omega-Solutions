@@ -12,9 +12,9 @@ import { ModuleEntitlementsGuard } from '../subscriptions/module-entitlements.gu
 @UseGuards(JwtAuthGuard, PermissionsGuard, ModuleEntitlementsGuard)
 export class ContractsController {
   constructor(private readonly service: ContractsService) {}
-  @Get() @RequirePermissions('contracts:read') list(@Req() req: { user: AuthenticatedUser }) { return this.service.list(req.user); }
+  @Get() @RequirePermissions('purchases:read') list(@Req() req: { user: AuthenticatedUser }) { return this.service.list(req.user); }
   @Get(':id') @RequirePermissions('contracts:read') get(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseUUIDPipe) id: string) { return this.service.get(req.user, id); }
-  @Post() @RequirePermissions('contracts:write') create(@Req() req: { user: AuthenticatedUser }, @Body() body: Record<string, unknown>) { return this.service.create(req.user, body); }
+  @Post() @RequirePermissions('purchases:write') create(@Req() req: { user: AuthenticatedUser }, @Body() body: Record<string, unknown>) { return this.service.create(req.user, body); }
   @Patch(':id') @RequirePermissions('contracts:write') update(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseUUIDPipe) id: string, @Body() body: Record<string, unknown>) { return this.service.update(req.user, id, body); }
   @Post(':id/activate') @RequirePermissions('contracts:write') activate(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseUUIDPipe) id: string) { return this.service.changeStatus(req.user, id, 'active'); }
   @Post(':id/suspend') @RequirePermissions('contracts:write') suspend(@Req() req: { user: AuthenticatedUser }, @Param('id', ParseUUIDPipe) id: string) { return this.service.changeStatus(req.user, id, 'suspended'); }
