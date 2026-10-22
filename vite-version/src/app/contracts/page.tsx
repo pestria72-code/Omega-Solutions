@@ -67,7 +67,11 @@ export default function ContractsPage(){
    setBusy(c.id);setError("")
    try{await api.post("/contracts/"+c.id+"/"+action);await refresh();if(selected?.id===c.id){const updated=await api.get<Contract & {items:unknown[];obligations:unknown[]}>("/contracts/"+c.id);setSelected(updated)}}catch(e){setError(message(e))}finally{setBusy("")}
  }
- const createRequisition=async()=>{\n   if(!selected)return;setBusy(selected.id);setError("");setNotice("")\n   try{const result=await api.post<{requestNumber:string;itemCount:number;message:string}>("/contracts/"+selected.id+"/requisitions");setNotice(result.message+" "+result.requestNumber+" ("+result.itemCount+" lines).");await refresh()}catch(e){setError(message(e))}finally{setBusy("")}\n }\n const addObligation=async()=>{
+ const createRequisition=async()=>{
+   if(!selected)return;setBusy(selected.id);setError("");setNotice("")
+   try{const result=await api.post<{requestNumber:string;itemCount:number;message:string}>("/contracts/"+selected.id+"/requisitions");setNotice(result.message+" "+result.requestNumber+" ("+result.itemCount+" lines).");await refresh()}catch(e){setError(message(e))}finally{setBusy("")}
+ }
+ const addObligation=async()=>{
    if(!selected||!obligationTitle.trim())return
    setBusy(selected.id);setError("")
    try{await api.post("/contracts/"+selected.id+"/obligations",{title:obligationTitle.trim(),dueDate:obligationDue||undefined});const updated=await api.get<Contract & {items:unknown[];obligations:unknown[]}>("/contracts/"+selected.id);setSelected(updated);setObligationTitle("");setObligationDue("");await refresh()}catch(e){setError(message(e))}finally{setBusy("")}
@@ -81,7 +85,8 @@ export default function ContractsPage(){
  const selectedDetail=selected as (Contract & {items?:Array<{id:string;description:string;item_type:string;quantity:string|number;unit?:string;unit_price:string|number;frequency:string}>;obligations?:Array<{id:string;title:string;due_date?:string|null;status:string}>})|null
  return <BaseLayout><div className="flex flex-col gap-5 px-4 lg:px-6">
   <PageHeader title="Contract Management" description="Manage customer and supplier agreements, material requirements, obligations, and renewal dates." action={<div className="flex gap-2"><Button variant="outline" onClick={()=>void refresh()} disabled={loading}><RefreshCw className="mr-2 size-4"/>Refresh</Button><Button onClick={()=>{setShowForm(v=>!v);setSelected(null)}}><Plus className="mr-2 size-4"/>New contract</Button></div>}/>
-  {notice&&<div role="status" className="rounded-lg border border-emerald-600/30 bg-emerald-600/5 p-3 text-sm text-emerald-700">{notice}</div>}\n  {error&&<div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"><AlertCircle className="mt-0.5 size-4 shrink-0"/><span>{error}</span></div>}
+  {notice&&<div role="status" className="rounded-lg border border-emerald-600/30 bg-emerald-600/5 p-3 text-sm text-emerald-700">{notice}</div>}
+  {error&&<div role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm"><AlertCircle className="mt-0.5 size-4 shrink-0"/><span>{error}</span></div>}
   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
    <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Total contracts</CardTitle></CardHeader><CardContent><div className="text-2xl font-semibold">{contracts.length}</div></CardContent></Card>
    <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Active contracts</CardTitle></CardHeader><CardContent><div className="text-2xl font-semibold">{contracts.filter(c=>c.status==="active").length}</div></CardContent></Card>
