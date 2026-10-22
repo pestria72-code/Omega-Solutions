@@ -3,6 +3,7 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import { calculateKenyaMonthlyPayroll } from './kenya-payroll-calculator.js';
+import type { NssfMethod, PayrollStatutoryOptions } from './kenya-payroll-calculator.js';
 
 interface PayEmployee {
  [key:string]:unknown;
@@ -104,17 +105,17 @@ export class PayrollService {
   const statutoryResult=await this.db.query(`SELECT nssf_method,nssf_employee_flat,nssf_employer_flat,nssf_employee_rate,nssf_employer_rate,nssf_pensionable_pay_cap,housing_levy_enabled,housing_levy_employee_rate,housing_levy_employer_rate
    FROM company_payroll_statutory_settings WHERE company_id=$1 AND effective_from<=$2::date ORDER BY effective_from DESC LIMIT 1`,[membership.companyId,dto.periodStart]);
   const statutoryRow=statutoryResult.rows[0]??{};
-  const statutoryOptions={
-   nssfMethod:statutoryRow.nssf_method??'YEAR4',
+  const statutoryOptions:PayrollStatutoryOptions={
+   nssfMethod:String(statutoryRow.nssf_method??'YEAR4') as NssfMethod,
    nssfEmployeeFlat:Number(statutoryRow.nssf_employee_flat??200),
    nssfEmployerFlat:Number(statutoryRow.nssf_employer_flat??200),
    nssfEmployeeRate:Number(statutoryRow.nssf_employee_rate??.06),
    nssfEmployerRate:Number(statutoryRow.nssf_employer_rate??.06),
    nssfPensionablePayCap:Number(statutoryRow.nssf_pensionable_pay_cap??108000),
-   housingLevyEnabled:statutoryRow.housing_levy_enabled??true,
+   housingLevyEnabled:statutoryRow.housing_levy_enabled===undefined?true:Boolean(statutoryRow.housing_levy_enabled),
    housingLevyEmployeeRate:Number(statutoryRow.housing_levy_employee_rate??.015),
    housingLevyEmployerRate:Number(statutoryRow.housing_levy_employer_rate??.015),
-  } as const;
+  };
   const employees=await this.db.query<PayEmployee>(`SELECT e.id,e.employee_number,e.first_name,e.last_name,
     s.monthly_basic_salary,s.monthly_taxable_allowances,s.monthly_taxable_benefits,s.employee_pension_contribution,
     s.post_retirement_medical_contribution,s.qualifying_mortgage_interest,s.eligible_insurance_premiums,s.resident_for_tax_purposes
