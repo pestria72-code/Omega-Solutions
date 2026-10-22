@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     (contract_type = 'customer' AND counterparty_supplier_id IS NULL) OR
     (contract_type = 'supplier' AND counterparty_customer_id IS NULL)
   ),
-  CONSTRAINT contracts_company_number_unique UNIQUE (company_id, contract_number)
+  CONSTRAINT contracts_company_number_unique UNIQUE (company_id, contract_number),
+  CONSTRAINT contracts_company_id_unique UNIQUE (company_id, id)
 );
 CREATE INDEX IF NOT EXISTS contracts_company_status_idx ON contracts(company_id, status, end_date);
 CREATE INDEX IF NOT EXISTS contracts_company_branch_idx ON contracts(company_id, branch_id);
