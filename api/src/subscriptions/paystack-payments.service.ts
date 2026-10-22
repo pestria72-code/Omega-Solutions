@@ -124,14 +124,11 @@ export class PaystackPaymentsService {
         status: 'pending',
       };
     } catch {
-      await this.db.query(
-        `UPDATE subscription_payments
-         SET status = 'failed', updated_at = NOW()
-         WHERE reference = $1 AND status = 'pending'`,
-        [reference],
-      );
+      // Keep the ledger row pending after a network/timeout error: Paystack may
+      // have created the transaction before the connection failed. A later signed
+      // webhook can still verify it safely; never mark it paid from this request.
       throw new ServiceUnavailableException(
-        'Unable to initialize Paystack checkout. Please try again; no subscription has been activated.',
+        'Unable to confirm Paystack checkout initialization. No subscription has been activated; you may retry or contact support if you received a checkout link.',
       );
     }
   }
