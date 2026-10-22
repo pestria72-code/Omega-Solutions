@@ -19,12 +19,12 @@ try {
  for(let attempt=0;attempt<12;attempt++){try{h=await req("GET","/health");if(h.data?.status==="ok"&&h.data?.database==="connected")break;h=null}catch(e){lastHealthError=e}await new Promise(resolve=>setTimeout(resolve,5000))}
  if(!h)throw Error(`API health/database did not recover: ${String(lastHealthError||"unexpected health response")}`);
  ok(h.data?.status==="ok"&&h.data?.database==="connected","health/database");
- const login = await neonTestLogin(base, { slot: "B" });
+ const login = await neonTestLogin(base, { slot: "A" });
  const approver = await neonTestLogin(base, { slot: "APPROVER" });
  const token = login.token;
  const approverToken = approver.token;
  ok(!!token&&!!login.refreshToken,"verified Neon Auth requester identity exchanged for Omega tokens");
- ok(login.user.companyId === "82920006-d0a8-464e-bbde-42de40a26d48","test account B is mapped to its approved isolated company before any writes");
+ ok(login.user.companyId === "5a72776a-a976-4d98-87e5-ea323fec61f8","test account A is mapped to Fezaton Enterprises before any writes");
  ok(!!approverToken&&!!approver.refreshToken&&approver.user.userId!==login.user.userId,"verified distinct approver identity is available");
  ok(approver.user.companyId===login.user.companyId,"requester and approver belong to the same isolated test company");
  const me=(await req("GET","/auth/me",undefined,token)).data;ok(me.userId===login.user.userId&&me.companyId===login.user.companyId,"authenticated /me and tenant identity");
