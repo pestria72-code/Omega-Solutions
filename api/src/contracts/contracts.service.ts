@@ -81,7 +81,7 @@ export class ContractsService {
     if(body.items!==undefined) throw new BadRequestException('Edit contract items through a new draft in this initial release; existing items are preserved.');
     if(keys.length) {
       const vals:unknown[]=[membership.companyId,id]; const sets=keys.map(k=>{vals.push(body[k]);return `${allowed[k]}=$${vals.length}`});
-      await this.db.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND (${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=${vals.length+1})`,[...vals,membership.branchId] as (string|number|boolean|Date|null)[]);
+      await this.db.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND ($${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=${vals.length+1})`,[...vals,membership.branchId] as (string|number|boolean|Date|null)[]);
     }
     await this.audit.log({userId:user.userId,companyId:membership.companyId,branchId:membership.branchId,action:'update',entityType:'contract',entityId:id,oldValues:null,newValues:body,ipAddress:null});
     return this.get(user,id);
