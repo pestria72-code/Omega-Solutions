@@ -95,8 +95,12 @@ export class ContractsService {
   }
   async addObligation(user:AuthenticatedUser,id:string,body:Record<string,unknown>) {
     if(typeof body.title!=='string'||!body.title.trim()) throw new BadRequestException('Obligation title is required.');
+    if(body.dueDate!==undefined&&body.dueDate!==null&&(typeof body.dueDate!=='string'||!/^\\d{4}-\\d{2}-\\d{2}$/.test(body.dueDate)||Number.isNaN(Date.parse(body.dueDate+'T00:00:00Z'))||new Date(body.dueDate+'T00:00:00Z').toISOString().slice(0,10)!==body.dueDate)) throw new BadRequestException('Obligation dueDate must be a valid YYYY-MM-DD date.');
+    if(body.notes!==undefined&&body.notes!==null&&(typeof body.notes!=='string'||body.notes.length>2000)) throw new BadRequestException('Obligation notes must be text up to 2000 characters.');
     const {membership}=await this.scoped(user,id), obligationId=randomUUID();
-    await this.db.query('INSERT INTO contract_obligations(id,company_id,contract_id,title,due_date,notes) VALUES($1,$2,$3,$4,$5,$6)',[obligationId,membership.companyId,id,body.title.trim(),body.dueDate??null,body.notes??null]);
+    const dueDate=body.dueDate===undefined||body.dueDate===null?null:body.dueDate as string;
+    const notes=body.notes===undefined||body.notes===null?null:body.notes as string;
+    await this.db.query('INSERT INTO contract_obligations(id,company_id,contract_id,title,due_date,notes) VALUES($1,$2,$3,$4,$5,$6)',[obligationId,membership.companyId,id,body.title.trim(),dueDate,notes]);
     return this.get(user,id);
   }
   async updateObligation(user:AuthenticatedUser,id:string,obligationId:string,body:Record<string,unknown>) {
