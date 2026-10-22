@@ -80,8 +80,8 @@ export class ContractsService {
     const keys=Object.keys(allowed).filter(k=>body[k]!==undefined);
     await this.db.transaction(async client=>{
       if(keys.length) {
-        const vals:unknown[]=[membership.companyId,id]; const sets=keys.map(k=>{vals.push(body[k]);return `${allowed[k]}=${vals.length}`});
-        await client.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND (${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=${vals.length+1})`,[...vals,membership.branchId]);
+        const vals:unknown[]=[membership.companyId,id]; const sets=keys.map(k=>{vals.push(body[k]);return `${allowed[k]}=$${vals.length}`});
+        await client.query(`UPDATE contracts SET ${sets.join(',')},updated_at=NOW() WHERE company_id=$1 AND id=$2 AND ($${vals.length+1}::uuid IS NULL OR branch_id IS NULL OR branch_id=$${vals.length+1})`,[...vals,membership.branchId]);
       }
       if(body.items!==undefined) {
         await client.query('DELETE FROM contract_items WHERE company_id=$1 AND contract_id=$2',[membership.companyId,id]);
