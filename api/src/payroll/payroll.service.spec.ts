@@ -2,6 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { PayrollService } from './payroll.service.js';
 
 describe('PayrollService tenant and workflow guards',()=>{
+ it('loads company statutory settings with safe defaults when no effective row exists',async()=>{
+  const db={query:vi.fn().mockResolvedValue({rows:[]}),transaction:vi.fn()} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  const result=await service.getCompanyStatutorySettings({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]});
+  expect(result.company_id).toBe('company-a');
+  expect(result.nssf_method).toBe('YEAR4');
+  expect(result.housing_levy_enabled).toBe(true);
+  expect((db as {query:ReturnType<typeof vi.fn>}).query.mock.calls[0][1][0]).toBe('company-a');
+ });
+ it('validates company statutory settings before writing and scopes writes to active company',async()=>{
+  const db={query:vi.fn().mockResolvedValue({rows:[{company_id:'company-a',nssf_method:'LEGACY_FLAT_200'}]}),transaction:vi.fn()} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  const user={userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]};
+  await expect(service.setCompanyStatutorySettings(user,{effectiveFrom:'2026-10-01',nssfMethod:'UNKNOWN'})).rejects.toThrow('nssfMethod must be');
+  expect((db as {query:ReturnType<typeof vi.fn>}).query).not.toHaveBeenCalled();
+  const result=await service.setCompanyStatutorySettings(user,{effectiveFrom:'2026-10-01',nssfMethod:'LEGACY_FLAT_200',housingLevyEnabled:false});
+  expect(result.company_id).toBe('company-a');
+  const query=(db as {query:ReturnType<typeof vi.fn>}).query;
+  expect(query.mock.calls[0][1]).toEqual(['company-a','2026-10-01','LEGACY_FLAT_200',200,200,.06,.06,108000,false,.015,.015,'user-a']);
+ });
  it('rejects malformed periods before reading employees',async()=>{
   const db={query:vi.fn(),transaction:vi.fn()} as never;
   const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
