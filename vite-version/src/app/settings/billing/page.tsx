@@ -79,7 +79,7 @@ export default function BillingSettings() {
     }
   }
 
-  const checkPaymentStatus = async (reference: string) => {
+  const checkPaymentStatus = React.useCallback(async (reference: string) => {
     setCheckingPayment(true)
     setError(null)
     try {
@@ -102,7 +102,7 @@ export default function BillingSettings() {
     } finally {
       setCheckingPayment(false)
     }
-  }
+  }, [])
 
   React.useEffect(() => {
     const reference = new URLSearchParams(window.location.search).get("reference")
@@ -110,7 +110,7 @@ export default function BillingSettings() {
     setPaymentReference(reference)
     window.history.replaceState({}, "", window.location.pathname)
     void checkPaymentStatus(reference)
-  }, [])
+  }, [checkPaymentStatus])
 
   const handleModuleSelect = async (moduleCode: string) => {
     setRequestingModule(moduleCode)
