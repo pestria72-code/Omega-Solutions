@@ -63,7 +63,7 @@ export default function ContractsPage(){
      setShowForm(false);setTitle("");setPartyId("");setValue("0");setBudget("");setDescription("");setNotes("");setRenewalDate("");setItems([blankItem()]);await refresh()
    }catch(e){setError(message(e))}finally{setSaving(false)}
  }
- const changeStatus=async(c:Contract,action:"activate"|"suspend")=>{
+ const changeStatus=async(c:Contract,action:"submit-for-approval"|"suspend")=>{
    setBusy(c.id);setError("")
    try{await api.post("/contracts/"+c.id+"/"+action);await refresh();if(selected?.id===c.id){const updated=await api.get<Contract & {items:unknown[];obligations:unknown[]}>("/contracts/"+c.id);setSelected(updated)}}catch(e){setError(message(e))}finally{setBusy("")}
  }
@@ -152,7 +152,7 @@ export default function ContractsPage(){
           <td className="p-3"><span className="rounded-full border px-2 py-1 text-xs">{statusLabels[c.status] || c.status}</span></td>
           <td className="p-3">
            <div className="flex gap-2">
-            {(c.status === "draft" || c.status === "suspended") && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void changeStatus(c,"activate")}>Activate</Button>}
+            {(c.status === "draft" || c.status === "suspended") && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void changeStatus(c,"submit-for-approval")}>Submit for approval</Button>}
             {c.status === "active" && <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void changeStatus(c,"suspend")}>Suspend</Button>}
             <Button size="sm" variant="ghost" onClick={async () => { setError(""); try { setSelected(await api.get("/contracts/" + c.id)); setShowForm(false); } catch (e) { setError(message(e)); } }}>View</Button>
            </div>
