@@ -32,6 +32,7 @@ import {
   Factory,
   ShieldCheck,
   CreditCard,
+  FileSignature,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { NavMain } from "@/components/nav-main"
@@ -91,6 +92,7 @@ const navGroups: NavGroup[] = [
     module: "procurement",
     items: [
       { title: "Suppliers", url: "/suppliers", icon: Briefcase },
+      { title: "Contracts", url: "/contracts", icon: FileSignature },
       { title: "Requisitions", url: "/requisitions", icon: ClipboardList },
       { title: "Purchase Orders", url: "/purchase-orders", icon: ClipboardList },
       { title: "Supplier Bills", url: "/supplier-bills", icon: FileText },
