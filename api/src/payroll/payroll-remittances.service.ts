@@ -3,11 +3,31 @@ import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 
-const validDate = (value: unknown): value is string =>
-  typeof value === 'string' &&
-  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-  !Number.isNaN(Date.parse(value + 'T00:00:00Z')) &&
-  new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+export const calculateRemittanceDueDate = (authority: string, periodEndValue: unknown): string => {
+  const periodEnd = String(periodEndValue ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(periodEnd) ||
+      Number.isNaN(Date.parse(periodEnd + 'T00:00:00Z')) ||
+      new Date(periodEnd + 'T00:00:00Z').toISOString().slice(0, 10) !== periodEnd) {
+    throw new BadRequestException('Payroll period end must be a valid calendar date.');
+  }
+  const [year, month] = periodEnd.split('-').map(Number);
+  const nextMonth = new Date(Date.UTC(year, month, 1));
+  if (authority !== 'HOUSING_LEVY') {
+    return new Date(Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth(), 9))
+      .toISOString().slice(0, 10);
+  }
+  // Affordable Housing Levy is due by the ninth working day after month-end.
+  // Weekends are excluded here; public holidays and official deadline changes
+  // must be checked before payment.
+  let cursor = nextMonth;
+  let workingDays = 0;
+  while (workingDays < 9) {
+    const weekday = cursor.getUTCDay();
+    if (weekday !== 0 && weekday !== 6) workingDays += 1;
+    if (workingDays < 9) cursor = new Date(cursor.getTime() + 86400000);
+  }
+  return cursor.toISOString().slice(0, 10);
+};
 
 @Injectable()
 export class PayrollRemittancesService {
@@ -43,8 +63,7 @@ export class PayrollRemittancesService {
     )).rows;
   }
 
-  async generateForRun(user: AuthenticatedUser, runId: string, dueDate: unknown) {
-    if (!validDate(dueDate)) throw new BadRequestException('dueDate must be a valid YYYY-MM-DD date.');
+  async generateForRun(user: AuthenticatedUser, runId: string) {
     const { companyId } = await this.membershipFor(user);
     return this.db.transaction(async (client) => {
       const run = await client.query(
@@ -81,11 +100,11 @@ export class PayrollRemittancesService {
            VALUES($1,$2,$3,$4::date,$5::date,$6::date,$7,$8)
            ON CONFLICT(company_id,payroll_run_id,authority) DO NOTHING
            RETURNING id,authority,amount,due_date`,
-          [companyId, runId, authority, run.rows[0].period_start, run.rows[0].period_end, dueDate, amount, user.userId],
+          [companyId, runId, authority, run.rows[0].period_start, run.rows[0].period_end, calculateRemittanceDueDate(authority, run.rows[0].period_end), amount, user.userId],
         );
         if (result.rows.length) created.push(result.rows[0]);
       }
-      return { payrollRunId: runId, created, message: 'Only newly created obligations are returned. Existing obligations and payment records were not changed. Verify due dates against current authority guidance.' };
+      return { payrollRunId: runId, created, message: 'Due dates follow published authority guidance: PAYE, NSSF and SHIF by the 9th of the following month; housing levy by the 9th working day after month-end. Housing levy dates exclude weekends but do not account for public holidays. Verify the date in the relevant authority portal before payment. Existing obligations and payment records were not changed.' };
     });
   }
 
