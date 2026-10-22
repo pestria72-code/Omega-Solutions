@@ -108,6 +108,41 @@ export class PayrollService {
    });
   }catch(error){if((error as {code?:string}).code==='23505')throw new ConflictException('A payroll run already exists for this company and period.');throw error;}
  }
+
+ /**
+  * Produces tenant-scoped internal CSV support schedules from the immutable
+  * payroll snapshot. These are not authority-specific filing files and must
+  * not be represented as submitted returns or proof of remittance.
+  */
+ async exportRunReport(user:AuthenticatedUser,id:string,reportType:string){
+  const allowed=['payslips','paye','nssf','sha','housing'];
+  if(!allowed.includes(reportType))throw new BadRequestException(`Unsupported report type. Choose: ${allowed.join(', ')}.`);
+  const run=await this.getRun(user,id);
+  const items=run.items as Array<Record<string,unknown>>;
+  const csvCell=(value:unknown)=>{const text=String(value??'');return '"' + text.replace(/"/g,'""') + '"';};
+  const amountCell=(value:unknown)=>Number(value??0).toFixed(2);
+  let filename=`omega-payroll-${reportType}-${String(run.period_start).slice(0,10)}.csv`;
+  let headers:string[]=[];
+  let rows:unknown[][]=[];
+  if(reportType==='payslips'){
+   headers=['Employee number','Employee name','Pay period start','Pay period end','Gross cash pay KES','Taxable benefits KES','PAYE KES','Employee NSSF KES','Employee SHIF KES','Employee housing levy KES','Employee pension KES','Post-retirement medical KES','Total deductions KES','Net cash pay KES','Payroll status'];
+   rows=items.map(x=>[x.employee_number,x.employee_name,run.period_start,run.period_end,x.gross_cash_pay,x.taxable_benefits,x.paye,x.nssf_employee,x.shif_employee,x.housing_levy_employee,x.pension_employee,x.prmf_employee,x.employee_deductions,x.net_pay,run.status]);
+  }else if(reportType==='paye'){
+   headers=['Employee number','Employee name','Pay period start','Pay period end','Gross cash pay KES','Taxable benefits KES','Taxable income KES','PAYE before relief KES','Personal relief KES','Insurance relief KES','PAYE withheld KES','Payroll status'];
+   rows=items.map(x=>{const s=(x.calculation_snapshot||{}) as Record<string,unknown>;return [x.employee_number,x.employee_name,run.period_start,run.period_end,x.gross_cash_pay,x.taxable_benefits,s.taxableIncome,s.payeBeforeReliefs,s.personalRelief,s.insuranceRelief,x.paye,run.status];});
+  }else if(reportType==='nssf'){
+   headers=['Employee number','Employee name','Pay period start','Pay period end','Employee NSSF KES','Employer NSSF KES','Combined NSSF KES','Payroll status'];
+   rows=items.map(x=>[x.employee_number,x.employee_name,run.period_start,run.period_end,x.nssf_employee,x.nssf_employer,Number(x.nssf_employee||0)+Number(x.nssf_employer||0),run.status]);
+  }else if(reportType==='sha'){
+   headers=['Employee number','Employee name','Pay period start','Pay period end','Employee SHIF contribution KES','Payroll status'];
+   rows=items.map(x=>[x.employee_number,x.employee_name,run.period_start,run.period_end,x.shif_employee,run.status]);
+  }else{
+   headers=['Employee number','Employee name','Pay period start','Pay period end','Employee housing levy KES','Employer housing levy KES','Combined housing levy KES','Payroll status'];
+   rows=items.map(x=>[x.employee_number,x.employee_name,run.period_start,run.period_end,x.housing_levy_employee,x.housing_levy_employer,Number(x.housing_levy_employee||0)+Number(x.housing_levy_employer||0),run.status]);
+  }
+  const csv=[headers,...rows].map(row=>row.map(csvCell).join(',')).join('\\r\\n')+'\\r\\n';
+  return {filename,contentType:'text/csv; charset=utf-8',disclaimer:'Internal payroll support schedule generated from the saved payroll calculation snapshot. Not an official authority filing, not proof of submission or payment, and may require authority-specific identifiers, templates, and review before use.',csv};
+ }
  async approveRun(user:AuthenticatedUser,id:string){
   const membership=await this.membershipFor(user);
   return this.db.transaction(async client=>{
