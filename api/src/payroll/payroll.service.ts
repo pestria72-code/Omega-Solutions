@@ -32,7 +32,7 @@ export class PayrollService {
   const {companyId}=await this.membershipFor(user);
   const effectiveFrom=dto.effectiveFrom??new Date().toISOString().slice(0,10);
   if(typeof effectiveFrom!=='string'||!validDate(effectiveFrom))throw new BadRequestException('effectiveFrom must be a valid YYYY-MM-DD date.');
-  const nssfMethod=dto.nssfMethod??'YEAR4';
+  const nssfMethod=String(dto.nssfMethod??'YEAR4') as NssfMethod;
   if(!['YEAR4','LEGACY_FLAT_200','CUSTOM'].includes(String(nssfMethod)))throw new BadRequestException('nssfMethod must be YEAR4, LEGACY_FLAT_200, or CUSTOM.');
   const numeric:Record<string,number>={};
   const defaults:Record<string,number>={nssfEmployeeFlat:200,nssfEmployerFlat:200,nssfEmployeeRate:.06,nssfEmployerRate:.06,nssfPensionablePayCap:108000,housingLevyEmployeeRate:.015,housingLevyEmployerRate:.015};
