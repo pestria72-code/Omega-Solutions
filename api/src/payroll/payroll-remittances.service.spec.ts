@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PayrollRemittancesService } from './payroll-remittances.service.js';
+import { calculateRemittanceDueDate, PayrollRemittancesService } from './payroll-remittances.service.js';
 
 const user = {
   userId: 'user-a', email: 'a@example.test', fullName: 'A',
@@ -20,12 +20,18 @@ describe('PayrollRemittancesService', () => {
     expect(query.mock.calls[0][0]).toContain('payroll_remittance_payments');
   });
 
-  it('rejects an invalid due date before opening a transaction', async () => {
-    const db = { query: vi.fn(), transaction: vi.fn() } as never;
-    const memberships = { getMembership: vi.fn() } as never;
-    const service = new PayrollRemittancesService(db, memberships);
-    await expect(service.generateForRun(user, 'run-a', 'not-a-date')).rejects.toThrow('valid YYYY-MM-DD');
-    expect((db as { transaction: ReturnType<typeof vi.fn> }).transaction).not.toHaveBeenCalled();
+  it('calculates the 9th of the following month for PAYE, NSSF and SHIF', () => {
+    expect(calculateRemittanceDueDate('PAYE', '2026-10-31')).toBe('2026-11-09');
+    expect(calculateRemittanceDueDate('NSSF', '2026-10-31')).toBe('2026-11-09');
+    expect(calculateRemittanceDueDate('SHIF', '2026-10-31')).toBe('2026-11-09');
+  });
+
+  it('calculates the ninth weekday after month-end for housing levy', () => {
+    expect(calculateRemittanceDueDate('HOUSING_LEVY', '2026-10-31')).toBe('2026-11-12');
+  });
+
+  it('rejects invalid payroll period end dates', () => {
+    expect(() => calculateRemittanceDueDate('PAYE', 'not-a-date')).toThrow('valid calendar date');
   });
 
   it('does not generate obligations from a draft payroll run', async () => {
@@ -33,7 +39,7 @@ describe('PayrollRemittancesService', () => {
     const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
     const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
     const service = new PayrollRemittancesService(db, memberships);
-    await expect(service.generateForRun(user, 'run-a', '2026-11-09')).rejects.toThrow('only be generated from a posted payroll run');
+    await expect(service.generateForRun(user, 'run-a')).rejects.toThrow('only be generated from a posted payroll run');
     expect(client.query).toHaveBeenCalledTimes(1);
   });
 
