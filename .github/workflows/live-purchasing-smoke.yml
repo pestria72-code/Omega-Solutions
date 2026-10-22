@@ -52,11 +52,11 @@ jobs:
         with:
           ref: development
 
-      - name: Require an explicitly configured development-only API URL
+      - name: Verify development-only API URL
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
         run: |
-          node --input-type=module -e 'const value=process.env.OMEGA_API_URL; if (!value) throw new Error("Set OMEGA_DEVELOPMENT_API_URL to the verified development-only API URL ending in /api; refusing to run without it."); const url=new URL(value); if (url.hostname === "omega-solutions-api.onrender.com") throw new Error("Production API URL is forbidden in development smoke tests."); if (!url.pathname.endsWith("/api") && !url.pathname.endsWith("/api/")) throw new Error("OMEGA_DEVELOPMENT_API_URL must end in /api."); console.log("Development API target configured:", url.origin + url.pathname);'
+          node --input-type=module -e 'const value=process.env.OMEGA_API_URL; const url=new URL(value); if (url.hostname !== "omega-solutions-api-development.onrender.com" || url.pathname !== "/api") throw new Error("Refusing to run smoke tests against anything except the fixed development API."); console.log("Development API target configured:", url.origin + url.pathname);'
 
       - name: Verify live authenticated purchasing and accounting workflow
         env:
