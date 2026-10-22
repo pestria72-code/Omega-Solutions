@@ -18,6 +18,7 @@ describe('PayrollService tenant and workflow guards',()=>{
   const service=new PayrollService(db,memberships);
   const user={userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]};
   await expect(service.setCompanyStatutorySettings(user,{effectiveFrom:'2026-10-01',nssfMethod:'UNKNOWN'})).rejects.toThrow('nssfMethod must be');
+  await expect(service.setCompanyStatutorySettings(user,{effectiveFrom:'2026-10-01',nssfMethod:'YEAR4'})).rejects.toThrow('Choose whether this company remits the housing levy');
   expect((db as {query:ReturnType<typeof vi.fn>}).query).not.toHaveBeenCalled();
   const result=await service.setCompanyStatutorySettings(user,{effectiveFrom:'2026-10-01',nssfMethod:'LEGACY_FLAT_200',housingLevyEnabled:false});
   expect(result.company_id).toBe('company-a');
