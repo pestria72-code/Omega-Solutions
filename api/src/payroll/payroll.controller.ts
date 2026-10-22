@@ -16,6 +16,8 @@ export class PayrollController {
  listRuns(@Req() req:{user:AuthenticatedUser}){return this.payroll.listRuns(req.user);}
  @Get('runs/:id') @RequirePermissions('payroll:read')
  getRun(@Req() req:{user:AuthenticatedUser},@Param('id',ParseUUIDPipe) id:string){return this.payroll.getRun(req.user,id);}
+ @Get('runs/:id/reports/:reportType') @RequirePermissions('payroll:read')
+ exportRunReport(@Req() req:{user:AuthenticatedUser},@Param('id',ParseUUIDPipe) id:string,@Param('reportType') reportType:string){return this.payroll.exportRunReport(req.user,id,reportType);}
  @Post('employees/:employeeId/settings') @RequirePermissions('payroll:write')
  setEmployeePaySettings(@Req() req:{user:AuthenticatedUser},@Param('employeeId',ParseUUIDPipe) employeeId:string,@Body() dto:Record<string,unknown>){return this.payroll.setEmployeePaySettings(req.user,employeeId,dto);}
  @Get('employees/:employeeId/settings') @RequirePermissions('payroll:read')
