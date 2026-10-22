@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Get,
   Post,
+  Param,
   Request,
   UnauthorizedException,
   UseGuards,
@@ -11,10 +12,14 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/interfaces/authenticated-user.js';
 import { SubscriptionsService } from './subscriptions.service.js';
+import { PaystackPaymentsService } from './paystack-payments.service.js';
 
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private readonly subscriptions: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptions: SubscriptionsService,
+    private readonly paystackPayments: PaystackPaymentsService,
+  ) {}
 
   @Get('plans')
   getPlans() {
@@ -28,6 +33,57 @@ export class SubscriptionsController {
       throw new UnauthorizedException('Select a company before viewing its subscription.');
     }
     return this.subscriptions.getCurrent(req.user.companyId);
+  }
+
+  @Post('checkout')
+  @UseGuards(JwtAuthGuard)
+  initializeCheckout(
+    @Request() req: { user: AuthenticatedUser },
+    @Body() body: { planCode?: string },
+  ) {
+    if (!req.user.companyId) {
+      throw new UnauthorizedException('Select a company before starting subscription checkout.');
+    }
+    if (!['owner', 'admin'].includes(req.user.role.toLowerCase())) {
+      throw new ForbiddenException('Only company owners or administrators can pay for a subscription.');
+    }
+    return this.paystackPayments.initializeSubscriptionCheckout(
+      req.user.companyId,
+      req.user.userId,
+      req.user.email,
+      body?.planCode ?? '',
+    );
+  }
+
+  @Get('payments/:reference')
+  @UseGuards(JwtAuthGuard)
+  getPayment(
+    @Request() req: { user: AuthenticatedUser },
+    @Param('reference') reference: string,
+  ) {
+    if (!req.user.companyId) {
+      throw new UnauthorizedException('Select a company before viewing subscription payments.');
+    }
+    if (!['owner', 'admin'].includes(req.user.role.toLowerCase())) {
+      throw new ForbiddenException('Only company owners or administrators can view subscription payments.');
+    }
+    return this.paystackPayments.getCompanyPayment(req.user.companyId, reference);
+  }
+
+  @Post('paystack/webhook')
+  async paystackWebhook(
+    @Request() req: {
+      rawBody?: Buffer;
+      headers: Record<string, string | string[] | undefined>;
+      body: unknown;
+    },
+  ) {
+    const signature = req.headers['x-paystack-signature'];
+    return this.paystackPayments.handleWebhook(
+      req.rawBody,
+      Array.isArray(signature) ? signature[0] : signature,
+      req.body,
+    );
   }
 
   @Post('change-requests')
