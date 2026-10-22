@@ -12,6 +12,10 @@ import { ModuleEntitlementsGuard } from '../subscriptions/module-entitlements.gu
 @UseGuards(JwtAuthGuard,PermissionsGuard, ModuleEntitlementsGuard)
 export class PayrollController {
  constructor(private readonly payroll:PayrollService){}
+ @Get('statutory-settings') @RequirePermissions('payroll:read')
+ getCompanyStatutorySettings(@Req() req:{user:AuthenticatedUser},@Query('effectiveFrom') effectiveFrom?:string){return this.payroll.getCompanyStatutorySettings(req.user,effectiveFrom);}
+ @Post('statutory-settings') @RequirePermissions('payroll:write')
+ setCompanyStatutorySettings(@Req() req:{user:AuthenticatedUser},@Body() dto:Record<string,unknown>){return this.payroll.setCompanyStatutorySettings(req.user,dto);}
  @Get('runs') @RequirePermissions('payroll:read')
  listRuns(@Req() req:{user:AuthenticatedUser}){return this.payroll.listRuns(req.user);}
  @Get('reports/annual-tax-summary') @RequirePermissions('payroll:read')
