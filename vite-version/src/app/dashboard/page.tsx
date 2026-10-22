@@ -65,14 +65,15 @@ function StatCard({
   href: string
 }) {
   return (
-    <Card className="min-w-0">
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-2">
+    <Card className="group min-w-0 overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <div className="h-1 w-full bg-primary/80" aria-hidden="true" />
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 pb-2 pt-5">
         <div className="min-w-0 space-y-1">
           <CardDescription>{label}</CardDescription>
           <CardTitle className="break-words text-2xl font-semibold tabular-nums">{value}</CardTitle>
         </div>
-        <div className="shrink-0 rounded-lg bg-muted p-2">
-          <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
+        <div className="shrink-0 rounded-xl border border-primary/15 bg-primary/10 p-3 transition-colors group-hover:bg-primary/15">
+          <Icon className="size-5 text-primary-foreground" aria-hidden="true" />
         </div>
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-2">
@@ -116,16 +117,36 @@ export default function Page() {
   return (
     <BaseLayout>
       <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-6 px-4 sm:px-6 lg:px-8">
-        <PageHeader
-          title="Dashboard"
-          description={
-            companyLoading
-              ? "Loading your business overview…"
-              : company
-                ? `Live overview for ${company.name}`
-                : "Live overview of your business records"
-          }
-        />
+        <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-white via-white to-primary/10 p-5 shadow-sm sm:p-7 dark:from-card dark:via-card dark:to-primary/10">
+          <div className="pointer-events-none absolute -right-10 -top-16 size-56 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-2">
+              <p className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold tracking-wide text-foreground">
+                <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+                BUSINESS OVERVIEW
+              </p>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Good to see you back</h1>
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                {companyLoading
+                  ? "Loading your business workspace…"
+                  : company
+                    ? `Here is the latest view of ${company.name}. Keep track of stock, balances and the work that needs attention.`
+                    : "Your business at a glance. Keep track of stock, balances and the work that needs attention."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/invoices" className={buttonVariants({ className: "shadow-sm" })}><Wallet className="mr-2 size-4" />Sales invoices</Link>
+              <Link to="/products" className={buttonVariants({ variant: "outline", className: "bg-background/80" })}><Package className="mr-2 size-4" />View inventory</Link>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">At a glance</h2>
+            <p className="text-sm text-muted-foreground">Live figures from your current company records</p>
+          </div>
+          <span className="hidden items-center gap-2 text-xs text-muted-foreground sm:inline-flex"><span className="size-2 rounded-full bg-emerald-500" />Connected workspace</span>
+        </div>
 
         {errors.length > 0 && (
           <div role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
@@ -175,33 +196,42 @@ export default function Page() {
             </section>
 
             <section className="grid min-w-0 gap-4 lg:grid-cols-2" aria-label="Balances">
-              <Card>
-                <CardHeader>
-                  <CardDescription>Customer receivables</CardDescription>
-                  <CardTitle className="text-2xl tabular-nums">{formatKES(receivables)}</CardTitle>
+              <Card className="relative overflow-hidden border-l-4 border-l-primary">
+                <CardHeader className="flex flex-row items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <CardDescription>Customer receivables</CardDescription>
+                    <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatKES(receivables)}</CardTitle>
+                  </div>
+                  <div className="rounded-xl bg-primary/10 p-3"><ArrowUpRight className="size-5 text-primary" aria-hidden="true" /></div>
                 </CardHeader>
-                <CardContent className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">Sum of outstanding balances on customer records</p>
-                  <Link to="/customers" className={buttonVariants({ variant: "outline", size: "sm" })}>Customers</Link>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="max-w-sm text-sm text-muted-foreground">Outstanding balances recorded against customers</p>
+                  <Link to="/customers" className={buttonVariants({ variant: "outline", size: "sm" })}>Review customers</Link>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader>
-                  <CardDescription>Supplier payables</CardDescription>
-                  <CardTitle className="text-2xl tabular-nums">{formatKES(payables)}</CardTitle>
+              <Card className="relative overflow-hidden border-l-4 border-l-amber-500/70">
+                <CardHeader className="flex flex-row items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <CardDescription>Supplier payables</CardDescription>
+                    <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatKES(payables)}</CardTitle>
+                  </div>
+                  <div className="rounded-xl bg-amber-500/10 p-3"><ArrowDownRight className="size-5 text-amber-700 dark:text-amber-300" aria-hidden="true" /></div>
                 </CardHeader>
-                <CardContent className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">Sum of outstanding balances on supplier records</p>
-                  <Link to="/suppliers" className={buttonVariants({ variant: "outline", size: "sm" })}>Suppliers</Link>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="max-w-sm text-sm text-muted-foreground">Outstanding balances recorded against suppliers</p>
+                  <Link to="/suppliers" className={buttonVariants({ variant: "outline", size: "sm" })}>Review suppliers</Link>
                 </CardContent>
               </Card>
             </section>
 
             <section className="grid min-w-0 gap-4 xl:grid-cols-5">
               <Card className="min-w-0 xl:col-span-3">
-                <CardHeader>
-                  <CardTitle>Stock requiring attention</CardTitle>
-                  <CardDescription>Products at or below their configured reorder level</CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <CardTitle className="flex items-center gap-2"><Package className="size-5 text-primary" />Stock requiring attention</CardTitle>
+                    <CardDescription>Products at or below their configured reorder level</CardDescription>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ${lowStock.length ? "bg-amber-500/10 text-amber-800 dark:text-amber-300" : "bg-primary/10 text-foreground"}`}>{lowStock.length} flagged</span>
                 </CardHeader>
                 <CardContent>
                   {lowStock.length === 0 ? (
@@ -239,8 +269,8 @@ export default function Page() {
 
               <Card className="min-w-0 xl:col-span-2">
                 <CardHeader>
-                  <CardTitle>Quick actions</CardTitle>
-                  <CardDescription>Create and maintain your core business records</CardDescription>
+                  <CardTitle className="flex items-center gap-2"><ArrowUpRight className="size-5 text-primary" />Quick actions</CardTitle>
+                  <CardDescription>Jump straight into common tasks</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                   <Link to="/customers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Users className="mr-2 size-4" />Manage customers</Link>
