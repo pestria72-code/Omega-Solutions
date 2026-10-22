@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
@@ -11,7 +11,7 @@ export class ContractsService {
   private async companyFor(user: AuthenticatedUser) { return user.companyId ? this.memberships.getMembershipForCompany(user.userId, user.companyId) : this.memberships.getMembership(user.userId); }
   private async scoped(user: AuthenticatedUser, id: string) {
     const m = await this.companyFor(user);
-    const r = await this.db.query('SELECT * FROM contracts WHERE company_id=$1 AND id=$2', [m.companyId, id]);
+    const r = await this.db.query('SELECT * FROM contracts WHERE company_id=$1 AND id=$2 AND ($3::uuid IS NULL OR branch_id IS NULL OR branch_id=$3)', [m.companyId, id, m.branchId]);
     if (!r.rows[0]) throw new NotFoundException('Contract not found.');
     return { membership: m, row: r.rows[0] };
   }
@@ -22,7 +22,7 @@ export class ContractsService {
       FROM contracts c
       LEFT JOIN LATERAL (SELECT COUNT(*) AS item_count FROM contract_items i WHERE i.company_id=c.company_id AND i.contract_id=c.id) ci ON true
       LEFT JOIN LATERAL (SELECT COUNT(*) AS open_obligations FROM contract_obligations o WHERE o.company_id=c.company_id AND o.contract_id=c.id AND o.status='open') co ON true
-      WHERE c.company_id=$1 ORDER BY c.updated_at DESC`, [m.companyId])).rows;
+      WHERE c.company_id=$1 AND ($2::uuid IS NULL OR c.branch_id IS NULL OR c.branch_id=$2) ORDER BY c.updated_at DESC`, [m.companyId, m.branchId])).rows;
   }
   async get(user: AuthenticatedUser, id: string) {
     const { membership, row } = await this.scoped(user, id);
@@ -48,6 +48,7 @@ export class ContractsService {
     if (type === 'supplier' && !body.supplierId) throw new BadRequestException('Select a supplier for a supplier contract.');
     const number = typeof body.contractNumber === 'string' && body.contractNumber.trim() ? body.contractNumber.trim() : `CON-${new Date().getFullYear()}-${id.slice(0,8).toUpperCase()}`;
     await this.db.transaction(async client => {
+      if (m.branchId && body.branchId && body.branchId !== m.branchId) throw new ForbiddenException('You cannot create a contract for another branch.');
       if (body.branchId) { const b=await client.query('SELECT id FROM branches WHERE id=$1 AND company_id=$2',[body.branchId,companyId]); if(!b.rows[0]) throw new NotFoundException('Branch not found in this company.'); }
       if (type==='customer') { const c=await client.query('SELECT id FROM customers WHERE id=$1 AND company_id=$2',[body.customerId,companyId]); if(!c.rows[0]) throw new NotFoundException('Customer not found in this company.'); }
       if (type==='supplier') { const s=await client.query('SELECT id FROM suppliers WHERE id=$1 AND company_id=$2',[body.supplierId,companyId]); if(!s.rows[0]) throw new NotFoundException('Supplier not found in this company.'); }
