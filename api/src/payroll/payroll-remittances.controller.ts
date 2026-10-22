@@ -19,6 +19,15 @@ export class PayrollRemittancesController {
     return this.remittances.list(req.user);
   }
 
+  @Get('preview/:runId')
+  @RequirePermissions('payroll:read')
+  previewForRun(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('runId', ParseUUIDPipe) runId: string,
+  ) {
+    return this.remittances.previewForRun(req.user, runId);
+  }
+
   @Post('from-run/:runId')
   @RequirePermissions('payroll:write')
   generateForRun(
