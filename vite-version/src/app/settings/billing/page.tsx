@@ -34,6 +34,8 @@ export default function BillingSettings() {
   const [notice, setNotice] = React.useState<string | null>(null)
   const [requesting, setRequesting] = React.useState(false)
   const [requestingModule, setRequestingModule] = React.useState<string | null>(null)
+  const [paymentReference, setPaymentReference] = React.useState<string | null>(null)
+  const [checkingPayment, setCheckingPayment] = React.useState(false)
 
   React.useEffect(() => {
     let cancelled = false
@@ -57,14 +59,58 @@ export default function BillingSettings() {
     setError(null)
     setNotice(null)
     try {
+      if (!current?.subscription) {
+        const checkout = await api.post<{
+          authorizationUrl: string
+          reference: string
+          amountKes: number
+          currency: string
+        }>("/subscriptions/checkout", { planCode })
+        setNotice("Opening secure Paystack test checkout…")
+        window.location.assign(checkout.authorizationUrl)
+        return
+      }
       const result = await api.post<{ message: string }>("/subscriptions/change-requests", { planCode })
       setNotice(result.message)
     } catch (err) {
-      setError((err as { message?: string }).message ?? "Could not submit the plan request.")
+      setError((err as { message?: string }).message ?? "Could not start subscription checkout or submit the plan request.")
     } finally {
       setRequesting(false)
     }
   }
+
+  const checkPaymentStatus = async (reference: string) => {
+    setCheckingPayment(true)
+    setError(null)
+    try {
+      const payment = await api.get<{
+        status: string
+        plan_code: string
+        amount_kes: number
+      }>(`/subscriptions/payments/${encodeURIComponent(reference)}`)
+      if (payment.status === "success") {
+        setNotice("Payment confirmed. Your Omega subscription is active.")
+        const refreshed = await api.get<Current>("/subscriptions/current")
+        setCurrent(refreshed)
+      } else if (payment.status === "pending") {
+        setNotice("Payment is awaiting server-side confirmation. Omega will not activate the subscription until Paystack verification succeeds.")
+      } else {
+        setNotice(`Payment status: ${payment.status}. No subscription access was activated by this payment.`)
+      }
+    } catch (err) {
+      setError((err as { message?: string }).message ?? "Could not check payment status.")
+    } finally {
+      setCheckingPayment(false)
+    }
+  }
+
+  React.useEffect(() => {
+    const reference = new URLSearchParams(window.location.search).get("reference")
+    if (!reference) return
+    setPaymentReference(reference)
+    window.history.replaceState({}, "", window.location.pathname)
+    void checkPaymentStatus(reference)
+  }, [])
 
   const handleModuleSelect = async (moduleCode: string) => {
     setRequestingModule(moduleCode)
@@ -114,12 +160,13 @@ export default function BillingSettings() {
         </div>
 
         {error && <Alert variant="destructive"><AlertTitle>Subscription information</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-        {notice && <Alert><AlertTitle>Request submitted</AlertTitle><AlertDescription>{notice}</AlertDescription></Alert>}
+        {notice && <Alert><AlertTitle>{paymentReference ? "Payment status" : "Request submitted"}</AlertTitle><AlertDescription>{notice}</AlertDescription></Alert>}
+        {paymentReference && <div className="flex flex-wrap items-center gap-3"><span className="text-sm text-muted-foreground">Reference: {paymentReference}</span><Button type="button" variant="outline" disabled={checkingPayment} onClick={() => void checkPaymentStatus(paymentReference)}>{checkingPayment && <Loader2 className="mr-2 size-4 animate-spin" />}{checkingPayment ? "Checking…" : "Check payment status"}</Button></div>}
 
         <Card>
           <CardHeader>
             <CardTitle>Current subscription</CardTitle>
-            <CardDescription>Your company subscription status. Selecting a plan submits a request; it does not charge you or change access automatically.</CardDescription>
+            <CardDescription>Your company subscription status. First-time plan checkout uses Paystack test mode when configured. Plan changes for an existing subscription still require review.</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -153,7 +200,7 @@ export default function BillingSettings() {
               />
             )}
             {requesting && <p className="mt-4 text-sm text-muted-foreground">Submitting your request…</p>}
-            <p className="mt-4 text-sm text-muted-foreground">Plan changes require billing confirmation. Payment-provider fees, custom integrations and hands-on implementation may be priced separately.</p>
+            <p className="mt-4 text-sm text-muted-foreground">First-time subscription checkout uses Paystack test mode while billing is being validated. Existing plan changes remain requests until reviewed. Never enter real card or M-Pesa payment details in a test transaction.</p>
           </CardContent>
         </Card>
         {current?.subscription && addOnModules.length > 0 && (
