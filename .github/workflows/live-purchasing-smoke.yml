@@ -60,7 +60,7 @@ jobs:
 
       - name: Verify live authenticated purchasing and accounting workflow
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
@@ -71,7 +71,7 @@ jobs:
 
       - name: Verify live payment, reconciliation, POS and tenant-isolation workflow
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
@@ -80,7 +80,7 @@ jobs:
 
       - name: Verify live authenticated HRM, expenses, CRM and trial balance
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
@@ -89,7 +89,7 @@ jobs:
 
       - name: Verify employee statutory privacy and draft payroll calculations
         env:
-          OMEGA_API_URL: ${{ secrets.OMEGA_DEVELOPMENT_API_URL }}
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
