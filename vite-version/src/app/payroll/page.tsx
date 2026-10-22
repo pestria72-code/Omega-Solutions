@@ -51,7 +51,7 @@ export default function PayrollPage(){
  async function exportAnnualTaxSummary(){
   setActionError(null);
   try{
-   const report=await api.get<{filename:string;contentType:string;disclaimer:string;csv:string}>(\`/payroll/reports/annual-tax-summary?year=\${encodeURIComponent(annualTaxYear)}\`);
+   const report=await api.get<{filename:string;contentType:string;disclaimer:string;csv:string}>(`/payroll/reports/annual-tax-summary?year=${encodeURIComponent(annualTaxYear)}`);
    const blob=new Blob([report.csv],{type:report.contentType||"text/csv;charset=utf-8"});
    const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=report.filename;document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
    setSettingsMessage(report.disclaimer);
