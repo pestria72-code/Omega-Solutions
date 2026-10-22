@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { PayrollService } from './payroll.service.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../rbac/guards/permissions.guard.js';
@@ -14,6 +14,8 @@ export class PayrollController {
  constructor(private readonly payroll:PayrollService){}
  @Get('runs') @RequirePermissions('payroll:read')
  listRuns(@Req() req:{user:AuthenticatedUser}){return this.payroll.listRuns(req.user);}
+ @Get('reports/annual-tax-summary') @RequirePermissions('payroll:read')
+ exportAnnualTaxSummary(@Req() req:{user:AuthenticatedUser},@Query('year') year:string){return this.payroll.exportAnnualTaxSummary(req.user,year);}
  @Get('runs/:id') @RequirePermissions('payroll:read')
  getRun(@Req() req:{user:AuthenticatedUser},@Param('id',ParseUUIDPipe) id:string){return this.payroll.getRun(req.user,id);}
  @Get('runs/:id/reports/:reportType') @RequirePermissions('payroll:read')
