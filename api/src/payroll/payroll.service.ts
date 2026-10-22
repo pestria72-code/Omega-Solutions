@@ -114,6 +114,34 @@ export class PayrollService {
   * payroll snapshot. These are not authority-specific filing files and must
   * not be represented as submitted returns or proof of remittance.
   */
+ async exportAnnualTaxSummary(user:AuthenticatedUser,yearValue:string){
+  if(!/^20\\d{2}$/.test(yearValue)||Number(yearValue)<2026||Number(yearValue)>2100)throw new BadRequestException('year must be a four-digit year from 2026 to 2100. Earlier years require verified historical statutory rules.');
+  const {companyId}=await this.membershipFor(user);
+  const result=await this.db.query(`SELECT i.employee_id,i.employee_number,i.employee_name,
+    SUM(i.gross_cash_pay)::numeric(14,2) AS gross_cash_pay,
+    SUM(i.taxable_benefits)::numeric(14,2) AS taxable_benefits,
+    SUM(i.paye)::numeric(14,2) AS paye_withheld,
+    SUM(i.nssf_employee)::numeric(14,2) AS employee_nssf,
+    SUM(i.nssf_employer)::numeric(14,2) AS employer_nssf,
+    SUM(i.shif_employee)::numeric(14,2) AS shif_contributions,
+    SUM(i.housing_levy_employee)::numeric(14,2) AS employee_housing_levy,
+    SUM(i.housing_levy_employer)::numeric(14,2) AS employer_housing_levy,
+    SUM(i.pension_employee)::numeric(14,2) AS employee_pension,
+    SUM(i.prmf_employee)::numeric(14,2) AS post_retirement_medical,
+    SUM(i.employee_deductions)::numeric(14,2) AS total_employee_deductions,
+    SUM(i.net_pay)::numeric(14,2) AS net_cash_pay,
+    COUNT(DISTINCT r.id)::int AS posted_pay_periods
+   FROM payroll_items i JOIN payroll_runs r ON r.id=i.payroll_run_id AND r.company_id=i.company_id
+   WHERE i.company_id=$1 AND r.status='posted' AND r.period_start >= $2::date AND r.period_start < ($2::date + INTERVAL '1 year')
+   GROUP BY i.employee_id,i.employee_number,i.employee_name ORDER BY i.employee_name,i.employee_number`,
+  [companyId,`${yearValue}-01-01`]);
+  const headers=['Employee number','Employee name','Tax year','Posted payroll periods','Gross cash pay KES','Taxable benefits KES','PAYE withheld KES','Employee NSSF KES','Employer NSSF KES','Employee SHIF KES','Employee housing levy KES','Employer housing levy KES','Employee pension KES','Post-retirement medical KES','Total employee deductions KES','Net cash pay KES'];
+  const keys=['employee_number','employee_name','tax_year','posted_pay_periods','gross_cash_pay','taxable_benefits','paye_withheld','employee_nssf','employer_nssf','shif_contributions','employee_housing_levy','employer_housing_levy','employee_pension','post_retirement_medical','total_employee_deductions','net_cash_pay'];
+  const csvCell=(value:unknown):string=>{const text=String(value??'');const safe=/^[=+@\\t\\r-]/.test(text)?\"'\"+text:text;return '"'+safe.replace(/"/g,'""')+'"';};
+  const rows=result.rows.map((row:Record<string,unknown>)=>keys.map(key=>key==='tax_year'?yearValue:row[key]));
+  const csv=[headers,...rows].map(row=>row.map(csvCell).join(',')).join('\\r\\n')+'\\r\\n';
+  return {filename:`omega-annual-tax-summary-${yearValue}.csv`,contentType:'text/csv; charset=utf-8',year:Number(yearValue),payrollRunsIncluded:'posted only',disclaimer:'Internal annual payroll summary aggregated from posted payroll snapshots. This is not an official KRA P9/P9A tax deduction card, P10 return, filing confirmation, or proof of tax remittance. Reconcile with payroll records and current KRA requirements before filing or issuing certificates.',csv};
+ }
  async exportRunReport(user:AuthenticatedUser,id:string,reportType:string){
   const allowed=['payslips','paye','nssf','sha','housing'];
   if(!allowed.includes(reportType))throw new BadRequestException(`Unsupported report type. Choose: ${allowed.join(', ')}.`);
