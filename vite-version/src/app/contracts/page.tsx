@@ -60,7 +60,7 @@ export default function ContractsPage(){
    if(items.some(i=>i.description.trim()&&(!(Number(i.quantity)>0)||Number(i.unitPrice)<0||!Number.isFinite(Number(i.unitPrice))))){setError("Check item quantities and unit prices.");return}
    setSaving(true);setError("")
    try{
-     const payload={title:title.trim(),startDate,endDate,renewalDate:renewalDate||undefined,contractValue:Number(value),monthlyBudget:budget===""?undefined:Number(budget),description:description.trim()||undefined,notes:notes.trim()||undefined,items:validItems.map(i=>({description:i.description.trim(),itemType:i.itemType,productId:i.productId||undefined,quantity:Number(i.quantity),unit:i.unit||undefined,unitPrice:Number(i.unitPrice),frequency:i.frequency}))}
+     const payload={title:title.trim(),startDate,endDate,renewalDate:editingId?(renewalDate||null):(renewalDate||undefined),contractValue:Number(value),monthlyBudget:budget===""?(editingId?null:undefined):Number(budget),description:editingId?(description.trim()||null):(description.trim()||undefined),notes:editingId?(notes.trim()||null):(notes.trim()||undefined),items:validItems.map(i=>({description:i.description.trim(),itemType:i.itemType,productId:i.productId||undefined,quantity:Number(i.quantity),unit:i.unit||undefined,unitPrice:Number(i.unitPrice),frequency:i.frequency}))}
      if(editingId) await api.patch("/contracts/"+editingId,payload)
      else await api.post("/contracts",{...payload,contractType:type,customerId:type==="customer"?partyId:undefined,supplierId:type==="supplier"?partyId:undefined})
      setShowForm(false);setEditingId(null);setTitle("");setPartyId("");setValue("0");setBudget("");setDescription("");setNotes("");setRenewalDate("");setItems([blankItem()]);await refresh()
