@@ -6,6 +6,8 @@ import {
   Boxes,
   BriefcaseBusiness,
   CircleAlert,
+  CalendarClock,
+  TrendingUp,
   Package,
   Users,
   Wallet,
@@ -18,6 +20,8 @@ import { api } from "@/lib/api-client"
 import { formatKES, formatNumber } from "@/lib/format"
 import type { CustomerRow, ProductRow, SupplierRow } from "@/lib/api-types"
 import { useMyCompany } from "@/hooks/use-company"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import type { InvoiceApiRow } from "@/lib/api-types"
 
 type ResourceState<T> = {
   data: T[]
@@ -88,12 +92,14 @@ export default function Page() {
   const customers = useResource<CustomerRow>("/customers")
   const suppliers = useResource<SupplierRow>("/suppliers")
   const products = useResource<ProductRow>("/products")
+  const invoices = useResource<InvoiceApiRow>("/invoices")
 
-  const loading = customers.loading || suppliers.loading || products.loading
+  const loading = customers.loading || suppliers.loading || products.loading || invoices.loading
   const errors = [
     customers.error && `Customers: ${customers.error}`,
     suppliers.error && `Suppliers: ${suppliers.error}`,
     products.error && `Products: ${products.error}`,
+    invoices.error && `Invoices: ${invoices.error}`,
   ].filter(Boolean) as string[]
 
   const activeProducts = products.data.filter((product) => product.is_active)
@@ -112,6 +118,33 @@ export default function Page() {
     (total, supplier) => total + Number(supplier.outstanding_balance || 0),
     0,
   )
+  const today = new Date().toISOString().slice(0, 10)
+  const invoiceTrend = React.useMemo(() => {
+    const months: { key: string; label: string; total: number }[] = []
+    const now = new Date()
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+      months.push({ key, label: date.toLocaleDateString(undefined, { month: "short" }), total: 0 })
+    }
+    const byMonth = new Map(months.map((month) => [month.key, month]))
+    for (const invoice of invoices.data) {
+      if (invoice.status === "draft" || invoice.status === "cancelled") continue
+      const date = invoice.issue_date?.slice(0, 7)
+      const bucket = date ? byMonth.get(date) : undefined
+      if (bucket) bucket.total += Number(invoice.total || 0)
+    }
+    return months
+  }, [invoices.data])
+  const overdueInvoices = React.useMemo(() => invoices.data
+    .filter((invoice) => !["draft", "cancelled", "paid"].includes(invoice.status) && invoice.due_date < today)
+    .map((invoice) => ({
+      ...invoice,
+      balance: Math.max(0, Number(invoice.total || 0) - Number(invoice.amount_paid || 0) - Number(invoice.credited_amount || 0)),
+    }))
+    .filter((invoice) => invoice.balance > 0)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .slice(0, 6), [invoices.data, today])
 
   return (
     <BaseLayout>
@@ -191,6 +224,60 @@ export default function Page() {
                 icon={Boxes}
                 href="/stock-levels"
               />
+            </section>
+
+            <section className="grid min-w-0 gap-4 xl:grid-cols-5" aria-label="Invoice activity">
+              <Card className="min-w-0 xl:col-span-3">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><TrendingUp className="size-5 text-primary" />Invoice trend</CardTitle>
+                  <CardDescription>Monthly invoice totals for the last six months, excluding drafts and cancelled invoices</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {invoiceTrend.every((month) => month.total === 0) ? (
+                    <div className="flex min-h-52 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
+                      <TrendingUp className="size-6" />
+                      No invoice activity in this period.
+                    </div>
+                  ) : (
+                    <div className="h-56 w-full" role="img" aria-label="Monthly invoice totals chart">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={invoiceTrend} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                          <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={(value: number) => value >= 1000000 ? `KES ${(value / 1000000).toFixed(1)}m` : value >= 1000 ? `KES ${(value / 1000).toFixed(0)}k` : `KES ${value}`} />
+                          <Tooltip formatter={(value) => [formatKES(Number(value)), "Invoice total"]} labelFormatter={(label) => `Month: ${label}`} />
+                          <Line type="monotone" dataKey="total" name="Invoice total" stroke="var(--color-primary, #51BC8F)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <Card className="min-w-0 xl:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><CalendarClock className="size-5 text-amber-600" />Overdue invoices</CardTitle>
+                  <CardDescription>Past-due invoices with a remaining balance</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {overdueInvoices.length === 0 ? (
+                    <p className="flex min-h-24 items-center gap-2 text-sm text-muted-foreground">No overdue balances found in the available invoice records.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {overdueInvoices.map((invoice) => (
+                        <div key={invoice.id} className="flex min-w-0 items-start justify-between gap-3 border-b pb-3 last:border-0 last:pb-0">
+                          <div className="min-w-0">
+                            <Link to="/invoices" className="font-medium underline-offset-4 hover:underline">{invoice.invoice_number}</Link>
+                            <p className="truncate text-sm text-muted-foreground">{invoice.customer_name}</p>
+                            <p className="text-xs text-muted-foreground">Due {invoice.due_date}</p>
+                          </div>
+                          <p className="shrink-0 text-right text-sm font-semibold tabular-nums">{formatKES(invoice.balance)}</p>
+                        </div>
+                      ))}
+                      <Link to="/invoices" className={buttonVariants({ variant: "outline", size: "sm", className: "w-full" })}>Review invoices</Link>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </section>
 
             <section className="grid min-w-0 gap-4 lg:grid-cols-2" aria-label="Balances">
