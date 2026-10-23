@@ -121,4 +121,40 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect((db as {query:ReturnType<typeof vi.fn>}).query).not.toHaveBeenCalled();
  });
 
+
+ it('posts an approved payroll run with tenant-scoped balanced ledger lines and persists the journal link',async()=>{
+  const client={query:vi.fn(async (sql:string)=>{
+   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'run-a',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'approved'}]};
+   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'E-1',gross_cash_pay:'100000.00',nssf_employer:'6000.00',housing_levy_employer:'1500.00',net_pay:'79750.00',paye:'10000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
+   if(sql.includes('SELECT id,system_code FROM chart_of_accounts'))return {rows:[
+    {system_code:'payroll_wages',id:'a-wages'},{system_code:'payroll_employer_contributions',id:'a-employer'},
+    {system_code:'payroll_net_payable',id:'a-net'},{system_code:'payroll_paye_payable',id:'a-paye'},
+    {system_code:'payroll_shif_payable',id:'a-shif'},{system_code:'payroll_nssf_payable',id:'a-nssf'},
+    {system_code:'payroll_housing_levy_payable',id:'a-housing'},{system_code:'payroll_pension_payable',id:'a-pension'},
+    {system_code:'payroll_prmf_payable',id:'a-prmf'}]};
+   if(sql.includes('RETURNING next_number-1 AS allocated_number'))return {rows:[{allocated_number:1}]};
+   if(sql.includes('INSERT INTO journal_entries'))return {rows:[{id:'journal-a',entry_number:'PAY-2026-000001',entry_date:'2026-10-31',status:'posted',posted_at:'2026-10-23'}]};
+   if(sql.includes("UPDATE payroll_runs SET status='posted'"))return {rows:[{id:'run-a',company_id:'company-a',status:'posted',journal_entry_id:'journal-a'}]};
+   return {rows:[]};
+  })};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  const result=await service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-a');
+  expect(result).toMatchObject({status:'posted',journal_entry_id:'journal-a',debits:107500,credits:107500,balanced:true});
+  expect(client.query.mock.calls[0][1]).toEqual(['run-a','company-a']);
+  const journalLines=client.query.mock.calls.filter(([sql])=>String(sql).includes('INSERT INTO journal_entry_lines'));
+  expect(journalLines.length).toBe(7);
+  expect(journalLines.some(([sql,args])=>String(sql).includes('INSERT INTO journal_entry_lines')&&args?.[2]==='a-nssf'&&args?.[5]===12000)).toBe(true);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(true);
+ });
+ it('refuses to post a draft or already-posted payroll run without creating a journal',async()=>{
+  const client={query:vi.fn().mockResolvedValue({rows:[{id:'run-a',company_id:'company-a',status:'draft'}]})};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-a')).rejects.toThrow('Only approved payroll runs can be posted');
+  expect(client.query).toHaveBeenCalledTimes(1);
+ });
+
 });
