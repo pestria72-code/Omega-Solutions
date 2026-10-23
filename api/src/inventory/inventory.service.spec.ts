@@ -151,7 +151,7 @@ describe('InventoryService', () => {
 
     await service.updateWarehouse(user, 'warehouse-1', { name: 'Renamed' });
 
-    expect(db.query.mock.calls[1][0]).toContain('($4::uuid IS NULL OR branch_id=$4)');
+    expect(db.query.mock.calls[1][0]).toContain('WHERE id=$2 AND company_id=$3 AND ($4::uuid IS NULL OR branch_id=$4)');
     expect(db.query.mock.calls[1][1]).toEqual(['Renamed', 'warehouse-1', 'company-1', branchId]);
   });
 
