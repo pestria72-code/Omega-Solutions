@@ -24,18 +24,20 @@ describe('DatabaseService PostgreSQL transaction integration', () => {
     }
   });
 
-  it('persists no partial write when a transaction callback fails', async () => {
-    const failure = new Error('intentional rollback probe');
-
+  it('rolls back earlier writes when a later PostgreSQL write fails', async () => {
     await expect(
       db.transaction(async (client) => {
         await client.query(
           'INSERT INTO transaction_rollback_probe (id, value) VALUES ($1, $2)',
           [1, 'must roll back'],
         );
-        throw failure;
+        // Trigger a real PostgreSQL unique-key violation after the first write succeeds.
+        await client.query(
+          'INSERT INTO transaction_rollback_probe (id, value) VALUES ($1, $2)',
+          [1, 'duplicate key should fail'],
+        );
       }),
-    ).rejects.toBe(failure);
+    ).rejects.toMatchObject({ code: '23505' });
 
     const result = await db.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM transaction_rollback_probe',
