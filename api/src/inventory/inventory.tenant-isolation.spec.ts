@@ -50,7 +50,7 @@ describe('InventoryService tenant isolation', () => {
 
     expect(memberships.getMembershipForCompany).toHaveBeenCalledWith('user-company-2', 'company-2');
     expect(memberships.getMembership).not.toHaveBeenCalled();
-    expect(db.query.mock.calls[0][1]).toEqual(['company-2']);
+    expect(db.query.mock.calls[0][1]).toEqual(['company-2', null]);
   });
 
   it('scopes warehouse, stock, movement, and summary reads to the resolved company', async () => {
@@ -78,7 +78,7 @@ describe('InventoryService tenant isolation', () => {
 
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('WHERE w.id=$1 AND w.company_id=$2'),
-      ['warehouse-from-company-1', 'company-2'],
+      ['warehouse-from-company-1', 'company-2', null],
     );
   });
 
@@ -112,7 +112,7 @@ describe('InventoryService tenant isolation', () => {
         if (sql.includes('SELECT id,is_service FROM products')) {
           return { rows: [{ id: 'product-company-2', is_service: false }], rowCount: 1 };
         }
-        if (sql.includes('SELECT id FROM warehouses')) {
+        if (sql.includes('FROM warehouses WHERE id=$1')) {
           return params?.[0] === 'warehouse-company-2'
             ? { rows: [{ id: 'warehouse-company-2' }], rowCount: 1 }
             : { rows: [], rowCount: 0 };
