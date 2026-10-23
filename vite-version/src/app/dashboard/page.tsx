@@ -118,7 +118,8 @@ export default function Page() {
     (total, supplier) => total + Number(supplier.outstanding_balance || 0),
     0,
   )
-  const today = new Date().toISOString().slice(0, 10)
+  const todayDate = new Date()
+  const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`
   const invoiceTrend = React.useMemo(() => {
     const months: { key: string; label: string; total: number }[] = []
     const now = new Date()
@@ -130,12 +131,13 @@ export default function Page() {
     const byMonth = new Map(months.map((month) => [month.key, month]))
     for (const invoice of invoices.data) {
       if (invoice.status === "draft" || invoice.status === "cancelled") continue
+      if ((invoice.currency || "KES") !== (company?.currency || "KES")) continue
       const date = invoice.issue_date?.slice(0, 7)
       const bucket = date ? byMonth.get(date) : undefined
       if (bucket) bucket.total += Number(invoice.total || 0)
     }
     return months
-  }, [invoices.data])
+  }, [invoices.data, company?.currency])
   const overdueInvoices = React.useMemo(() => invoices.data
     .filter((invoice) => !["draft", "cancelled", "paid"].includes(invoice.status) && invoice.due_date < today)
     .map((invoice) => ({
@@ -230,7 +232,7 @@ export default function Page() {
               <Card className="min-w-0 xl:col-span-3">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><TrendingUp className="size-5 text-primary" />Invoice trend</CardTitle>
-                  <CardDescription>Monthly invoice totals for the last six months, excluding drafts and cancelled invoices</CardDescription>
+                  <CardDescription>Monthly invoice totals in {company?.currency || "KES"} for the last six months, excluding drafts and cancelled invoices</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {invoiceTrend.every((month) => month.total === 0) ? (
@@ -244,8 +246,8 @@ export default function Page() {
                         <LineChart data={invoiceTrend} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                          <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={(value: number) => value >= 1000000 ? `KES ${(value / 1000000).toFixed(1)}m` : value >= 1000 ? `KES ${(value / 1000).toFixed(0)}k` : `KES ${value}`} />
-                          <Tooltip formatter={(value) => [formatKES(Number(value)), "Invoice total"]} labelFormatter={(label) => `Month: ${label}`} />
+                          <YAxis tickLine={false} axisLine={false} width={64} tickFormatter={(value: number) => value >= 1000000 ? `${company?.currency || "KES"} ${(value / 1000000).toFixed(1)}m` : value >= 1000 ? `${company?.currency || "KES"} ${(value / 1000).toFixed(0)}k` : `${company?.currency || "KES"} ${value}`} />
+                          <Tooltip formatter={(value) => [new Intl.NumberFormat("en-KE", { style: "currency", currency: company?.currency || "KES", maximumFractionDigits: 0 }).format(Number(value)), "Invoice total"]} labelFormatter={(label) => `Month: ${label}`} />
                           <Line type="monotone" dataKey="total" name="Invoice total" stroke="var(--color-primary, #51BC8F)" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -270,7 +272,7 @@ export default function Page() {
                             <p className="truncate text-sm text-muted-foreground">{invoice.customer_name}</p>
                             <p className="text-xs text-muted-foreground">Due {invoice.due_date}</p>
                           </div>
-                          <p className="shrink-0 text-right text-sm font-semibold tabular-nums">{formatKES(invoice.balance)}</p>
+                          <p className="shrink-0 text-right text-sm font-semibold tabular-nums">{new Intl.NumberFormat("en-KE", { style: "currency", currency: invoice.currency || company?.currency || "KES" }).format(invoice.balance)}</p>
                         </div>
                       ))}
                       <Link to="/invoices" className={buttonVariants({ variant: "outline", size: "sm", className: "w-full" })}>Review invoices</Link>
