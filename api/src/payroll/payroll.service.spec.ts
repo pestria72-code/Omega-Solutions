@@ -232,6 +232,18 @@ describe('PayrollService tenant and workflow guards',()=>{
   await expect(service.approveRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'legacy-draft')).rejects.toThrow('Payroll run totals do not reconcile');
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='approved'"))).toBe(false);
  });
+ it('blocks approval when an employee deduction breakdown does not match the saved total',async()=>{
+  const client={query:vi.fn(async(sql:string)=>{
+   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'run-breakdown',company_id:'company-a',period_start:'2027-04-01',period_end:'2027-04-30',status:'draft',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'107500.00'}]};
+   if(sql.includes('SELECT id,gross_cash_pay'))return {rows:[{id:'item-breakdown',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employee:'6000.00',nssf_employer:'6000.00',shif_employee:'2750.00',housing_levy_employee:'1500.00',housing_levy_employer:'1500.00',paye:'9000.00',pension_employee:'0.00',prmf_employee:'0.00',employee_deductions:'20250.00',net_pay:'79750.00',employer_statutory_cost:'7500.00'}]};
+   return {rows:[]};
+  })};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.approveRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-breakdown')).rejects.toThrow('Payroll run totals do not reconcile');
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='approved'"))).toBe(false);
+ });
  it('blocks posting a legacy payroll run whose saved employer cost does not reconcile',async()=>{
   const client={query:vi.fn(async(sql:string)=>{
    if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'legacy-run',company_id:'company-a',period_start:'2027-12-01',period_end:'2027-12-31',status:'approved',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'1400.00'}]};
