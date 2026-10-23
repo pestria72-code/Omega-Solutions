@@ -70,6 +70,22 @@ describe('DatabaseService transaction boundary', () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 
+  it('preserves the original failure and discards the client if rollback also fails', async () => {
+    const db = new DatabaseService();
+    const operationFailure = new Error('simulated write failure');
+    const rollbackFailure = new Error('simulated rollback failure');
+    client.query.mockImplementation(async (sql: string) => {
+      if (sql === 'ROLLBACK') throw rollbackFailure;
+      return { rows: [], rowCount: 0 };
+    });
+    const callback = vi.fn().mockRejectedValue(operationFailure);
+
+    await expect(db.transaction(callback)).rejects.toBe(operationFailure);
+
+    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN', 'ROLLBACK']);
+    expect(client.release).toHaveBeenCalledWith(rollbackFailure);
+  });
+
   it('does not try to roll back if acquiring a client fails', async () => {
     const db = new DatabaseService();
     const failure = new Error('pool unavailable');
