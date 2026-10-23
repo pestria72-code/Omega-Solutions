@@ -22,7 +22,7 @@ describe('Kenyan monthly payroll rules', () => {
   });
 
   it('calculates statutory deductions and resident PAYE relief transparently', () => {
-    const result = calculateKenyaMonthlyPayroll({ grossCashPay: 100_000 });
+    const result = calculateKenyaMonthlyPayroll({ grossCashPay: 100_000, statutoryOptions: { housingLevyEnabled: true } });
     expect(result.nssfEmployee).toBe(6_000);
     expect(result.nssfEmployer).toBe(6_000);
     expect(result.shifEmployee).toBe(2_750);
@@ -52,7 +52,7 @@ describe('Kenyan monthly payroll rules', () => {
   });
 
   it('enforces minimum SHIF and excludes personal relief for non-residents', () => {
-    const result = calculateKenyaMonthlyPayroll({ grossCashPay: 10_000, residentForTaxPurposes: false });
+    const result = calculateKenyaMonthlyPayroll({ grossCashPay: 10_000, residentForTaxPurposes: false, statutoryOptions: { housingLevyEnabled: true } });
     expect(result.shifEmployee).toBe(300);
     expect(result.personalRelief).toBe(0);
     expect(result.netPay).toBeGreaterThanOrEqual(0);
@@ -64,12 +64,18 @@ describe('Kenyan monthly payroll rules', () => {
       employeePensionContribution: 50_000,
       postRetirementMedicalContribution: 20_000,
       qualifyingMortgageInterest: 40_000,
+      statutoryOptions: { housingLevyEnabled: true },
     });
     expect(result.pensionDeductionAllowed).toBe(30_000);
     expect(result.postRetirementMedicalContribution).toBe(20_000);
     expect(result.postRetirementMedicalDeduction).toBe(15_000);
     expect(result.employeeDeductions).toBeGreaterThanOrEqual(20_000);
     expect(result.mortgageInterestDeduction).toBe(30_000);
+  });
+
+  it('requires an explicit housing levy choice instead of assuming the levy is enabled', () => {
+    expect(() => calculateKenyaMonthlyPayroll({ grossCashPay: 100_000 })).toThrow('housingLevyEnabled must be a boolean');
+    expect(() => calculateKenyaMonthlyPayroll({ grossCashPay: 100_000, statutoryOptions: { housingLevyEnabled: false } })).not.toThrow();
   });
 
   it('rejects negative and non-finite input amounts', () => {
