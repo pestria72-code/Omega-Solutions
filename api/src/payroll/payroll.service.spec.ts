@@ -123,20 +123,20 @@ describe('PayrollService tenant and workflow guards',()=>{
 
 
  it('includes gross cash pay, taxable benefits and employer statutory contributions in employer cost total',async()=>{
+  const client={query:vi.fn()
+   .mockResolvedValueOnce({rows:[{id:'run-a',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'draft'}]})
+   .mockResolvedValue({rows:[]})};
   const db={query:vi.fn()
    .mockResolvedValueOnce({rows:[{nssf_method:'YEAR4',nssf_employee_flat:'200',nssf_employer_flat:'200',nssf_employee_rate:'0.06',nssf_employer_rate:'0.06',nssf_pensionable_pay_cap:'108000',housing_levy_enabled:false,housing_levy_employee_rate:'0.015',housing_levy_employer_rate:'0.015'}]})
    .mockResolvedValueOnce({rows:[{missing_count:0}]})
    .mockResolvedValueOnce({rows:[{id:'employee-a',employee_number:'E-1',first_name:'Employee',last_name:'One',monthly_basic_salary:'100000',monthly_taxable_allowances:'0',monthly_taxable_benefits:'5000',employee_pension_contribution:'0',post_retirement_medical_contribution:'0',qualifying_mortgage_interest:'0',eligible_insurance_premiums:'0',resident_for_tax_purposes:true}]}),
-   transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>{
-    const client={query:vi.fn().mockResolvedValueOnce({rows:[{id:'run-a',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'draft'}]}).mockResolvedValue({rows:[]})};
-    return callback(client);
-   })} as never;
+   transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
   const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
   const service=new PayrollService(db,memberships);
   await service.createRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},{periodStart:'2026-10-01',periodEnd:'2026-10-31'});
-  const transaction= (db as {transaction:ReturnType<typeof vi.fn>}).transaction;
-  const client=transaction.mock.calls.length ? undefined : undefined;
-  expect(transaction).toHaveBeenCalledTimes(1);
+  const insertRun=client.query.mock.calls.find(([sql])=>String(sql).includes('INSERT INTO payroll_runs'));
+  expect(insertRun?.[1][4]).toBe(105000);
+  expect(insertRun?.[1][7]).toBe(111000);
  });
  it('posts an approved payroll run with tenant-scoped balanced ledger lines and persists the journal link',async()=>{
   const client={query:vi.fn(async (sql:string)=>{
