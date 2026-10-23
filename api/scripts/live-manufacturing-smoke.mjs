@@ -1,6 +1,6 @@
 import { neonTestLogin } from "./neon-test-auth.mjs";
 
-const base=(process.env.OMEGA_API_URL||"https://omega-solutions-api.onrender.com/api").replace(/\/$/,"");
+const base=(process.env.OMEGA_API_URL||"https://omega-solutions-api-development.onrender.com/api").replace(/\/$/,"");
 const stamp=Date.now();
 const checks=[];
 async function req(method,path,body,token,expected=[200,201]){
