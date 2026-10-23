@@ -193,13 +193,25 @@ export class PayrollRemittancesService {
       );
       const remaining = Math.round((Number(obligation.rows[0].amount) - Number(paid.rows[0].amount_paid)) * 100) / 100;
       if (amount > remaining) throw new ConflictException('Payment exceeds the outstanding obligation balance.');
-      const result = await client.query(
-        `INSERT INTO payroll_remittance_payments
-           (company_id,obligation_id,amount,payment_reference,paid_at,receipt_storage_key,notes,recorded_by)
-         VALUES($1,$2,$3,$4,$5::timestamptz,$6,$7,$8)
-         RETURNING id,obligation_id,amount,payment_reference,paid_at,receipt_storage_key,notes,created_at`,
-        [companyId, obligationId, amount, paymentReference, paidAt, dto.receiptStorageKey ?? null, dto.notes ?? null, user.userId],
-      );
+      let result;
+      try {
+        result = await client.query(
+          `INSERT INTO payroll_remittance_payments
+             (company_id,obligation_id,amount,payment_reference,paid_at,receipt_storage_key,notes,recorded_by)
+           VALUES($1,$2,$3,$4,$5::timestamptz,$6,$7,$8)
+           RETURNING id,obligation_id,amount,payment_reference,paid_at,receipt_storage_key,notes,created_at`,
+          [companyId, obligationId, amount, paymentReference, paidAt, dto.receiptStorageKey ?? null, dto.notes ?? null, user.userId],
+        );
+      } catch (error: unknown) {
+        const databaseError = error as { code?: string; constraint?: string };
+        if (
+          databaseError.code === '23505' &&
+          databaseError.constraint === 'payroll_remittance_payments_company_id_payment_reference_key'
+        ) {
+          throw new ConflictException('This payment reference has already been recorded for this company.');
+        }
+        throw error;
+      }
       return { ...result.rows[0], verificationStatus: 'recorded_not_independently_verified' };
     });
   }
