@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { DatabaseService } from '../database.service.js';
@@ -46,7 +46,7 @@ export class InventoryService {
   }
 
   async listWarehouses(user: AuthenticatedUser): Promise<WarehouseRow[]> {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const result = await this.db.query<WarehouseRow>(
       `SELECT w.id,w.company_id,w.branch_id,w.code,w.name,w.location,w.capacity,w.is_active,w.created_at,w.updated_at,
               b.name AS branch_name,
@@ -54,21 +54,21 @@ export class InventoryService {
               COALESCE(SUM(s.quantity),0) AS total_quantity
        FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id AND b.company_id=w.company_id
        LEFT JOIN inventory_stock_levels s ON s.warehouse_id=w.id AND s.company_id=w.company_id
-       WHERE w.company_id=$1 GROUP BY w.id,b.name ORDER BY w.is_active DESC,w.name`,
-      [companyId],
+       WHERE w.company_id=$1 AND ($2::uuid IS NULL OR w.branch_id=$2) GROUP BY w.id,b.name ORDER BY w.is_active DESC,w.name`,
+      [companyId, branchId],
     );
     return result.rows;
   }
 
   async getWarehouse(user: AuthenticatedUser, warehouseId: string): Promise<WarehouseRow> {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const result = await this.db.query<WarehouseRow>(
       `SELECT w.*,b.name AS branch_name,
         COUNT(DISTINCT s.product_id)::int AS product_count,COALESCE(SUM(s.quantity),0) AS total_quantity
        FROM warehouses w LEFT JOIN branches b ON b.id=w.branch_id AND b.company_id=w.company_id
        LEFT JOIN inventory_stock_levels s ON s.warehouse_id=w.id AND s.company_id=w.company_id
-       WHERE w.id=$1 AND w.company_id=$2 GROUP BY w.id,b.name`,
-      [warehouseId, companyId],
+       WHERE w.id=$1 AND w.company_id=$2 AND ($3::uuid IS NULL OR w.branch_id=$3) GROUP BY w.id,b.name`,
+      [warehouseId, companyId, branchId],
     );
     if (!result.rows[0]) throw new NotFoundException('Warehouse not found.');
     return result.rows[0];
@@ -149,9 +149,9 @@ export class InventoryService {
   }
 
   async listStock(user: AuthenticatedUser, warehouseId?: string, search?: string): Promise<StockRow[]> {
-    const { companyId } = await this.resolveMembership(user);
-    const values: (string|number)[] = [companyId];
-    let filters = 's.company_id=$1';
+    const { companyId, branchId } = await this.resolveMembership(user);
+    const values: (string|number|null)[] = [companyId, branchId];
+    let filters = 's.company_id=$1 AND ($2::uuid IS NULL OR w.branch_id=$2)';
     if (warehouseId) { values.push(warehouseId); filters += ` AND s.warehouse_id=$${values.length}`; }
     if (search?.trim()) { values.push(`%${search.trim()}%`); filters += ` AND (p.name ILIKE $${values.length} OR p.sku ILIKE $${values.length} OR w.name ILIKE $${values.length})`; }
     const result = await this.db.query<StockRow>(
@@ -166,20 +166,20 @@ export class InventoryService {
   }
 
   async listMovements(user: AuthenticatedUser, limit?: string): Promise<MovementRow[]> {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const parsed = Number.parseInt(limit ?? '100', 10);
     const safeLimit = Number.isFinite(parsed) ? Math.max(1,Math.min(parsed,250)) : 100;
     const result = await this.db.query<MovementRow>(
       `SELECT m.*,p.name AS product_name,p.sku,w.name AS warehouse_name
        FROM inventory_stock_movements m JOIN products p ON p.id=m.product_id AND p.company_id=m.company_id
        JOIN warehouses w ON w.id=m.warehouse_id AND w.company_id=m.company_id
-       WHERE m.company_id=$1 ORDER BY m.created_at DESC LIMIT $2`, [companyId,safeLimit],
+       WHERE m.company_id=$1 AND ($2::uuid IS NULL OR w.branch_id=$2) ORDER BY m.created_at DESC LIMIT $3`, [companyId,branchId,safeLimit],
     );
     return result.rows;
   }
 
   async summary(user: AuthenticatedUser) {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const result = await this.db.query<Record<string, string|number>>(
       `SELECT COUNT(DISTINCT s.product_id)::int AS stocked_products,
         COUNT(*) FILTER(WHERE s.quantity>0 AND s.quantity<=s.reorder_level)::int AS low_stock_lines,
@@ -194,7 +194,8 @@ export class InventoryService {
   }
 
   async reconciliation(user: AuthenticatedUser) {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
+    if (branchId) throw new ForbiddenException('Inventory reconciliation is available to company-wide roles only.');
     const [ledger, legacy, valuation] = await Promise.all([
       this.db.query<{ mismatch_count: string | number; absolute_quantity_variance: string | number }>(
         `WITH movement_totals AS (
@@ -261,10 +262,10 @@ export class InventoryService {
   }
 
   async adjust(user: AuthenticatedUser, dto: AdjustStockDto) {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const result = await this.db.transaction(async client => {
       await this.assertProduct(client,companyId,dto.productId);
-      await this.assertWarehouse(client,companyId,dto.warehouseId);
+      await this.assertWarehouse(client,companyId,dto.warehouseId,branchId);
       await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
       const stock = await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
         'SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
@@ -295,13 +296,13 @@ export class InventoryService {
   }
 
   async transfer(user: AuthenticatedUser, dto: TransferStockDto) {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     if (dto.sourceWarehouseId===dto.destinationWarehouseId) throw new BadRequestException('Choose two different warehouses.');
     const transferGroupId = randomUUID();
     const result = await this.db.transaction(async client => {
       await this.assertProduct(client,companyId,dto.productId);
-      await this.assertWarehouse(client,companyId,dto.sourceWarehouseId);
-      await this.assertWarehouse(client,companyId,dto.destinationWarehouseId);
+      await this.assertWarehouse(client,companyId,dto.sourceWarehouseId,branchId);
+      await this.assertWarehouse(client,companyId,dto.destinationWarehouseId,branchId);
       await this.ensureStockRow(client,companyId,dto.sourceWarehouseId,dto.productId);
       await this.ensureStockRow(client,companyId,dto.destinationWarehouseId,dto.productId);
       const ids=[dto.sourceWarehouseId,dto.destinationWarehouseId].sort();
@@ -334,10 +335,10 @@ export class InventoryService {
   }
 
   private async postSingleMovement(user: AuthenticatedUser,dto: CreateStockMovementDto,type:'receipt'|'issue',signedQuantity:number) {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const movement = await this.db.transaction(async client => {
       await this.assertProduct(client,companyId,dto.productId);
-      await this.assertWarehouse(client,companyId,dto.warehouseId);
+      await this.assertWarehouse(client,companyId,dto.warehouseId,branchId);
       await this.ensureStockRow(client,companyId,dto.warehouseId,dto.productId);
       const stock=await client.query<{quantity:string;reserved_quantity:string;average_unit_cost:string|number}>(
         'SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels WHERE company_id=$1 AND warehouse_id=$2 AND product_id=$3 FOR UPDATE',
@@ -391,9 +392,9 @@ export class InventoryService {
     if(result.rows[0].is_service) throw new BadRequestException('Service items do not have stock.');
   }
 
-  private async assertWarehouse(client:PoolClient,companyId:string,warehouseId:string) {
-    const result=await client.query<{id:string}>('SELECT id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true',[warehouseId,companyId]);
-    if(!result.rows[0]) throw new NotFoundException('Active warehouse not found in this company.');
+  private async assertWarehouse(client:PoolClient,companyId:string,warehouseId:string,branchId:string|null) {
+    const result=await client.query<{id:string;branch_id:string|null}>('SELECT id,branch_id FROM warehouses WHERE id=$1 AND company_id=$2 AND is_active=true AND ($3::uuid IS NULL OR branch_id=$3)',[warehouseId,companyId,branchId]);
+    if(!result.rows[0]) throw new NotFoundException('Active warehouse not found in your company and assigned branch.');
   }
 
   private async assertBranch(companyId:string,branchId:string) {
