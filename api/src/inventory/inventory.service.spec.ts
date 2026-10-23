@@ -137,6 +137,24 @@ describe('InventoryService', () => {
     expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ branchId, action: 'inventory.warehouse.create' }));
   });
 
+  it('keeps the assigned-branch predicate on the warehouse update statement itself', async () => {
+    const branchId = '11111111-1111-4111-8111-111111111111';
+    memberships.getMembership.mockResolvedValue({ companyId: 'company-1', branchId, role: 'manager' });
+    const existing = {
+      id: 'warehouse-1', company_id: 'company-1', branch_id: branchId,
+      code: 'MAIN', name: 'Main', location: null, capacity: 0, is_active: true,
+      created_at: '2026-10-23T00:00:00.000Z', updated_at: '2026-10-23T00:00:00.000Z',
+    };
+    db.query
+      .mockResolvedValueOnce({ rows: [existing], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ ...existing, name: 'Renamed' }], rowCount: 1 });
+
+    await service.updateWarehouse(user, 'warehouse-1', { name: 'Renamed' });
+
+    expect(db.query.mock.calls[1][0]).toContain('($4::uuid IS NULL OR branch_id=$4)');
+    expect(db.query.mock.calls[1][1]).toEqual(['Renamed', 'warehouse-1', 'company-1', branchId]);
+  });
+
   it('reconciles stock levels against movement history, legacy totals, and the inventory control account without writes', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ mismatch_count: 1, absolute_quantity_variance: '2.000' }], rowCount: 1 })
