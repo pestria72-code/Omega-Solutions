@@ -60,7 +60,7 @@ export function calculateKenyaMonthlyPayroll(input:KenyaPayrollInput):KenyaPayro
   nssfEmployeeRate:rate(raw.nssfEmployeeRate,.06,'nssfEmployeeRate'),
   nssfEmployerRate:rate(raw.nssfEmployerRate,.06,'nssfEmployerRate'),
   nssfPensionablePayCap:money(raw.nssfPensionablePayCap??108000,'nssfPensionablePayCap'),
-  housingLevyEnabled:raw.housingLevyEnabled??true,
+  housingLevyEnabled:raw.housingLevyEnabled as boolean,
   housingLevyEmployeeRate:rate(raw.housingLevyEmployeeRate,.015,'housingLevyEmployeeRate'),
   housingLevyEmployerRate:rate(raw.housingLevyEmployerRate,.015,'housingLevyEmployerRate'),
  };
