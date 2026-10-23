@@ -302,7 +302,7 @@ export default function Page() {
             </section>}
 
             <section className="grid min-w-0 gap-4 lg:grid-cols-2" aria-label="Balances">
-              {canReadSales && <Card className="relative overflow-hidden border-l-4 border-l-primary">
+              {canReadCustomers && <Card className="relative overflow-hidden border-l-4 border-l-primary">
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
                     <CardDescription>Customer receivables</CardDescription>
@@ -379,10 +379,10 @@ export default function Page() {
                   <CardDescription>Jump straight into common tasks</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                  <Link to="/customers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Users className="mr-2 size-4" />Manage customers</Link>
-                  <Link to="/suppliers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><BriefcaseBusiness className="mr-2 size-4" />Manage suppliers</Link>
-                  <Link to="/products" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Package className="mr-2 size-4" />Manage products</Link>
-                  <Link to="/invoices" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Wallet className="mr-2 size-4" />Sales invoices</Link>
+                  {canReadCustomers && <Link to="/customers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Users className="mr-2 size-4" />Manage customers</Link>}
+                  {canReadProcurement && <Link to="/suppliers" className={buttonVariants({ variant: "outline", className: "justify-start" })}><BriefcaseBusiness className="mr-2 size-4" />Manage suppliers</Link>}
+                  {canReadProducts && <Link to="/products" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Package className="mr-2 size-4" />Manage products</Link>}
+                  {canReadSales && <Link to="/invoices" className={buttonVariants({ variant: "outline", className: "justify-start" })}><Wallet className="mr-2 size-4" />Sales invoices</Link>}
                   {lowStock.length > 0 && (
                     <p className="flex items-center gap-2 text-sm text-amber-700 sm:col-span-2 xl:col-span-1">
                       <ArrowDownRight className="size-4 shrink-0" />
