@@ -115,6 +115,28 @@ describe('InventoryService', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
+  it('defaults branch-scoped warehouse creation to the member branch when the UI omits branchId', async () => {
+    const branchId = '11111111-1111-4111-8111-111111111111';
+    memberships.getMembership.mockResolvedValue({ companyId: 'company-1', branchId, role: 'manager' });
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: branchId }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{
+        id: 'warehouse-new', company_id: 'company-1', branch_id: branchId,
+        code: 'MAIN', name: 'Main', location: null, capacity: 0, is_active: true,
+        created_at: '2026-10-23T00:00:00.000Z', updated_at: '2026-10-23T00:00:00.000Z',
+      }], rowCount: 1 });
+
+    const result = await service.createWarehouse(user, { code: 'main', name: 'Main' });
+
+    expect(result.branch_id).toBe(branchId);
+    expect(db.query).toHaveBeenNthCalledWith(3,
+      expect.stringContaining('INSERT INTO warehouses'),
+      ['company-1', branchId, 'MAIN', 'Main', null, 0, true],
+    );
+    expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ branchId, action: 'inventory.warehouse.create' }));
+  });
+
   it('reconciles stock levels against movement history, legacy totals, and the inventory control account without writes', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ mismatch_count: 1, absolute_quantity_variance: '2.000' }], rowCount: 1 })
