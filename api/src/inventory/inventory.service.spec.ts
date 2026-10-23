@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseService } from '../database.service.js';
 import { MembershipsService } from '../memberships/memberships.service.js';
@@ -70,6 +70,49 @@ describe('InventoryService', () => {
     expect(db.query).toHaveBeenCalledTimes(1);
     expect(db.query.mock.calls[0][0]).toContain('FROM inventory_stock_levels s');
     expect(db.query.mock.calls[0][0]).not.toContain('INSERT INTO');
+  });
+
+  it('limits warehouse, stock, and movement reads to the assigned branch', async () => {
+    const branchId = '11111111-1111-4111-8111-111111111111';
+    memberships.getMembership.mockResolvedValue({ companyId: 'company-1', branchId, role: 'manager' });
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+
+    await service.listWarehouses(user);
+    await service.listStock(user);
+    await service.listMovements(user);
+
+    expect(db.query.mock.calls[0][0]).toContain('w.branch_id=$2');
+    expect(db.query.mock.calls[0][1]).toEqual(['company-1', branchId]);
+    expect(db.query.mock.calls[1][0]).toContain('w.branch_id=$2');
+    expect(db.query.mock.calls[1][1]).toEqual(['company-1', branchId]);
+    expect(db.query.mock.calls[2][0]).toContain('w.branch_id=$2');
+    expect(db.query.mock.calls[2][1]).toEqual(['company-1', branchId, 100]);
+  });
+
+  it('rejects company-wide inventory reconciliation for a branch-restricted member', async () => {
+    memberships.getMembership.mockResolvedValue({
+      companyId: 'company-1',
+      branchId: '11111111-1111-4111-8111-111111111111',
+      role: 'manager',
+    });
+
+    await expect(service.reconciliation(user)).rejects.toThrow(ForbiddenException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects creating a warehouse outside the assigned branch before database writes', async () => {
+    memberships.getMembership.mockResolvedValue({
+      companyId: 'company-1',
+      branchId: '11111111-1111-4111-8111-111111111111',
+      role: 'manager',
+    });
+
+    await expect(service.createWarehouse(user, {
+      code: 'OTHER',
+      name: 'Other branch',
+      branchId: '22222222-2222-4222-8222-222222222222',
+    })).rejects.toThrow(ForbiddenException);
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it('reconciles stock levels against movement history, legacy totals, and the inventory control account without writes', async () => {
@@ -181,7 +224,7 @@ describe('InventoryService', () => {
   it('rejects a transfer that would consume reserved stock without writing movements', async () => {
     const client = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
-      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse' }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [{ id: 'warehouse' }], rowCount: 1 };
       if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
@@ -213,7 +256,7 @@ describe('InventoryService', () => {
   it('records receipts as a stock-ledger movement and synchronizes the legacy product quantity', async () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
-      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
       if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '3', reserved_quantity: '1', average_unit_cost: '10' }], rowCount: 1 };
       if (sql.includes('INSERT INTO inventory_stock_movements')) return { rows: [{ id: 'receipt-movement', movement_type: params?.[3], quantity: params?.[4] }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
@@ -235,7 +278,7 @@ describe('InventoryService', () => {
   it('uses existing weighted-average cost for stock issues', async () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
-      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
       if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '1', average_unit_cost: '7.25' }], rowCount: 1 };
       if (sql.includes('INSERT INTO inventory_stock_movements')) return { rows: [{ id: 'issue-movement', movement_type: params?.[3], quantity: params?.[4], unit_cost: params?.[5] }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
@@ -251,7 +294,7 @@ describe('InventoryService', () => {
   it('rejects issuing stock that is reserved and leaves stock and ledger untouched', async () => {
     const client = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
-      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
       if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '5', reserved_quantity: '4' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
@@ -270,7 +313,7 @@ describe('InventoryService', () => {
   it('rejects stock adjustments below reserved quantity without changing stock', async () => {
     const client = { query: vi.fn(async (sql: string) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
-      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [{ id: 'warehouse-1' }], rowCount: 1 };
       if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '8', reserved_quantity: '3' }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     }) };
