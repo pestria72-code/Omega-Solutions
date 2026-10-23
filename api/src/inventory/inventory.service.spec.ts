@@ -178,6 +178,56 @@ describe('InventoryService', () => {
     );
   });
 
+  it('rejects a receipt into a warehouse outside the assigned branch before stock writes', async () => {
+    const branchId = '11111111-1111-4111-8111-111111111111';
+    memberships.getMembership.mockResolvedValue({ companyId: 'company-1', branchId, role: 'manager' });
+    const client = { query: vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [], rowCount: 0 };
+      return { rows: [], rowCount: 1 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+
+    await expect(service.receive(user, {
+      productId: 'product-1',
+      warehouseId: 'warehouse-other-branch',
+      quantity: 2,
+      unitCost: 10,
+    })).rejects.toThrow(NotFoundException);
+
+    const statements = client.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => sql.includes('UPDATE inventory_stock_levels'))).toBe(false);
+    expect(statements.some(sql => sql.includes('INSERT INTO inventory_stock_movements'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('rejects a transfer to a warehouse outside the assigned branch before ledger writes', async () => {
+    const branchId = '11111111-1111-4111-8111-111111111111';
+    memberships.getMembership.mockResolvedValue({ companyId: 'company-1', branchId, role: 'manager' });
+    const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) {
+        return params?.[0] === 'warehouse-source'
+          ? { rows: [{ id: 'warehouse-source', branch_id: branchId }], rowCount: 1 }
+          : { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 1 };
+    }) };
+    db.transaction.mockImplementation(async (callback: (client: unknown) => Promise<unknown>) => callback(client));
+
+    await expect(service.transfer(user, {
+      productId: 'product-1',
+      sourceWarehouseId: 'warehouse-source',
+      destinationWarehouseId: 'warehouse-other-branch',
+      quantity: 1,
+    })).rejects.toThrow(NotFoundException);
+
+    const statements = client.query.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => sql.includes('UPDATE inventory_stock_levels'))).toBe(false);
+    expect(statements.some(sql => sql.includes('INSERT INTO inventory_stock_movements'))).toBe(false);
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
   it('posts transfers as paired ledger movements and scopes all stock writes to the membership company', async () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
