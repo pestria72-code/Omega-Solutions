@@ -200,7 +200,7 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(false);
   expect(db.transaction).toHaveBeenCalledOnce();
  });
- it('blocks an unbalanced payroll journal before allocating a number or creating a journal',async()=>{
+ it('blocks posting when an employee deduction breakdown is inconsistent before allocating a number',async()=>{
   const client={query:vi.fn(async(sql:string)=>{
    if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'run-unbalanced',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'approved',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'107500.00'}]};
    if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'E-1',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employer:'6000.00',housing_levy_employer:'1500.00',employer_statutory_cost:'7500.00',employee_deductions:'20250.00',net_pay:'79750.00',paye:'11000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
@@ -215,7 +215,7 @@ describe('PayrollService tenant and workflow guards',()=>{
   const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
   const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
   const service=new PayrollService(db,memberships);
-  await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-unbalanced')).rejects.toThrow('Payroll journal is not balanced');
+  await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-unbalanced')).rejects.toThrow('Payroll run totals do not reconcile');
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes('RETURNING next_number-1 AS allocated_number'))).toBe(false);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entries'))).toBe(false);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes('UPDATE payroll_runs SET status=\'posted\''))).toBe(false);
