@@ -131,14 +131,14 @@ describe('InventoryService', () => {
     await expect(service.getWarehouse(user, 'warehouse-other-company')).rejects.toThrow(NotFoundException);
     expect(db.query).toHaveBeenCalledWith(
       expect.stringContaining('WHERE w.id=$1 AND w.company_id=$2'),
-      ['warehouse-other-company', 'company-1'],
+      ['warehouse-other-company', 'company-1', null],
     );
   });
 
   it('posts transfers as paired ledger movements and scopes all stock writes to the membership company', async () => {
     const client = { query: vi.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes('SELECT id,is_service FROM products')) return { rows: [{ id: 'product-1', is_service: false }], rowCount: 1 };
-      if (sql.includes('SELECT id FROM warehouses')) return { rows: [{ id: params?.[0] }], rowCount: 1 };
+      if (sql.includes('FROM warehouses WHERE id=$1')) return { rows: [{ id: params?.[0] }], rowCount: 1 };
       if (sql.includes('SELECT quantity,reserved_quantity,average_unit_cost FROM inventory_stock_levels')) return { rows: [{ quantity: '10', reserved_quantity: '2' }], rowCount: 1 };
       if (sql.includes('INSERT INTO inventory_stock_movements')) {
         return { rows: [{ id: params?.[3] === 'transfer_out' ? 'movement-out' : 'movement-in', movement_type: params?.[3], quantity: params?.[4], transfer_group_id: params?.[9] }], rowCount: 1 };
