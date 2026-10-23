@@ -75,7 +75,8 @@ export class InventoryService {
   }
 
   async createWarehouse(user: AuthenticatedUser, dto: CreateWarehouseDto): Promise<WarehouseRow> {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
+    if (branchId && dto.branchId !== branchId) throw new ForbiddenException('You can only create warehouses in your assigned branch.');
     const code = dto.code.trim().toUpperCase();
     const name = dto.name.trim();
     if (!code) throw new BadRequestException('Warehouse code cannot be empty.');
@@ -102,8 +103,10 @@ export class InventoryService {
   }
 
   async updateWarehouse(user: AuthenticatedUser, warehouseId: string, dto: UpdateWarehouseDto): Promise<WarehouseRow> {
-    const { companyId } = await this.resolveMembership(user);
+    const { companyId, branchId } = await this.resolveMembership(user);
     const existing = await this.getWarehouse(user, warehouseId);
+    if (branchId && existing.branch_id !== branchId) throw new ForbiddenException('You can only manage warehouses in your assigned branch.');
+    if (branchId && 'branchId' in dto && dto.branchId !== branchId) throw new ForbiddenException('You cannot move a warehouse outside your assigned branch.');
     if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
     if (typeof dto.code === 'string') {
       const normalizedCode = dto.code.trim().toUpperCase();
@@ -185,10 +188,11 @@ export class InventoryService {
         COUNT(*) FILTER(WHERE s.quantity>0 AND s.quantity<=s.reorder_level)::int AS low_stock_lines,
         COUNT(*) FILTER(WHERE s.quantity=0)::int AS out_of_stock_lines,
         COALESCE(SUM(s.quantity*s.average_unit_cost),0) AS inventory_cost_value,
-        (SELECT COUNT(*)::int FROM warehouses WHERE company_id=$1 AND is_active=true) AS active_warehouses,
-        (SELECT COUNT(*)::int FROM inventory_stock_movements WHERE company_id=$1 AND created_at >= NOW()-INTERVAL '30 days') AS movements_last_30_days
+        (SELECT COUNT(*)::int FROM warehouses WHERE company_id=$1 AND is_active=true AND ($2::uuid IS NULL OR branch_id=$2)) AS active_warehouses,
+        (SELECT COUNT(*)::int FROM inventory_stock_movements m JOIN warehouses mw ON mw.id=m.warehouse_id AND mw.company_id=m.company_id WHERE m.company_id=$1 AND ($2::uuid IS NULL OR mw.branch_id=$2) AND m.created_at >= NOW()-INTERVAL '30 days') AS movements_last_30_days
        FROM inventory_stock_levels s JOIN products p ON p.id=s.product_id AND p.company_id=s.company_id
-       WHERE s.company_id=$1 AND p.is_service=false`, [companyId],
+       JOIN warehouses w ON w.id=s.warehouse_id AND w.company_id=s.company_id
+       WHERE s.company_id=$1 AND ($2::uuid IS NULL OR w.branch_id=$2) AND p.is_service=false`, [companyId, branchId],
     );
     return result.rows[0];
   }
