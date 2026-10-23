@@ -25,5 +25,5 @@ jobs:
           node-version: 24
       - name: Verify live API and database health
         env:
-          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
         run: node api/scripts/live-health-smoke.mjs
