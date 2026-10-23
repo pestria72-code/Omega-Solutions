@@ -19,6 +19,7 @@ describe('Kenyan monthly payroll rules', () => {
     expect(calculateNssfYear4(15_000)).toBe(900);
     expect(calculateNssfYear4(108_000)).toBe(6_480);
     expect(calculateNssfYear4(250_000)).toBe(6_480);
+    expect(calculateNssfYear4(250_000, 50_000)).toBe(3_000);
   });
 
   it('calculates statutory deductions and resident PAYE relief transparently', () => {
