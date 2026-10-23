@@ -183,4 +183,25 @@ describe('PayrollRemittancesService', () => {
     expect(client.query).toHaveBeenCalledTimes(3);
   });
 
+  it('propagates an unexpected payment insert failure so the transaction can roll back', async () => {
+    const insertFailure = new Error('simulated database write failure');
+    const client: MockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-a', amount: '100.00' }] })
+        .mockResolvedValueOnce({ rows: [{ amount_paid: '0.00' }] })
+        .mockRejectedValueOnce(insertFailure),
+    };
+    const transaction = vi.fn(async (callback: (client: MockClient) => unknown) => callback(client));
+    const db = { query: vi.fn(), transaction } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+
+    await expect(service.recordPayment(user, 'obligation-a', {
+      amount: 10, paymentReference: 'WRITE-FAILURE-REF',
+    })).rejects.toBe(insertFailure);
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(client.query).toHaveBeenCalledTimes(3);
+  });
+
 });
