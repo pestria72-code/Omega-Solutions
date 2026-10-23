@@ -179,7 +179,7 @@ describe('PayrollService tenant and workflow guards',()=>{
  it('blocks posting a legacy payroll run whose saved employer cost does not reconcile',async()=>{
   const client={query:vi.fn(async(sql:string)=>{
    if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'legacy-run',company_id:'company-a',period_start:'2027-12-01',period_end:'2027-12-31',status:'approved',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'1400.00'}]};
-   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'PAYE2E',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employer:'200.00',housing_levy_employer:'0.00',employer_statutory_cost:'200.00',employee_deductions:'24448.35',net_pay:'75551.65',paye:'10000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
+   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'PAYE2E',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employer:'6000.00',housing_levy_employer:'1500.00',employer_statutory_cost:'7500.00',employee_deductions:'20250.00',net_pay:'79750.00',paye:'10000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
    return {rows:[]};
   })};
   const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
