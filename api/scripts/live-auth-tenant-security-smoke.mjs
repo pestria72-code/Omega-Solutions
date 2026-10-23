@@ -1,4 +1,4 @@
-const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api.onrender.com/api").replace(/\/$/, "");
+const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api-development.onrender.com/api").replace(/\/$/, "");
 const emailA = process.env.OMEGA_SECURITY_TEST_A_EMAIL;
 const passwordA = process.env.OMEGA_SECURITY_TEST_A_PASSWORD;
 const emailB = process.env.OMEGA_SECURITY_TEST_B_EMAIL;
@@ -95,7 +95,7 @@ async function login(email, password, label) {
 }
 async function main() {
   const health = await request("GET", "/health", undefined, undefined, [200]);
-  assert(health?.status === "ok" && health?.database === "connected", "development API and database are healthy");
+  assert(health?.status === "ok" && health?.database === "connected", "configured API and database are healthy");
 
   const a = await login(emailA, passwordA, "Account A");
   const b = await login(emailB, passwordB, "Account B");
