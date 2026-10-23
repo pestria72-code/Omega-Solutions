@@ -100,6 +100,19 @@ describe('InventoryService', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
+  it('denies direct warehouse-ID reads for a warehouse outside the assigned branch', async () => {
+    const branchId = '11111111-1111-4111-8111-111111111111';
+    memberships.getMembership.mockResolvedValue({ companyId: 'company-1', branchId, role: 'manager' });
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+    await expect(service.getWarehouse(user, 'warehouse-other-branch')).rejects.toThrow(NotFoundException);
+
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE w.id=$1 AND w.company_id=$2 AND ($3::uuid IS NULL OR w.branch_id=$3)'),
+      ['warehouse-other-branch', 'company-1', branchId],
+    );
+  });
+
   it('rejects creating a warehouse outside the assigned branch before database writes', async () => {
     memberships.getMembership.mockResolvedValue({
       companyId: 'company-1',
