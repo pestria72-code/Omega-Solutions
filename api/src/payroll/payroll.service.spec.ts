@@ -164,6 +164,18 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(journalLines.some(([sql,args])=>String(sql).includes('INSERT INTO journal_entry_lines')&&args?.[2]==='a-nssf'&&args?.[5]===12000)).toBe(true);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(true);
  });
+ it('blocks approval of a draft payroll run whose saved totals do not reconcile',async()=>{
+  const client={query:vi.fn(async(sql:string)=>{
+   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'legacy-draft',company_id:'company-a',period_start:'2027-04-01',period_end:'2027-04-30',status:'draft',employee_count:7,gross_total:'700000.00',employee_deductions_total:'171138.45',net_pay_total:'528861.55',employer_cost_total:'52500.00'}]};
+   if(sql.includes('SELECT id,gross_cash_pay'))return {rows:[{id:'item-a',gross_cash_pay:'100000.00',taxable_benefits:'0.00',employee_deductions:'24448.35',net_pay:'75551.65',nssf_employer:'7500.00',housing_levy_employer:'0.00',employer_statutory_cost:'7500.00'}]};
+   return {rows:[]};
+  })};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.approveRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'legacy-draft')).rejects.toThrow('Payroll run totals do not reconcile');
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='approved'"))).toBe(false);
+ });
  it('blocks posting a legacy payroll run whose saved employer cost does not reconcile',async()=>{
   const client={query:vi.fn(async(sql:string)=>{
    if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'legacy-run',company_id:'company-a',period_start:'2027-12-01',period_end:'2027-12-31',status:'approved',employee_count:7,gross_total:'700000.00',employee_deductions_total:'171138.45',net_pay_total:'528861.55',employer_cost_total:'1400.00'}]};
