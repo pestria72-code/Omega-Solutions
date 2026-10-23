@@ -198,4 +198,17 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(client.query).toHaveBeenCalledTimes(1);
  });
 
+
+ it('cannot post a payroll run belonging to another company',async()=>{
+  const client={query:vi.fn().mockResolvedValue({rows:[]})};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-from-company-b')).rejects.toThrow('Payroll run not found in this company.');
+  expect(client.query).toHaveBeenCalledTimes(1);
+  expect(client.query.mock.calls[0][1]).toEqual(['run-from-company-b','company-a']);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entries'))).toBe(false);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(false);
+ });
+
 });
