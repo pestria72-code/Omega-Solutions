@@ -1,13 +1,8 @@
 name: Payment regression smoke test
 
 on:
-  # Run automatically for backend changes on the development branch.
-  # Keep the frontend out of this trigger while its work is paused.
-  push:
-    branches: [development]
-    paths:
-      - 'api/**'
-      - '.github/workflows/payment-regression-smoke.yml'
+  # This smoke test creates persistent invoices, payments, supplier bills and POS records.
+  # Run manually only when its data impact and cleanup plan have been reviewed.
   workflow_dispatch:
 
 permissions:
