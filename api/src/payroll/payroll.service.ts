@@ -152,7 +152,7 @@ export class PayrollService {
      calculated.reduce((s,x)=>s+x.grossCashPay+x.snapshot.taxableBenefits,0),
      calculated.reduce((s,x)=>s+x.snapshot.employeeDeductions,0),
      calculated.reduce((s,x)=>s+x.snapshot.netPay,0),
-     calculated.reduce((s,x)=>s+x.snapshot.employerStatutoryCost,0),user.userId]);
+     calculated.reduce((s,x)=>s+x.grossCashPay+x.snapshot.taxableBenefits+x.snapshot.employerStatutoryCost,0),user.userId]);
     const run=inserted.rows[0];
     for(const {employee,snapshot,grossCashPay} of calculated){
       await client.query(`INSERT INTO payroll_items(company_id,payroll_run_id,employee_id,employee_number,employee_name,gross_cash_pay,taxable_benefits,nssf_employee,nssf_employer,shif_employee,housing_levy_employee,housing_levy_employer,paye,pension_employee,prmf_employee,employee_deductions,net_pay,employer_statutory_cost,calculation_snapshot)
