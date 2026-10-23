@@ -175,6 +175,26 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(postedLineTuples.reduce((sum,line)=>sum+Number(line[2]),0)).toBe(107500);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(true);
  });
+ it('blocks an unbalanced payroll journal before allocating a number or creating a journal',async()=>{
+  const client={query:vi.fn(async(sql:string)=>{
+   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'run-unbalanced',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'approved',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'107500.00'}]};
+   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'E-1',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employer:'6000.00',housing_levy_employer:'1500.00',employer_statutory_cost:'7500.00',employee_deductions:'20250.00',net_pay:'79750.00',paye:'11000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
+   if(sql.includes('SELECT id,system_code FROM chart_of_accounts'))return {rows:[
+    {system_code:'payroll_wages',id:'a-wages'},{system_code:'payroll_employer_contributions',id:'a-employer'},
+    {system_code:'payroll_net_payable',id:'a-net'},{system_code:'payroll_paye_payable',id:'a-paye'},
+    {system_code:'payroll_shif_payable',id:'a-shif'},{system_code:'payroll_nssf_payable',id:'a-nssf'},
+    {system_code:'payroll_housing_levy_payable',id:'a-housing'},{system_code:'payroll_pension_payable',id:'a-pension'},
+    {system_code:'payroll_prmf_payable',id:'a-prmf'}]};
+   return {rows:[]};
+  })};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-unbalanced')).rejects.toThrow('Payroll journal is not balanced');
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('RETURNING next_number-1 AS allocated_number'))).toBe(false);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entries'))).toBe(false);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('UPDATE payroll_runs SET status=\'posted\''))).toBe(false);
+ });
  it('blocks approval of a draft payroll run whose saved totals do not reconcile',async()=>{
   const client={query:vi.fn(async(sql:string)=>{
    if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'legacy-draft',company_id:'company-a',period_start:'2027-04-01',period_end:'2027-04-30',status:'draft',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'7500.00'}]};
