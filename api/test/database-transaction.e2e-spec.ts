@@ -122,6 +122,46 @@ describe('DatabaseService PostgreSQL transaction integration', () => {
     await db.query('DROP TABLE journal_entry_lines, journal_entries, payroll_journal_sequences, chart_of_accounts, payroll_items, payroll_runs CASCADE');
   });
 
+  it('prevents concurrent remittance payments from exceeding an obligation balance', async () => {
+    await db.query('DROP TABLE IF EXISTS payroll_remittance_payments, payroll_remittance_obligations CASCADE');
+    await db.query(`CREATE TABLE payroll_remittance_obligations (
+      id text PRIMARY KEY, company_id text NOT NULL, amount numeric(14,2) NOT NULL
+    )`);
+    await db.query(`CREATE TABLE payroll_remittance_payments (
+      id text PRIMARY KEY DEFAULT gen_random_uuid()::text, company_id text NOT NULL, obligation_id text NOT NULL,
+      amount numeric(14,2) NOT NULL, payment_reference text NOT NULL, paid_at timestamptz NOT NULL,
+      receipt_storage_key text, notes text, recorded_by text, created_at timestamptz NOT NULL DEFAULT NOW(),
+      UNIQUE(company_id, payment_reference)
+    )`);
+    await db.query(`INSERT INTO payroll_remittance_obligations(id,company_id,amount)
+      VALUES('obligation-race','company-a',100.00)`);
+
+    const { PayrollRemittancesService } = await import('../src/payroll/payroll-remittances.service.js');
+    const memberships = {
+      getMembership: async () => ({ companyId: 'company-a' }),
+      getMembershipForCompany: async () => ({ companyId: 'company-a' }),
+    };
+    const service = new PayrollRemittancesService(db, memberships as never);
+    const user = {
+      userId: 'user-a', email: 'user@example.test', fullName: 'Test Owner',
+      companyId: 'company-a', branchId: null, role: 'owner', permissions: [],
+    };
+
+    const outcomes = await Promise.allSettled([
+      service.recordPayment(user, 'obligation-race', { amount: 70, paymentReference: 'RACE-REF-A' }),
+      service.recordPayment(user, 'obligation-race', { amount: 70, paymentReference: 'RACE-REF-B' }),
+    ]);
+    expect(outcomes.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    const payments = await db.query<{ count: string; total: string }>(
+      'SELECT COUNT(*)::text AS count, COALESCE(SUM(amount),0)::text AS total FROM payroll_remittance_payments WHERE company_id=$1 AND obligation_id=$2',
+      ['company-a', 'obligation-race'],
+    );
+    expect(payments.rows[0]).toEqual({ count: '1', total: '70.00' });
+
+    await db.query('DROP TABLE payroll_remittance_payments, payroll_remittance_obligations CASCADE');
+  });
+
   it('commits successful writes', async () => {
     await db.transaction(async (client) => {
       await client.query(
