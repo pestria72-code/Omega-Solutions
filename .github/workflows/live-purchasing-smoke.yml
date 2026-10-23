@@ -115,6 +115,20 @@ jobs:
                   "FEZATON_MEMBER_ROLE_" + role.replace(/[^a-z0-9_-]/g, "_")
                 ));
               }
+              const identity = await pool.query(`
+                SELECT
+                  EXISTS (SELECT 1 FROM public.users WHERE lower(trim(email)) = $1) AS omega_user_exists,
+                  EXISTS (SELECT 1 FROM public.users WHERE lower(trim(email)) = $1 AND is_active = true) AS omega_user_active,
+                  EXISTS (SELECT 1 FROM neon_auth."user" WHERE lower(trim(email)) = $1) AS neon_user_exists,
+                  EXISTS (SELECT 1 FROM neon_auth."user" WHERE lower(trim(email)) = $1 AND "emailVerified" = true) AS neon_email_verified
+              `, [email]);
+              const row = identity.rows[0];
+              console.log("APPROVER_ACCOUNT_DIAGNOSTIC=" + JSON.stringify({
+                omegaUserExists: row.omega_user_exists,
+                omegaUserActive: row.omega_user_active,
+                neonUserExists: row.neon_user_exists,
+                neonEmailVerified: row.neon_email_verified
+              }));
             } finally {
               await pool.end();
             }
