@@ -20,6 +20,20 @@ const payFields=['monthlyBasicSalary','monthlyTaxableAllowances','monthlyTaxable
 export class PayrollService {
  constructor(private readonly db:DatabaseService,private readonly memberships:MembershipsService){}
  private membershipFor(user:AuthenticatedUser){return user.companyId?this.memberships.getMembershipForCompany(user.userId,user.companyId):this.memberships.getMembership(user.userId);}
+ private assertRunTotalsReconcile(run:Record<string,unknown>,items:Array<Record<string,unknown>>){
+  const sum=(field:string)=>items.reduce((total,item)=>total+Number(item[field]??0),0);
+  const same=(actual:unknown,expected:number)=>Number.isFinite(Number(actual))&&Math.abs(Number(actual)-expected)<=0.01;
+  const gross=sum('gross_cash_pay')+sum('taxable_benefits');
+  const employerStatutoryFromItems=sum('nssf_employer')+sum('housing_levy_employer');
+  const employerStatutoryStored=sum('employer_statutory_cost');
+  const reconciles=Number(run.employee_count)===items.length&&
+   same(run.gross_total,gross)&&
+   same(run.employee_deductions_total,sum('employee_deductions'))&&
+   same(run.net_pay_total,sum('net_pay'))&&
+   same(employerStatutoryStored,employerStatutoryFromItems)&&
+   same(run.employer_cost_total,gross+employerStatutoryFromItems);
+  if(!reconciles)throw new ConflictException('Payroll run totals do not reconcile with its saved employee items. Approval/posting is blocked; review and correct the run through an audited correction process first. No journal was created.');
+ }
  async getCompanyStatutorySettings(user:AuthenticatedUser,effectiveFromValue?:string){
   const {companyId}=await this.membershipFor(user);
   const effectiveFrom=effectiveFromValue??new Date().toISOString().slice(0,10);
@@ -231,8 +245,9 @@ export class PayrollService {
    const run=await client.query(`SELECT * FROM payroll_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,[id,membership.companyId]);
    if(!run.rows.length)throw new NotFoundException('Payroll run not found in this company.');
    if(run.rows[0].status!=='draft')throw new ConflictException('Only draft payroll runs can be approved.');
-   const items=await client.query(`SELECT id FROM payroll_items WHERE payroll_run_id=$1 AND company_id=$2 FOR UPDATE`,[id,membership.companyId]);
+   const items=await client.query(`SELECT id,gross_cash_pay,taxable_benefits,employee_deductions,net_pay,nssf_employer,housing_levy_employer,employer_statutory_cost FROM payroll_items WHERE payroll_run_id=$1 AND company_id=$2 FOR UPDATE`,[id,membership.companyId]);
    if(!items.rows.length)throw new BadRequestException('Payroll run has no employee items.');
+   this.assertRunTotalsReconcile(run.rows[0] as Record<string,unknown>,items.rows as Array<Record<string,unknown>>);
    const updated=await client.query(`UPDATE payroll_runs SET status='approved',approved_by=$3,approved_at=NOW(),updated_at=NOW() WHERE id=$1 AND company_id=$2 AND status='draft'
     RETURNING id,company_id,period_start,period_end,status,employee_count,gross_total,employee_deductions_total,net_pay_total,employer_cost_total,approved_by,approved_at`,[id,membership.companyId,user.userId]);
    return updated.rows[0];
@@ -248,6 +263,7 @@ export class PayrollService {
    const itemsResult=await client.query('SELECT * FROM payroll_items WHERE payroll_run_id=$1 AND company_id=$2 ORDER BY employee_number FOR UPDATE',[id,membership.companyId]);
    const items=itemsResult.rows;
    if(!items.length)throw new BadRequestException('Payroll run has no employee items.');
+   this.assertRunTotalsReconcile(run as Record<string,unknown>,items as Array<Record<string,unknown>>);
    const totals=items.reduce((t,x)=>({
     gross:t.gross+Number(x.gross_cash_pay),
     employerNssf:t.employerNssf+Number(x.nssf_employer),
