@@ -138,4 +138,23 @@ describe('PayrollRemittancesService', () => {
     expect(client.query.mock.calls[0][1]).toEqual(['obligation-from-company-b', 'company-a']);
   });
 
+  it('returns a conflict when a payment reference was already recorded for this company', async () => {
+    const client: MockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-a', amount: '100.00' }] })
+        .mockResolvedValueOnce({ rows: [{ amount_paid: '0.00' }] })
+        .mockRejectedValueOnce({
+          code: '23505',
+          constraint: 'payroll_remittance_payments_company_id_payment_reference_key',
+        }),
+    };
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    await expect(service.recordPayment(user, 'obligation-a', {
+      amount: 10, paymentReference: 'DUPLICATE-REF',
+    })).rejects.toThrow('This payment reference has already been recorded for this company.');
+    expect(client.query).toHaveBeenCalledTimes(3);
+  });
+
 });
