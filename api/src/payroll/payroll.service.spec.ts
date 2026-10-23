@@ -161,7 +161,18 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(client.query.mock.calls[0][1]).toEqual(['run-a','company-a']);
   const journalLines=client.query.mock.calls.filter(([sql])=>String(sql).includes('INSERT INTO journal_entry_lines'));
   expect(journalLines.length).toBe(7);
-  expect(journalLines.some(([sql,args])=>String(sql).includes('INSERT INTO journal_entry_lines')&&args?.[2]==='a-nssf'&&args?.[5]===12000)).toBe(true);
+  const postedLineTuples=journalLines.map(([,args])=>[args?.[2],args?.[4],args?.[5]]);
+  expect(postedLineTuples).toEqual([
+   ['a-wages',100000,0],
+   ['a-employer',7500,0],
+   ['a-net',0,79750],
+   ['a-paye',0,10000],
+   ['a-shif',0,2750],
+   ['a-nssf',0,12000],
+   ['a-housing',0,3000],
+  ]);
+  expect(postedLineTuples.reduce((sum,line)=>sum+Number(line[1]),0)).toBe(107500);
+  expect(postedLineTuples.reduce((sum,line)=>sum+Number(line[2]),0)).toBe(107500);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(true);
  });
  it('blocks approval of a draft payroll run whose saved totals do not reconcile',async()=>{
@@ -189,13 +200,15 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entries'))).toBe(false);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(false);
  });
- it('refuses to post a draft or already-posted payroll run without creating a journal',async()=>{
-  const client={query:vi.fn().mockResolvedValue({rows:[{id:'run-a',company_id:'company-a',status:'draft'}]})};
+ it.each(['draft','posted'])('refuses to post a %s payroll run without creating a second journal',async(status)=>{
+  const client={query:vi.fn().mockResolvedValue({rows:[{id:'run-a',company_id:'company-a',status}]})};
   const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
   const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
   const service=new PayrollService(db,memberships);
   await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'run-a')).rejects.toThrow('Only approved payroll runs can be posted');
   expect(client.query).toHaveBeenCalledTimes(1);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entries'))).toBe(false);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entry_lines'))).toBe(false);
  });
 
 
