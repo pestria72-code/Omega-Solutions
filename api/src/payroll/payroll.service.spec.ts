@@ -140,8 +140,8 @@ describe('PayrollService tenant and workflow guards',()=>{
  });
  it('posts an approved payroll run with tenant-scoped balanced ledger lines and persists the journal link',async()=>{
   const client={query:vi.fn(async (sql:string)=>{
-   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'run-a',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'approved'}]};
-   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'E-1',gross_cash_pay:'100000.00',nssf_employer:'6000.00',housing_levy_employer:'1500.00',net_pay:'79750.00',paye:'10000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
+   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'run-a',company_id:'company-a',period_start:'2026-10-01',period_end:'2026-10-31',status:'approved',employee_count:1,gross_total:'100000.00',employee_deductions_total:'20250.00',net_pay_total:'79750.00',employer_cost_total:'107500.00'}]};
+   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'E-1',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employer:'6000.00',housing_levy_employer:'1500.00',employer_statutory_cost:'7500.00',employee_deductions:'20250.00',net_pay:'79750.00',paye:'10000.00',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
    if(sql.includes('SELECT id,system_code FROM chart_of_accounts'))return {rows:[
     {system_code:'payroll_wages',id:'a-wages'},{system_code:'payroll_employer_contributions',id:'a-employer'},
     {system_code:'payroll_net_payable',id:'a-net'},{system_code:'payroll_paye_payable',id:'a-paye'},
@@ -163,6 +163,19 @@ describe('PayrollService tenant and workflow guards',()=>{
   expect(journalLines.length).toBe(7);
   expect(journalLines.some(([sql,args])=>String(sql).includes('INSERT INTO journal_entry_lines')&&args?.[2]==='a-nssf'&&args?.[5]===12000)).toBe(true);
   expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(true);
+ });
+ it('blocks posting a legacy payroll run whose saved employer cost does not reconcile',async()=>{
+  const client={query:vi.fn(async(sql:string)=>{
+   if(sql.includes('SELECT * FROM payroll_runs'))return {rows:[{id:'legacy-run',company_id:'company-a',period_start:'2027-12-01',period_end:'2027-12-31',status:'approved',employee_count:7,gross_total:'700000.00',employee_deductions_total:'171138.45',net_pay_total:'528861.55',employer_cost_total:'1400.00'}]};
+   if(sql.includes('SELECT * FROM payroll_items'))return {rows:[{employee_number:'PAYE2E',gross_cash_pay:'100000.00',taxable_benefits:'0.00',nssf_employer:'200.00',housing_levy_employer:'0.00',employer_statutory_cost:'200.00',employee_deductions:'24448.35',net_pay:'75551.65',paye:'13998.35',shif_employee:'2750.00',nssf_employee:'6000.00',housing_levy_employee:'1500.00',pension_employee:'0.00',prmf_employee:'0.00'}]};
+   return {rows:[]};
+  })};
+  const db={query:vi.fn(),transaction:vi.fn(async(callback:(tx:{query:ReturnType<typeof vi.fn>})=>unknown)=>callback(client))} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.postRun({userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},'legacy-run')).rejects.toThrow('Payroll run totals do not reconcile');
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes('INSERT INTO journal_entries'))).toBe(false);
+  expect(client.query.mock.calls.some(([sql])=>String(sql).includes("UPDATE payroll_runs SET status='posted'"))).toBe(false);
  });
  it('refuses to post a draft or already-posted payroll run without creating a journal',async()=>{
   const client={query:vi.fn().mockResolvedValue({rows:[{id:'run-a',company_id:'company-a',status:'draft'}]})};
