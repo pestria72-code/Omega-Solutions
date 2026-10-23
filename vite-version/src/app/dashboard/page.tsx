@@ -98,11 +98,13 @@ export default function Page() {
   const { user, loading: authLoading } = useAuth()
   const permissions = new Set(user?.permissions ?? [])
   const canReadSales = permissions.has("sales:read")
+  const canReadCustomers = permissions.has("customers:read")
   const canReadProcurement = permissions.has("suppliers:read")
-  const canReadInventory = permissions.has("products:read")
-  const customers = useResource<CustomerRow>("/customers", !authLoading && canReadSales)
+  const canReadProducts = permissions.has("products:read")
+  const canReadInventory = permissions.has("inventory:read")
+  const customers = useResource<CustomerRow>("/customers", !authLoading && canReadCustomers)
   const suppliers = useResource<SupplierRow>("/suppliers", !authLoading && canReadProcurement)
-  const products = useResource<ProductRow>("/products", !authLoading && canReadInventory)
+  const products = useResource<ProductRow>("/products", !authLoading && canReadProducts)
   const invoices = useResource<InvoiceApiRow>("/invoices", !authLoading && canReadSales)
 
   const loading = authLoading || customers.loading || suppliers.loading || products.loading || invoices.loading
@@ -180,8 +182,9 @@ export default function Page() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link to="/invoices" className={buttonVariants({ className: "shadow-sm" })}><Wallet className="mr-2 size-4" />Sales invoices</Link>
-              <Link to="/products" className={buttonVariants({ variant: "outline", className: "bg-background/80" })}><Package className="mr-2 size-4" />View inventory</Link>
+              {canReadSales && <Link to="/invoices" className={buttonVariants({ className: "shadow-sm" })}><Wallet className="mr-2 size-4" />Sales invoices</Link>}
+              {canReadProducts && <Link to="/products" className={buttonVariants({ variant: "outline", className: "bg-background/80" })}><Package className="mr-2 size-4" />View inventory</Link>}
+              {canReadInventory && <Link to="/stock-levels" className={buttonVariants({ variant: "outline", className: "bg-background/80" })}>Stock levels</Link>}
             </div>
           </div>
         </div>
@@ -209,7 +212,7 @@ export default function Page() {
         ) : (
           <>
             <section aria-label="Business summary" className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {canReadSales && <StatCard
+              {canReadCustomers && <StatCard
                 label="Customers"
                 value={formatNumber(customers.data.length)}
                 detail="Customer records"
@@ -223,14 +226,14 @@ export default function Page() {
                 icon={BriefcaseBusiness}
                 href="/suppliers"
               />}
-              {canReadInventory && <StatCard
+              {canReadProducts && <StatCard
                 label="Active products"
                 value={formatNumber(activeProducts.length)}
                 detail={`${lowStock.length} at or below reorder level`}
                 icon={Package}
                 href="/products"
               />}
-              {canReadInventory && <StatCard
+              {canReadProducts && <StatCard
                 label="Inventory cost value"
                 value={formatKES(inventoryCost)}
                 detail="Current stock × recorded cost price"
@@ -322,7 +325,7 @@ export default function Page() {
               </Card>}
             </section>
 
-            {canReadInventory && <section className="grid min-w-0 gap-4 xl:grid-cols-5">
+            {canReadProducts && <section className="grid min-w-0 gap-4 xl:grid-cols-5">
               <Card className="min-w-0 xl:col-span-3">
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
