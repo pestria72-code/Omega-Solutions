@@ -23,11 +23,19 @@ export class PayrollService {
  private membershipFor(user:AuthenticatedUser){return user.companyId?this.memberships.getMembershipForCompany(user.userId,user.companyId):this.memberships.getMembership(user.userId);}
  private assertRunTotalsReconcile(run:Record<string,unknown>,items:Array<Record<string,unknown>>){
   const sum=(field:string)=>items.reduce((total,item)=>total+Number(item[field]??0),0);
-  const same=(actual:unknown,expected:number)=>Number.isFinite(Number(actual))&&Math.abs(Number(actual)-expected)<=0.01;
+  const same=(actual:unknown,expected:number)=>Number.isFinite(Number(actual))&&Number.isFinite(expected)&&Math.abs(Number(actual)-expected)<=0.01;
+  const itemAmountsReconcile=items.every(item=>{
+   const amountFields=['gross_cash_pay','taxable_benefits','nssf_employee','nssf_employer','shif_employee','housing_levy_employee','housing_levy_employer','paye','pension_employee','prmf_employee','employee_deductions','net_pay','employer_statutory_cost'];
+   if(!amountFields.every(field=>Number.isFinite(Number(item[field]))&&Number(item[field])>=0))return false;
+   const expectedDeductions=Number(item.paye)+Number(item.nssf_employee)+Number(item.shif_employee)+Number(item.housing_levy_employee)+Number(item.pension_employee)+Number(item.prmf_employee);
+   return same(item.employee_deductions,expectedDeductions)&&
+    same(item.net_pay,Number(item.gross_cash_pay)-Number(item.employee_deductions))&&
+    same(item.employer_statutory_cost,Number(item.nssf_employer)+Number(item.housing_levy_employer));
+  });
   const gross=sum('gross_cash_pay')+sum('taxable_benefits');
   const employerStatutoryFromItems=sum('nssf_employer')+sum('housing_levy_employer');
   const employerStatutoryStored=sum('employer_statutory_cost');
-  const reconciles=Number(run.employee_count)===items.length&&
+  const reconciles=Number(run.employee_count)===items.length&&itemAmountsReconcile&&
    same(run.gross_total,gross)&&
    same(run.employee_deductions_total,sum('employee_deductions'))&&
    same(run.net_pay_total,sum('net_pay'))&&
@@ -246,7 +254,7 @@ export class PayrollService {
    const run=await client.query(`SELECT * FROM payroll_runs WHERE id=$1 AND company_id=$2 FOR UPDATE`,[id,membership.companyId]);
    if(!run.rows.length)throw new NotFoundException('Payroll run not found in this company.');
    if(run.rows[0].status!=='draft')throw new ConflictException('Only draft payroll runs can be approved.');
-   const items=await client.query(`SELECT id,gross_cash_pay,taxable_benefits,employee_deductions,net_pay,nssf_employer,housing_levy_employer,employer_statutory_cost FROM payroll_items WHERE payroll_run_id=$1 AND company_id=$2 FOR UPDATE`,[id,membership.companyId]);
+   const items=await client.query(`SELECT id,gross_cash_pay,taxable_benefits,nssf_employee,nssf_employer,shif_employee,housing_levy_employee,housing_levy_employer,paye,pension_employee,prmf_employee,employee_deductions,net_pay,employer_statutory_cost FROM payroll_items WHERE payroll_run_id=$1 AND company_id=$2 FOR UPDATE`,[id,membership.companyId]);
    if(!items.rows.length)throw new BadRequestException('Payroll run has no employee items.');
    this.assertRunTotalsReconcile(run.rows[0] as Record<string,unknown>,items.rows as Array<Record<string,unknown>>);
    const updated=await client.query(`UPDATE payroll_runs SET status='approved',approved_by=$3,approved_at=NOW(),updated_at=NOW() WHERE id=$1 AND company_id=$2 AND status='draft'
