@@ -76,12 +76,13 @@ export class InventoryService {
 
   async createWarehouse(user: AuthenticatedUser, dto: CreateWarehouseDto): Promise<WarehouseRow> {
     const { companyId, branchId } = await this.resolveMembership(user);
-    if (branchId && dto.branchId !== branchId) throw new ForbiddenException('You can only create warehouses in your assigned branch.');
+    if (branchId && dto.branchId && dto.branchId !== branchId) throw new ForbiddenException('You can only create warehouses in your assigned branch.');
+    const targetBranchId = branchId ?? dto.branchId ?? null;
     const code = dto.code.trim().toUpperCase();
     const name = dto.name.trim();
     if (!code) throw new BadRequestException('Warehouse code cannot be empty.');
     if (!name) throw new BadRequestException('Warehouse name cannot be empty.');
-    if (dto.branchId) await this.assertBranch(companyId, dto.branchId);
+    if (targetBranchId) await this.assertBranch(companyId, targetBranchId);
     const exists = await this.db.query<{ id: string }>(
       'SELECT id FROM warehouses WHERE company_id=$1 AND UPPER(code)=UPPER($2)', [companyId, code],
     );
@@ -89,7 +90,7 @@ export class InventoryService {
     const result = await this.db.query<WarehouseRow>(
       `INSERT INTO warehouses(company_id,branch_id,code,name,location,capacity,is_active)
        VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [companyId,dto.branchId ?? null,code,name,dto.location?.trim() || null,dto.capacity ?? 0,dto.isActive ?? true],
+      [companyId,targetBranchId,code,name,dto.location?.trim() || null,dto.capacity ?? 0,dto.isActive ?? true],
     ).catch((error: unknown) => {
       const databaseError = error as { code?: string };
       if (databaseError.code === '23505') {
@@ -98,7 +99,7 @@ export class InventoryService {
       throw error;
     });
     const warehouse = result.rows[0];
-    await this.audit.log({userId:user.userId,companyId,branchId:dto.branchId ?? null,action:'inventory.warehouse.create',entityType:'warehouse',entityId:warehouse.id,oldValues:null,newValues:{code:warehouse.code,name:warehouse.name},ipAddress:null});
+    await this.audit.log({userId:user.userId,companyId,branchId:targetBranchId,action:'inventory.warehouse.create',entityType:'warehouse',entityId:warehouse.id,oldValues:null,newValues:{code:warehouse.code,name:warehouse.name},ipAddress:null});
     return warehouse;
   }
 
