@@ -294,10 +294,6 @@ export class PayrollService {
    for(const a of accounts)if(!accountMap.has(a[4]))throw new BadRequestException(`Payroll account ${a[4]} is missing or inactive.`);
    const periodEnd=String(run.period_end).slice(0,10);
    const year=Number(periodEnd.slice(0,4));
-   const seq=await client.query(`INSERT INTO payroll_journal_sequences(company_id,entry_year,next_number) VALUES($1,$2,2)
-    ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=payroll_journal_sequences.next_number+1
-    RETURNING next_number-1 AS allocated_number`,[membership.companyId,year]);
-   const entryNumber=`PAY-${year}-${String(seq.rows[0].allocated_number).padStart(6,'0')}`;
    const debitWages=money2(totals.gross);
    const debitEmployer=money2(totals.employerNssf+totals.employerHousing);
    const lines=[
@@ -314,6 +310,10 @@ export class PayrollService {
    const totalDebits=money2(lines.reduce((s,l)=>s+l.debit,0));
    const totalCredits=money2(lines.reduce((s,l)=>s+l.credit,0));
    if(Math.abs(totalDebits-totalCredits)>0.01)throw new BadRequestException(`Payroll journal is not balanced (debits ${totalDebits}, credits ${totalCredits}).`);
+   const seq=await client.query(`INSERT INTO payroll_journal_sequences(company_id,entry_year,next_number) VALUES($1,$2,2)
+    ON CONFLICT(company_id,entry_year) DO UPDATE SET next_number=payroll_journal_sequences.next_number+1
+    RETURNING next_number-1 AS allocated_number`,[membership.companyId,year]);
+   const entryNumber=`PAY-${year}-${String(seq.rows[0].allocated_number).padStart(6,'0')}`;
    const journal=await client.query(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
     VALUES($1,$2,$3::date,$4,'payroll',$5,'posted',NOW(),$6) RETURNING id,entry_number,entry_date,status,posted_at`,
     [membership.companyId,entryNumber,periodEnd,`Payroll for ${String(run.period_start).slice(0,10)} to ${periodEnd}`,id,user.userId]);
