@@ -1,17 +1,9 @@
 name: Manufacturing live valuation smoke test
 
+# This smoke test creates purchasing, inventory, and accounting records.
+# Keep it manual-only until its fixture cleanup is implemented.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - development
-    paths:
-      - "api/scripts/live-manufacturing-smoke.mjs"
-      - "api/scripts/neon-test-auth.mjs"
-      - "api/src/manufacturing/**"
-      - "api/src/inventory/**"
-      - "api/src/accounting/**"
-      - ".github/workflows/manufacturing-live-smoke.yml"
 
 concurrency:
   group: omega-development-manufacturing-live-smoke
@@ -35,7 +27,7 @@ jobs:
           node-version: 22
       - name: Verify authenticated manufacturing valuation and accounting
         env:
-          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
