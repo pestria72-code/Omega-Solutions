@@ -70,6 +70,32 @@ describe('PayrollRemittancesService', () => {
     expect(client.query).toHaveBeenCalledTimes(1);
   });
 
+  it('generates only positive statutory obligations from a posted run with tenant-scoped periods and due dates', async () => {
+    const client: MockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'run-a', period_start: '2026-10-01', period_end: '2026-10-31', status: 'posted' }] })
+        .mockResolvedValueOnce({ rows: [{ paye: '100.25', nssf: '0.00', shif: '30.00', housing_levy: '40.00' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-paye', authority: 'PAYE', amount: '100.25', due_date: '2026-11-09' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-shif', authority: 'SHIF', amount: '30.00', due_date: '2026-11-09' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-housing', authority: 'HOUSING_LEVY', amount: '40.00', due_date: '2026-11-12' }] }),
+    };
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    const result = await service.generateForRun(user, 'run-a');
+    expect(client.query).toHaveBeenCalledTimes(5);
+    expect(result.created).toHaveLength(3);
+    expect(client.query.mock.calls[2][1]).toEqual([
+      'company-a', 'run-a', 'PAYE', '2026-10-01', '2026-10-31', '2026-11-09', 100.25, 'user-a',
+    ]);
+    expect(client.query.mock.calls[3][1]).toEqual([
+      'company-a', 'run-a', 'SHIF', '2026-10-01', '2026-10-31', '2026-11-09', 30, 'user-a',
+    ]);
+    expect(client.query.mock.calls[4][1]).toEqual([
+      'company-a', 'run-a', 'HOUSING_LEVY', '2026-10-01', '2026-10-31', '2026-11-12', 40, 'user-a',
+    ]);
+  });
+
   it('rejects payments above the tenant-scoped outstanding balance', async () => {
     const client = {
       query: vi.fn()
