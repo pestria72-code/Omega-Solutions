@@ -1,4 +1,4 @@
-const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api.onrender.com/api").replace(/\/$/, "");
+const base = (process.env.OMEGA_API_URL || "https://omega-solutions-api-development.onrender.com/api").replace(/\/$/, "");
 const endpoint = `${base}/health`;
 let lastError;
 for (let attempt = 1; attempt <= 3; attempt += 1) {
