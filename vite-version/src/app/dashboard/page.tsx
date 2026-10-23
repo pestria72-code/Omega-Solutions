@@ -20,6 +20,7 @@ import { api } from "@/lib/api-client"
 import { formatKES, formatNumber } from "@/lib/format"
 import type { CustomerRow, ProductRow, SupplierRow } from "@/lib/api-types"
 import { useMyCompany } from "@/hooks/use-company"
+import { useAuth } from "@/contexts/auth-context"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import type { InvoiceApiRow } from "@/lib/api-types"
 
@@ -29,7 +30,7 @@ type ResourceState<T> = {
   error: string | null
 }
 
-function useResource<T>(path: string) {
+function useResource<T>(path: string, enabled = true) {
   const [state, setState] = React.useState<ResourceState<T>>({
     data: [],
     loading: true,
@@ -38,6 +39,11 @@ function useResource<T>(path: string) {
 
   React.useEffect(() => {
     let active = true
+    if (!enabled) {
+      setState({ data: [], loading: false, error: null })
+      return () => { active = false }
+    }
+    setState((current) => ({ ...current, loading: true, error: null }))
     api
       .get<T[]>(path)
       .then((data) => {
@@ -49,7 +55,7 @@ function useResource<T>(path: string) {
     return () => {
       active = false
     }
-  }, [path])
+  }, [path, enabled])
 
   return state
 }
@@ -76,7 +82,7 @@ function StatCard({
           <CardTitle className="break-words text-2xl font-semibold tabular-nums">{value}</CardTitle>
         </div>
         <div className="shrink-0 rounded-xl border border-primary/15 bg-primary/10 p-3 transition-colors group-hover:bg-primary/15">
-          <Icon className="size-5 text-primary-foreground" aria-hidden="true" />
+          <Icon className="size-5 text-primary" aria-hidden="true" />
         </div>
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-2">
@@ -89,12 +95,17 @@ function StatCard({
 
 export default function Page() {
   const { company, loading: companyLoading } = useMyCompany()
-  const customers = useResource<CustomerRow>("/customers")
-  const suppliers = useResource<SupplierRow>("/suppliers")
-  const products = useResource<ProductRow>("/products")
-  const invoices = useResource<InvoiceApiRow>("/invoices")
+  const { user, loading: authLoading } = useAuth()
+  const permissions = new Set(user?.permissions ?? [])
+  const canReadSales = permissions.has("sales:read")
+  const canReadProcurement = permissions.has("procurement:read")
+  const canReadInventory = permissions.has("inventory:read")
+  const customers = useResource<CustomerRow>("/customers", !authLoading && canReadSales)
+  const suppliers = useResource<SupplierRow>("/suppliers", !authLoading && canReadProcurement)
+  const products = useResource<ProductRow>("/products", !authLoading && canReadInventory)
+  const invoices = useResource<InvoiceApiRow>("/invoices", !authLoading && canReadSales)
 
-  const loading = customers.loading || suppliers.loading || products.loading || invoices.loading
+  const loading = authLoading || customers.loading || suppliers.loading || products.loading || invoices.loading
   const errors = [
     customers.error && `Customers: ${customers.error}`,
     suppliers.error && `Suppliers: ${suppliers.error}`,
@@ -198,37 +209,37 @@ export default function Page() {
         ) : (
           <>
             <section aria-label="Business summary" className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
+              {canReadSales && <StatCard
                 label="Customers"
                 value={formatNumber(customers.data.length)}
                 detail="Customer records"
                 icon={Users}
                 href="/customers"
-              />
-              <StatCard
+              />}
+              {canReadProcurement && <StatCard
                 label="Suppliers"
                 value={formatNumber(suppliers.data.length)}
                 detail="Supplier records"
                 icon={BriefcaseBusiness}
                 href="/suppliers"
-              />
-              <StatCard
+              />}
+              {canReadInventory && <StatCard
                 label="Active products"
                 value={formatNumber(activeProducts.length)}
                 detail={`${lowStock.length} at or below reorder level`}
                 icon={Package}
                 href="/products"
-              />
-              <StatCard
+              />}
+              {canReadInventory && <StatCard
                 label="Inventory cost value"
                 value={formatKES(inventoryCost)}
                 detail="Current stock × recorded cost price"
                 icon={Boxes}
                 href="/stock-levels"
-              />
+              />}
             </section>
 
-            <section className="grid min-w-0 gap-4 xl:grid-cols-5" aria-label="Invoice activity">
+            {canReadSales && <section className="grid min-w-0 gap-4 xl:grid-cols-5" aria-label="Invoice activity">
               <Card className="min-w-0 xl:col-span-3">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><TrendingUp className="size-5 text-primary" />Invoice trend</CardTitle>
@@ -280,10 +291,10 @@ export default function Page() {
                   )}
                 </CardContent>
               </Card>
-            </section>
+            </section>}
 
             <section className="grid min-w-0 gap-4 lg:grid-cols-2" aria-label="Balances">
-              <Card className="relative overflow-hidden border-l-4 border-l-primary">
+              {canReadSales && <Card className="relative overflow-hidden border-l-4 border-l-primary">
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
                     <CardDescription>Customer receivables</CardDescription>
@@ -295,8 +306,8 @@ export default function Page() {
                   <p className="max-w-sm text-sm text-muted-foreground">Outstanding balances recorded against customers</p>
                   <Link to="/customers" className={buttonVariants({ variant: "outline", size: "sm" })}>Review customers</Link>
                 </CardContent>
-              </Card>
-              <Card className="relative overflow-hidden border-l-4 border-l-amber-500/70">
+              </Card>}
+              {canReadProcurement && <Card className="relative overflow-hidden border-l-4 border-l-amber-500/70">
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
                     <CardDescription>Supplier payables</CardDescription>
@@ -308,10 +319,10 @@ export default function Page() {
                   <p className="max-w-sm text-sm text-muted-foreground">Outstanding balances recorded against suppliers</p>
                   <Link to="/suppliers" className={buttonVariants({ variant: "outline", size: "sm" })}>Review suppliers</Link>
                 </CardContent>
-              </Card>
+              </Card>}
             </section>
 
-            <section className="grid min-w-0 gap-4 xl:grid-cols-5">
+            {canReadInventory && <section className="grid min-w-0 gap-4 xl:grid-cols-5">
               <Card className="min-w-0 xl:col-span-3">
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
@@ -372,7 +383,7 @@ export default function Page() {
                   )}
                 </CardContent>
               </Card>
-            </section>
+            </section>}
           </>
         )}
       </div>
