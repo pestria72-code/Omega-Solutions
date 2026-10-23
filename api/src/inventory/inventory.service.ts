@@ -139,7 +139,7 @@ export class InventoryService {
     fields.push('updated_at=NOW()');
     values.push(warehouseId,companyId,branchId);
     const result = await this.db.query<WarehouseRow>(
-      `UPDATE warehouses SET ${fields.join(',')} WHERE id=${values.length-2} AND company_id=${values.length-1} AND (${values.length}::uuid IS NULL OR branch_id=${values.length}) RETURNING *`, values as (string|number|boolean|null)[],
+      `UPDATE warehouses SET ${fields.join(',')} WHERE id=${values.length-2} AND company_id=${values.length-1} AND ($${values.length}::uuid IS NULL OR branch_id=$${values.length}) RETURNING *`, values as (string|number|boolean|null)[],
     ).catch((error: unknown) => {
       const databaseError = error as { code?: string };
       if (databaseError.code === '23505') {
