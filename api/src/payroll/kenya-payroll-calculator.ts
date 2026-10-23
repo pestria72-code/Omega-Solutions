@@ -39,9 +39,13 @@ export function calculateMonthlyPaye(taxableIncome:number):number{
  return roundKes(tax);
 }
 /** NSSF Year 4: 6% on the first KES 9,000 and next KES 99,000, capped at KES 6,480 per side. */
-export function calculateNssfYear4(pensionablePay:number):number{
+export function calculateNssfYear4(pensionablePay:number,pensionablePayCap=108000):number{
  const pay=money(pensionablePay,'pensionablePay');
- return roundKes(Math.min(pay,9000)*.06+Math.min(Math.max(pay-9000,0),99000)*.06);
+ const cap=money(pensionablePayCap,'pensionablePayCap');
+ const cappedPay=Math.min(pay,cap);
+ const firstTier=Math.min(cappedPay,9000);
+ const secondTier=Math.max(cappedPay-firstTier,0);
+ return roundKes((firstTier+secondTier)*.06);
 }
 export function calculateKenyaMonthlyPayroll(input:KenyaPayrollInput):KenyaPayrollCalculation{
  const grossCashPay=money(input.grossCashPay,'grossCashPay');
@@ -66,7 +70,7 @@ export function calculateKenyaMonthlyPayroll(input:KenyaPayrollInput):KenyaPayro
  };
  if(typeof options.housingLevyEnabled!=='boolean')throw new RangeError('housingLevyEnabled must be a boolean.');
  let nssfEmployee=0,nssfEmployer=0;
- if(nssfMethod==='YEAR4'){nssfEmployee=calculateNssfYear4(grossCashPay);nssfEmployer=nssfEmployee;}
+ if(nssfMethod==='YEAR4'){nssfEmployee=calculateNssfYear4(grossCashPay,options.nssfPensionablePayCap);nssfEmployer=nssfEmployee;}
  else if(nssfMethod==='LEGACY_FLAT_200'){nssfEmployee=Math.min(grossCashPay,options.nssfEmployeeFlat);nssfEmployer=Math.min(grossCashPay,options.nssfEmployerFlat);}
  else {nssfEmployee=roundKes(Math.min(grossCashPay,options.nssfPensionablePayCap)*options.nssfEmployeeRate);nssfEmployer=roundKes(Math.min(grossCashPay,options.nssfPensionablePayCap)*options.nssfEmployerRate);}
  const grossTaxableEmploymentIncome=roundKes(grossCashPay+taxableBenefits);
