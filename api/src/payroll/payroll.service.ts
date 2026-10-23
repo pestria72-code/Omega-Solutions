@@ -107,6 +107,7 @@ export class PayrollService {
    FROM company_payroll_statutory_settings WHERE company_id=$1 AND effective_from<=$2::date ORDER BY effective_from DESC LIMIT 1`,[membership.companyId,dto.periodStart]);
   const statutoryRow=statutoryResult.rows[0];
   if(!statutoryRow)throw new BadRequestException('Company statutory payroll settings are not configured for this pay period. Save the applicable NSSF method and housing levy choice before generating payroll. No payroll was created.');
+  if(typeof statutoryRow.housing_levy_enabled!=='boolean')throw new BadRequestException('Company statutory settings do not contain an explicit housing levy choice. Save the applicable settings before generating payroll. No payroll was created.');
   const statutoryOptions:PayrollStatutoryOptions={
    nssfMethod:String(statutoryRow.nssf_method??'YEAR4') as NssfMethod,
    nssfEmployeeFlat:Number(statutoryRow.nssf_employee_flat??200),
@@ -114,7 +115,7 @@ export class PayrollService {
    nssfEmployeeRate:Number(statutoryRow.nssf_employee_rate??.06),
    nssfEmployerRate:Number(statutoryRow.nssf_employer_rate??.06),
    nssfPensionablePayCap:Number(statutoryRow.nssf_pensionable_pay_cap??108000),
-   housingLevyEnabled:statutoryRow.housing_levy_enabled===undefined?true:Boolean(statutoryRow.housing_levy_enabled),
+   housingLevyEnabled:statutoryRow.housing_levy_enabled,
    housingLevyEmployeeRate:Number(statutoryRow.housing_levy_employee_rate??.015),
    housingLevyEmployerRate:Number(statutoryRow.housing_levy_employer_rate??.015),
   };
