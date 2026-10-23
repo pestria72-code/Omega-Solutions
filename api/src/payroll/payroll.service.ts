@@ -13,6 +13,7 @@ interface PayEmployee {
  qualifying_mortgage_interest:string|number;eligible_insurance_premiums:string|number;resident_for_tax_purposes:boolean;
 }
 const amount=(value:string|number)=>Math.round(Number(value)*100)/100;
+const dateOnly=(value:unknown)=>value instanceof Date?value.toISOString().slice(0,10):String(value).slice(0,10);
 const validDate=(value:string)=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value+'T00:00:00Z'))&&new Date(value+'T00:00:00Z').toISOString().slice(0,10)===value;
 const payFields=['monthlyBasicSalary','monthlyTaxableAllowances','monthlyTaxableBenefits','employeePensionContribution','postRetirementMedicalContribution','qualifyingMortgageInterest','eligibleInsurancePremiums'] as const;
 
@@ -292,7 +293,7 @@ export class PayrollService {
    const accountRows=await client.query('SELECT id,system_code FROM chart_of_accounts WHERE company_id=$1 AND system_code=ANY($2::text[]) AND is_active=true',[membership.companyId,accounts.map(a=>a[4])]);
    const accountMap=new Map(accountRows.rows.map(a=>[a.system_code,a.id]));
    for(const a of accounts)if(!accountMap.has(a[4]))throw new BadRequestException(`Payroll account ${a[4]} is missing or inactive.`);
-   const periodEnd=String(run.period_end).slice(0,10);
+   const periodEnd=dateOnly(run.period_end);
    const year=Number(periodEnd.slice(0,4));
    const debitWages=money2(totals.gross);
    const debitEmployer=money2(totals.employerNssf+totals.employerHousing);
@@ -316,7 +317,7 @@ export class PayrollService {
    const entryNumber=`PAY-${year}-${String(seq.rows[0].allocated_number).padStart(6,'0')}`;
    const journal=await client.query(`INSERT INTO journal_entries(company_id,entry_number,entry_date,description,source_type,source_id,status,posted_at,posted_by)
     VALUES($1,$2,$3::date,$4,'payroll',$5,'posted',NOW(),$6) RETURNING id,entry_number,entry_date,status,posted_at`,
-    [membership.companyId,entryNumber,periodEnd,`Payroll for ${String(run.period_start).slice(0,10)} to ${periodEnd}`,id,user.userId]);
+    [membership.companyId,entryNumber,periodEnd,`Payroll for ${dateOnly(run.period_start)} to ${periodEnd}`,id,user.userId]);
    for(const line of lines)await client.query(`INSERT INTO journal_entry_lines(company_id,journal_entry_id,account_id,description,debit,credit)
     VALUES($1,$2,$3,$4,$5,$6)`,[membership.companyId,journal.rows[0].id,accountMap.get(line.system),line.description,line.debit,line.credit]);
    const updated=await client.query(`UPDATE payroll_runs SET status='posted',journal_entry_id=$3,posted_by=$4,posted_at=NOW(),updated_at=NOW()
