@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buttonVariants } from "@/components/ui/button"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { api } from "@/lib/api-client"
-import { formatKES, formatNumber } from "@/lib/format"
+import { formatNumber } from "@/lib/format"
 import type { CustomerRow, ProductRow, SupplierRow } from "@/lib/api-types"
 import { useMyCompany } from "@/hooks/use-company"
 import { useAuth } from "@/contexts/auth-context"
@@ -131,6 +131,11 @@ export default function Page() {
     (total, supplier) => total + Number(supplier.outstanding_balance || 0),
     0,
   )
+  const formatCompanyCurrency = (value: number) => new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: company?.currency || "KES",
+    maximumFractionDigits: 2,
+  }).format(value)
   const todayDate = new Date()
   const today = `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, "0")}-${String(todayDate.getDate()).padStart(2, "0")}`
   const invoiceTrend = React.useMemo(() => {
@@ -235,7 +240,7 @@ export default function Page() {
               />}
               {canReadProducts && <StatCard
                 label="Inventory cost value"
-                value={formatKES(inventoryCost)}
+                value={formatCompanyCurrency(inventoryCost)}
                 detail="Current stock × recorded cost price"
                 icon={Boxes}
                 href="/stock-levels"
@@ -301,7 +306,7 @@ export default function Page() {
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
                     <CardDescription>Customer receivables</CardDescription>
-                    <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatKES(receivables)}</CardTitle>
+                    <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatCompanyCurrency(receivables)}</CardTitle>
                   </div>
                   <div className="rounded-xl bg-primary/10 p-3"><ArrowUpRight className="size-5 text-primary" aria-hidden="true" /></div>
                 </CardHeader>
@@ -314,7 +319,7 @@ export default function Page() {
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <div className="space-y-1">
                     <CardDescription>Supplier payables</CardDescription>
-                    <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatKES(payables)}</CardTitle>
+                    <CardTitle className="text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">{formatCompanyCurrency(payables)}</CardTitle>
                   </div>
                   <div className="rounded-xl bg-amber-500/10 p-3"><ArrowDownRight className="size-5 text-amber-700 dark:text-amber-300" aria-hidden="true" /></div>
                 </CardHeader>
