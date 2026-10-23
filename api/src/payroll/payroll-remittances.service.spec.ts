@@ -108,4 +108,34 @@ describe('PayrollRemittancesService', () => {
     await expect(service.recordPayment(user, 'obligation-a', { amount: 1, paymentReference: '  ' })).rejects.toThrow('paymentReference is required');
     expect((db as { transaction: ReturnType<typeof vi.fn> }).transaction).not.toHaveBeenCalled();
   });
+
+  it('records a partial payment without exceeding the outstanding balance and keeps verification explicit', async () => {
+    const client: MockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 'obligation-a', amount: '100.00' }] })
+        .mockResolvedValueOnce({ rows: [{ amount_paid: '25.00' }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'payment-b', obligation_id: 'obligation-a', amount: '30.00', payment_reference: 'BANK-REF-30' }] }),
+    };
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    const result = await service.recordPayment(user, 'obligation-a', { amount: 30, paymentReference: 'BANK-REF-30' });
+    expect(result).toMatchObject({ id: 'payment-b', amount: '30.00', verificationStatus: 'recorded_not_independently_verified' });
+    expect(client.query.mock.calls[0][1]).toEqual(['obligation-a', 'company-a']);
+    expect(client.query.mock.calls[1][1]).toEqual(['company-a', 'obligation-a']);
+    expect(client.query.mock.calls[2][1]).toEqual(['company-a', 'obligation-a', 30, 'BANK-REF-30', expect.any(String), null, null, 'user-a']);
+  });
+
+  it('cannot record a payment against another company’s obligation', async () => {
+    const client: MockClient = { query: vi.fn().mockResolvedValue({ rows: [] }) };
+    const db = { query: vi.fn(), transaction: vi.fn(async (callback: (client: MockClient) => unknown) => callback(client)) } as never;
+    const memberships = { getMembership: vi.fn().mockResolvedValue({ companyId: 'company-a' }) } as never;
+    const service = new PayrollRemittancesService(db, memberships);
+    await expect(service.recordPayment(user, 'obligation-from-company-b', {
+      amount: 10, paymentReference: 'CROSS-TENANT-REF',
+    })).rejects.toThrow('Remittance obligation not found in this company.');
+    expect(client.query).toHaveBeenCalledTimes(1);
+    expect(client.query.mock.calls[0][1]).toEqual(['obligation-from-company-b', 'company-a']);
+  });
+
 });
