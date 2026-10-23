@@ -76,16 +76,26 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
    */
   async transaction<T>(callback: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
+    let releaseError: Error | undefined;
     try {
       await client.query('BEGIN');
       const result = await callback(client);
       await client.query('COMMIT');
       return result;
     } catch (err) {
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        // Preserve the operation's original error and discard a connection whose
+        // transaction state may be uncertain instead of returning it to the pool.
+        releaseError =
+          rollbackErr instanceof Error
+            ? rollbackErr
+            : new Error('Transaction rollback failed.');
+      }
       throw err;
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   }
 
