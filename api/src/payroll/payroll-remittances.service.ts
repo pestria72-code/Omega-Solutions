@@ -193,7 +193,7 @@ export class PayrollRemittancesService {
       );
       const remaining = Math.round((Number(obligation.rows[0].amount) - Number(paid.rows[0].amount_paid)) * 100) / 100;
       if (amount > remaining) throw new ConflictException('Payment exceeds the outstanding obligation balance.');
-      let result: Awaited<ReturnType<typeof client.query>>;
+      let result: { rows: Array<Record<string, unknown>> };
       try {
         result = await client.query(
           `INSERT INTO payroll_remittance_payments
