@@ -129,6 +129,24 @@ jobs:
                 neonUserExists: row.neon_user_exists,
                 neonEmailVerified: row.neon_email_verified
               }));
+              try {
+                const credentials = await pool.query(`
+                  SELECT a."providerId" AS provider_id,
+                         COUNT(*)::int AS account_count,
+                         BOOL_OR(a.password IS NOT NULL AND length(a.password) > 0) AS has_password_credential
+                  FROM neon_auth.account a
+                  JOIN neon_auth."user" u ON u.id = a."userId"
+                  WHERE lower(trim(u.email)) = $1
+                  GROUP BY a."providerId"
+                `, [email]);
+                console.log("APPROVER_AUTH_METHODS=" + JSON.stringify(credentials.rows.map(account => ({
+                  provider: String(account.provider_id).slice(0, 40),
+                  accountCount: account.account_count,
+                  hasPasswordCredential: account.has_password_credential === true
+                }))));
+              } catch (diagnosticError) {
+                console.log("APPROVER_AUTH_METHODS_DIAGNOSTIC_UNAVAILABLE=" + String(diagnosticError?.code || "unknown"));
+              }
             } finally {
               await pool.end();
             }
