@@ -36,6 +36,17 @@ describe('PayrollService tenant and workflow guards',()=>{
   )).rejects.toThrow('Company statutory payroll settings are not configured');
   expect((db as {query:ReturnType<typeof vi.fn>}).query).toHaveBeenCalledTimes(1);
  });
+ it('rejects legacy statutory rows without an explicit housing levy choice before creating a run',async()=>{
+  const db={query:vi.fn().mockResolvedValue({rows:[{nssf_method:'YEAR4',nssf_employee_flat:'200',nssf_employer_flat:'200',nssf_employee_rate:'0.06',nssf_employer_rate:'0.06',nssf_pensionable_pay_cap:'108000',housing_levy_enabled:null,housing_levy_employee_rate:'0.015',housing_levy_employer_rate:'0.015'}]}),transaction:vi.fn()} as never;
+  const memberships={getMembership:vi.fn().mockResolvedValue({companyId:'company-a'})} as never;
+  const service=new PayrollService(db,memberships);
+  await expect(service.createRun(
+   {userId:'user-a',email:'a@b.test',fullName:'A',companyId:null,branchId:null,role:'owner',permissions:[]},
+   {periodStart:'2026-10-01',periodEnd:'2026-10-31'}
+  )).rejects.toThrow('do not contain an explicit housing levy choice');
+  expect((db as {query:ReturnType<typeof vi.fn>}).query).toHaveBeenCalledTimes(1);
+  expect((db as {transaction:ReturnType<typeof vi.fn>}).transaction).not.toHaveBeenCalled();
+ });
  it('blocks payroll creation when any active employee lacks effective pay settings',async()=>{
   const db={query:vi.fn()
    .mockResolvedValueOnce({rows:[{nssf_method:'YEAR4',nssf_employee_flat:'200',nssf_employer_flat:'200',nssf_employee_rate:'0.06',nssf_employer_rate:'0.06',nssf_pensionable_pay_cap:'108000',housing_levy_enabled:false,housing_levy_employee_rate:'0.015',housing_levy_employer_rate:'0.015'}]})
