@@ -29,7 +29,7 @@ jobs:
 
       - name: Verify development API and cross-tenant auth isolation
         env:
-          OMEGA_API_URL: https://omega-solutions-api.onrender.com/api
+          OMEGA_API_URL: https://omega-solutions-api-development.onrender.com/api
           OMEGA_SECURITY_TEST_A_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_A_EMAIL }}
           OMEGA_SECURITY_TEST_A_PASSWORD: ${{ secrets.OMEGA_SECURITY_TEST_A_PASSWORD }}
           OMEGA_SECURITY_TEST_B_EMAIL: ${{ secrets.OMEGA_SECURITY_TEST_B_EMAIL }}
