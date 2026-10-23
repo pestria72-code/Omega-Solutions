@@ -1,0 +1,60 @@
+name: PostgreSQL transaction integration
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - "api/src/database.service.ts"
+      - "api/src/database.service.spec.ts"
+      - "api/test/database-transaction.e2e-spec.ts"
+      - "api/package.json"
+      - "api/package-lock.json"
+      - ".github/workflows/postgres-transaction-integration.yml"
+  pull_request:
+    paths:
+      - "api/src/database.service.ts"
+      - "api/src/database.service.spec.ts"
+      - "api/test/database-transaction.e2e-spec.ts"
+      - "api/package.json"
+      - "api/package-lock.json"
+      - ".github/workflows/postgres-transaction-integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  transaction-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: omega_transaction_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d omega_transaction_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - name: Install API dependencies
+        working-directory: api
+        run: npm ci
+      - name: Verify PostgreSQL transaction rollback against disposable database
+        working-directory: api
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/omega_transaction_test
+        run: npx vitest run --config ./vitest.config.e2e.ts test/database-transaction.e2e-spec.ts
