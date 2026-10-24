@@ -24,6 +24,8 @@ import { useAuth } from "@/contexts/auth-context"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import type { InvoiceApiRow } from "@/lib/api-types"
 
+type SubscriptionAccess = { subscription: null | { status: string }; modules?: Record<string, boolean> }
+
 type ResourceState<T> = {
   data: T[]
   loading: boolean
@@ -97,17 +99,40 @@ export default function Page() {
   const { company, loading: companyLoading } = useMyCompany()
   const { user, loading: authLoading } = useAuth()
   const permissions = new Set(user?.permissions ?? [])
-  const canReadSales = permissions.has("sales:read")
-  const canReadCustomers = permissions.has("customers:read")
-  const canReadProcurement = permissions.has("suppliers:read")
-  const canReadProducts = permissions.has("products:read")
-  const canReadInventory = permissions.has("inventory:read")
+  const [subscriptionAccess, setSubscriptionAccess] = React.useState<SubscriptionAccess | null>(null)
+  const [subscriptionLoaded, setSubscriptionLoaded] = React.useState(false)
+
+  React.useEffect(() => {
+    if (authLoading || !user) return
+    let cancelled = false
+    setSubscriptionLoaded(false)
+    api.get<SubscriptionAccess>("/subscriptions/current")
+      .then((result) => { if (!cancelled) setSubscriptionAccess(result) })
+      .catch(() => {
+        // Fail closed when entitlement state cannot be verified.
+        if (!cancelled) setSubscriptionAccess({ subscription: { status: "unknown" }, modules: {} })
+      })
+      .finally(() => { if (!cancelled) setSubscriptionLoaded(true) })
+    return () => { cancelled = true }
+  }, [authLoading, user?.userId, company?.id])
+
+  const canUseModule = (moduleCode: string) => {
+    if (!subscriptionLoaded) return false
+    if (!subscriptionAccess?.subscription) return true
+    return ["active", "trialing"].includes(subscriptionAccess.subscription.status) &&
+      subscriptionAccess.modules?.[moduleCode] === true
+  }
+  const canReadSales = canUseModule("sales") && permissions.has("sales:read")
+  const canReadCustomers = canUseModule("sales") && permissions.has("customers:read")
+  const canReadProcurement = canUseModule("procurement") && permissions.has("suppliers:read")
+  const canReadProducts = canUseModule("inventory") && permissions.has("products:read")
+  const canReadInventory = canUseModule("inventory") && permissions.has("inventory:read")
   const customers = useResource<CustomerRow>("/customers", !authLoading && canReadCustomers)
   const suppliers = useResource<SupplierRow>("/suppliers", !authLoading && canReadProcurement)
   const products = useResource<ProductRow>("/products", !authLoading && canReadProducts)
   const invoices = useResource<InvoiceApiRow>("/invoices", !authLoading && canReadSales)
 
-  const loading = authLoading || customers.loading || suppliers.loading || products.loading || invoices.loading
+  const loading = authLoading || !subscriptionLoaded || customers.loading || suppliers.loading || products.loading || invoices.loading
   const errors = [
     customers.error && `Customers: ${customers.error}`,
     suppliers.error && `Suppliers: ${suppliers.error}`,
@@ -243,7 +268,7 @@ export default function Page() {
                 value={formatCompanyCurrency(inventoryCost)}
                 detail="Current stock × recorded cost price"
                 icon={Boxes}
-                href="/stock-levels"
+                href="/products"
               />}
             </section>
 
